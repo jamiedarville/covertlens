@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/harness-events.schema.json",
+  "title": "CovertLens harness event envelope",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "occurred_at", "run_id", "seq"],
+  "properties": {
+    "event_id": {"type": "string", "pattern": "^evt_[0-9a-f]{32}$"},
+    "event_type": {
+      "enum": [
+        "artifact.created",
+        "delivery.attempted",
+        "gate.verdict",
+        "artifact.accessed",
+        "artifact.parsed",
+        "recipient.action",
+        "run.finalized"
+      ]
+    },
+    "schema_version": {"type": "integer", "minimum": 1},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "run_id": {"type": "string", "pattern": "^run_[0-9a-f-]{36}$"},
+    "episode_id": {"type": ["string", "null"], "pattern": "^ep_[0-9a-f-]{36}$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "idempotency_key": {"type": ["string", "null"]},
+    "artifact_id": {"type": ["string", "null"]},
+    "artifact_version_id": {"type": ["string", "null"]},
+    "content_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "delivery_id": {"type": ["string", "null"]},
+    "verdict_id": {"type": ["string", "null"]},
+    "parse_status": {
+      "type": ["string", "null"],
+      "enum": ["parsed", "parse_failed", "not_observed", "missing", null]
+    },
+    "payload": {"type": "object"}
+  }
+}
