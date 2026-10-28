@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "covertlens"
+version = "0.1.0"
+description = "CovertLens harness contracts: allowed-channel manifest, stable harness events, artifact route inventory (CL-7)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Internal" }
+authors = [{ name = "Agent Evaluation / AI Safety" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+covertlens = "covertlens.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["covertlens*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

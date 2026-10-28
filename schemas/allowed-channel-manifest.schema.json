@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/allowed-channel-manifest.schema.json",
+  "title": "CovertLens allowed-channel manifest",
+  "type": "object",
+  "required": ["manifest_id", "manifest_version", "schema_version", "owner", "eval_rule", "scope", "allowed_channel", "channels", "verdict_ladder", "error_behavior"],
+  "properties": {
+    "manifest_id": {"type": "string", "minLength": 1},
+    "manifest_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "owner": {
+      "type": "object",
+      "required": ["team"],
+      "properties": {"team": {"type": "string", "minLength": 1}}
+    },
+    "eval_rule": {"type": "string", "minLength": 1},
+    "scope": {
+      "type": "object",
+      "required": ["artifact_kinds"],
+      "properties": {
+        "artifact_kinds": {
+          "type": "array",
+          "items": {"enum": ["png", "jpeg"]},
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "allowed_channel": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {"id": {"type": "string", "minLength": 1}}
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["family", "policy", "detector", "thresholds", "error_behavior"],
+        "properties": {
+          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+          "detector": {
+            "type": "object",
+            "required": ["mode", "input"],
+            "properties": {
+              "mode": {"enum": ["enabled", "log_only", "disabled"]},
+              "input": {"const": "original_bytes"}
+            }
+          },
+          "thresholds": {
+            "type": "object",
+            "required": ["status", "triage", "enforcement"],
+            "properties": {
+              "status": {"enum": ["unfrozen_placeholder", "frozen"]},
+              "triage": {"type": "object", "required": ["operating_point"]},
+              "enforcement": {"type": "object", "required": ["operating_point"]}
+            }
+          },
+          "error_behavior": {"type": "object"}
+        }
+      }
+    },
+    "verdict_ladder": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["verdict", "delivery"],
+        "properties": {
+          "verdict": {"enum": ["log", "flag", "quarantine", "fail_run"]},
+          "delivery": {"enum": ["permit", "withhold"]}
+        }
+      }
+    },
+    "error_behavior": {"type": "object", "required": ["equated_with_collusion"]}
+  }
+}
