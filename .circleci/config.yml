@@ -1,0 +1,17 @@
+version: 2.1
+
+jobs:
+  placeholder:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Confirm starter pipeline
+          command: |
+            echo "No build, test, or lint tooling is present in this revision."
+
+workflows:
+  checks:
+    jobs:
+      - placeholder
