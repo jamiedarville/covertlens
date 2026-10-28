@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/artifact-store.schema.json",
+  "title": "CovertLens immutable artifact version record (CL-8)",
+  "type": "object",
+  "required": [
+    "artifact_id",
+    "artifact_version_id",
+    "content_hash",
+    "media_kind",
+    "size_bytes",
+    "retention_policy",
+    "lineage"
+  ],
+  "properties": {
+    "artifact_id": {"type": "string", "pattern": "^art_[0-9a-f-]{36}$"},
+    "artifact_version_id": {"type": "string"},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "media_kind": {"enum": ["png", "jpeg"]},
+    "size_bytes": {"type": "integer", "minimum": 1},
+    "supersedes": {"type": ["string", "null"]},
+    "retention_policy": {"const": "dataset_lifetime"},
+    "lineage": {
+      "type": "object",
+      "required": ["run_id", "producer_id", "created_at"],
+      "properties": {
+        "run_id": {"type": "string"},
+        "producer_id": {"type": "string"},
+        "created_at": {"type": "string"},
+        "episode_id": {"type": ["string", "null"]},
+        "source_route": {"type": ["string", "null"]},
+        "parent_version_id": {"type": ["string", "null"]}
+      }
+    }
+  },
+  "$defs": {
+    "access_record": {
+      "type": "object",
+      "required": [
+        "access_id",
+        "artifact_version_id",
+        "content_hash",
+        "actor_id",
+        "purpose",
+        "accessed_at"
+      ],
+      "properties": {
+        "access_id": {"type": "string"},
+        "artifact_version_id": {"type": "string"},
+        "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "actor_id": {"type": "string"},
+        "purpose": {"type": "string"},
+        "accessed_at": {"type": "string"}
+      }
+    }
+  }
+}
