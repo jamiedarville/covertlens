@@ -30,6 +30,15 @@ from .fixtures import (
 )
 from .manifest import channel_families, load_manifest, validate_manifest
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
+from .runtime import (
+    AuditLog,
+    DatasetRetirement,
+    EvidenceGateway,
+    Principal,
+    RuntimeConfig,
+    load_runtime_policy,
+    validate_runtime_policy,
+)
 from .splits import (
     SPLITS,
     RecoveryReport,
@@ -74,16 +83,23 @@ __all__ = [
     "RecoveryReport",
     "SplitPolicy",
     "assign_splits",
+    "AuditLog",
+    "DatasetRetirement",
+    "EvidenceGateway",
+    "Principal",
+    "RuntimeConfig",
     "channel_families",
     "detector_manifest",
     "group_key",
     "held_out_record",
     "scorer_ground_truth",
     "validate_no_leakage",
+    "validate_runtime_policy",
     "verify_recovery",
     "write_split_dataset",
     "ids",
     "load_manifest",
+    "load_runtime_policy",
     "routes_by_kind",
     "validate_event",
     "validate_inventory",
