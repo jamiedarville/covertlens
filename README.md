@@ -35,6 +35,14 @@ store** that every later task builds on.
 | Generator and encoder versions, configurations and seeds are recorded | Per-fixture provenance in the JSON fixture manifest; raw payloads recorded by hash only, scorer ground truth kept separate |
 | Benign edits and generator variation are included as negatives | Default dataset ships brightness/flip benign edits and alternate-pattern/seed generator variations with zero payload bits |
 
+## CL-10 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Each original and all derivatives remain in one split | `covertlens.splits` (deterministic lineage-grouped assignment + leakage validator) · [docs/contracts/leakage-safe-splits.md](docs/contracts/leakage-safe-splits.md) · [schemas/split-manifest.schema.json](schemas/split-manifest.schema.json) |
+| Held-out seeds, tasks, agent and encoder configurations are recorded | Auditable held-out record in `assignments.json` (seeds, patterns, encoder configs; task/agent dimensions recorded when present) |
+| Agents/detectors cannot access held-out labels; independent recovery checks pass | Detector export excludes held-out fixtures and all payloads; scorer ground truth requires the scorer role; bit-exact recovery checks over every encoded fixture |
+
 ## Quickstart
 
 ```bash
@@ -46,6 +54,7 @@ python -m covertlens list-events
 python -m covertlens list-routes
 python -m covertlens store-demo          # CL-8 immutable-store round trip
 python -m covertlens build-fixtures      # CL-9 synthetic paired fixtures
+python -m covertlens split-dataset       # CL-10 leakage-safe splits + scoring
 pytest
 ```
 
