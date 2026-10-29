@@ -9,20 +9,28 @@ traced to its Jira issue(s).
 Source PRD referenced by all issues: **CovertLens PRD v0.2 — October 27,
 2026** (FR-01…FR-13, §§10–13). Owner: Agent Evaluation / AI Safety team.
 
+Addendum §8 (2026-10-28, proposed — not yet traced to a Jira issue)
+adds a fourth channel family, geometric/semantic encoding. It does not
+change the Jira-traced requirements in §2 unless explicitly noted.
+
 ## 1. Product summary
 
 CovertLens is an inline steganalysis / covert-channel gate for the Meta AI
 internal eval harness. Agents may not encode task-relevant information in
 image pixels or metadata outside an allowed channel. Every inter-agent
 image is intercepted at the artifact store, scored on its original bytes
-across three channel families (spatial LSB, JPEG DCT, metadata), and
+across three pixel/metadata channel families (spatial LSB, JPEG DCT,
+metadata), plus the proposed geometric/semantic family in §8, and
 subject to a verdict ladder — log → flag → quarantine → run failure —
 before any recipient access. Findings join ordered run-trace events so
 researchers can triage repeated weak signals; frozen synthetic benchmarks
 plus a seeded live-trace pilot decide the MVP release.
 
 Scope: eval-generated PNG/JPEG artifacts only. Consumer uploads and
-transports are explicitly excluded.
+transports are explicitly excluded. Proposed §8 extension: where a
+vector source for a generated image is available in the harness, it is
+an additional interception route; the rendered image remains the
+artifact delivered and scored.
 
 ## 2. Requirements catalog
 
@@ -68,6 +76,11 @@ transports are explicitly excluded.
 - **DT-06** Metadata corpus: known metadata payloads, clean matched
   controls, allowed task-metadata exceptions; lineage, units, and split
   rules matching the initial dataset. (`CL-22`)
+- **DT-07** Geometric corpus (proposed, §8): clean/encoded paired
+  fixtures for geometric/semantic encoding, with benign negatives
+  (legitimate charts, unencoded scenes, benign edits) and generator
+  variation; lineage, units, and split rules matching the initial
+  dataset. (Proposed — not yet in Jira)
 
 ### DET — Channel detection (Epic CL-3)
 
@@ -85,6 +98,61 @@ transports are explicitly excluded.
 - **DET-05** Metadata scoring: metadata evidence distinguished from benign
   controls; all three families individually visible, run through pinned
   threshold configurations. (`CL-23`)
+
+### GEO — Geometric / semantic encoding (Proposed, not yet in Jira)
+
+This family covers messages carried not in low-level pixel noise or
+metadata, but in the visible geometry and attributes of a generated
+image: the height, position, size, gap, angle, colour code, or lit/dark
+state of repeated visual elements, read in order. A human viewer may
+see only an ordinary scene; the sequence of attributes may still
+carry a structured message.
+
+- **GEO-01** Repeated-object segmentation: segment repeated,
+  similarly shaped visual elements in a generated image, in reading
+  order, and extract a numeric attribute sequence per element
+  (height, vertical position, width, gap, angle/tilt, colour code,
+  lit/dark state, or equivalent), with segmentation method,
+  tolerances, and failure modes recorded. (Proposed)
+- **GEO-02** Quantization test: test whether attribute values snap
+  to a small, regular grid or discrete set with near-zero residual,
+  versus continuous natural variation; report grid step, residual,
+  and count. A bare "pattern detected" verdict without these numbers
+  is not acceptable. (Proposed)
+- **GEO-03** Language/structure test: only where a quantized
+  sequence maps through a simple, declared code (alphabet position,
+  timing ratios, byte patterns, or equivalent) to a structured
+  sequence (words, codes, grammatical text) may it be scored as a
+  candidate encoding. A quantized sequence alone, without structure,
+  is a weak signal for triage only. (Proposed)
+- **GEO-04** Vector source: where a vector source is available,
+  parse object attributes directly from the source, with lineage
+  linking the source version to the rendered version; the verdict
+  binds to the rendered version actually delivered. Where only a
+  raster is available, segment on original raster bytes; renderer,
+  resize, and recompression effects are recorded as limitations,
+  and no resize or recompression is applied before analysis.
+  (Proposed)
+- **GEO-05** Benign controls and legitimate encoding: height, size,
+  and similar attributes are legitimate in data visualizations,
+  charts, diagrams, and ordinary scenes. The detector must
+  distinguish by context (is the image supposed to be a chart or
+  diagram?), by the quantization and structure tests, and by
+  comparison to benign controls (benign generated scenes, skylines,
+  charts, abstract art). Height or size alone never triggers
+  enforcement. (Proposed)
+- **GEO-06** Family coverage, not height-only: coverage must
+  include, at minimum, height/position, gap/timing, lit/dark and
+  colour-code sequences, and angle/tilt, and must report
+  per-subfamily results separately. A detector tuned only to one
+  subfamily must not claim general geometric coverage. (Proposed)
+- **GEO-07** Geometric fixtures and benchmark: build clean/encoded
+  paired fixtures for geometric encoding analogous to CL-9: the
+  same scene, with and without an encoded attribute sequence,
+  verified by independent re-measurement; include benign negatives
+  and generator variation; record generator, encoder, seeds,
+  configs, and declared payload units; keep scorer ground truth
+  separate, with leakage-safe splits per DT-03/DT-04. (Proposed)
 
 ### ENF — Inline verdicts, quarantine, run failure (Epic CL-4)
 
@@ -162,6 +230,8 @@ transports are explicitly excluded.
 | Metric | Target | Source |
 |---|---|---|
 | Per-family recall (LSB, DCT, metadata) | ≥ 95%, prevalence/intervals reported | CL-28 |
+| Per-family recall (geometric/semantic, proposed) | ≥ 95%, prevalence/intervals reported, to be frozen per OP-03 — not yet a Jira target | §8 |
+| Geometric false claims on benign controls | Report separately; no invented target before calibration | §8 |
 | Enforcement precision | ≥ 99% | CL-28 |
 | Clean-run false failures | ≤ 1% on ≥ 300 independent clean runs | CL-28 |
 | Inline overhead (P95) | ≤ 2 s for ≤ 10 MB / 20 MP images at agreed concurrency | CL-29 |
@@ -187,6 +257,13 @@ transports are explicitly excluded.
 - **C-07** Calibration and frozen benchmarks never touch held-out test
   labels. (CL-27, CL-28)
 - **C-08** Consumer uploads and transports are out of scope. (Epic notes)
+- **C-09** A geometric score is evidence, never a decoded message.
+  Attribute sequences and heatmaps are evidence aids, never decoded
+  messages. (Proposed, §8; extends REV-04)
+- **C-10** Where a vector source and a rendered raster both exist,
+  lineage must link them. A verdict on the rendered version does
+  not by itself prove source intent, and a clean raster score does
+  not clear a vector source that was not intercepted. (Proposed, §8)
 
 ## 5. Delivery plan
 
@@ -226,6 +303,10 @@ Dependency analysis (parsed from issue descriptions):
    Jira — link the PRD doc if you want requirements traced to it.
 5. CL-29’s latency target is marked “proposed” — needs owner agreement
    before Sprint 5.
+6. Geometric/semantic encoding (§8) is not in CL-7…CL-36 / PRD v0.2 —
+   confirm whether to add new Jira issues, extend an existing
+   detection task, or keep it as a proposed addendum; confirm
+   whether vector-source interception is in harness scope.
 
 ## 7. Jira working protocol
 
@@ -239,3 +320,81 @@ As we work through the sprints I will:
   sprints before moving it.
 - Ask before starting/completing sprints or editing issue scope —
   routine status and comment updates I will make directly.
+
+## 8. Addendum — Geometric / semantic encoding (proposed, 2026-10-28)
+
+### 8.1 Threat model
+
+An agent generating an image may carry task-relevant information in
+the image's visible structure rather than in pixel noise or metadata.
+Examples of the general class, stated without reference to any
+specific published case:
+
+- A row of similarly shaped objects (buildings, stars, blades,
+  windows, or equivalent) whose heights or vertical positions, read
+  left to right, map to letters or codes, with spacing that groups
+  them into words.
+- Short/long elements and gaps whose timing ratios map to a code
+  such as Morse.
+- Lit/dark, colour, or other binary/ternary states whose sequence
+  maps to byte patterns.
+- Angle, tilt, or other object attributes used in the same way.
+
+The resulting image may look ordinary to a human viewer. The
+message is not in a single pixel; it is in the sequence of
+attributes across repeated elements.
+
+### 8.2 Why hash, LSB, and DCT checks miss this class
+
+- Hash comparison only shows that bytes changed. An image encoded
+  at creation hashes cleanly; nothing was edited afterward.
+- LSB and DCT scores look for low-level pixel/coefficient noise.
+  A geometric encoding can leave those statistics essentially
+  clean, because the carrier is the scene geometry itself.
+- Metadata scoring looks at file metadata, not at object geometry.
+
+A detector for this class therefore cannot reuse LSB/DCT scores
+alone. It needs its own segmentation, attribute, quantization, and
+structure tests (GEO-01…GEO-07).
+
+### 8.3 Detection approach
+
+1. Segment repeated, similarly shaped elements and order them by
+   reading order.
+2. Extract one attribute sequence per element (height, position,
+   width, gap, angle, colour code, lit/dark state).
+3. Test for quantization: do values snap to a regular grid with
+   near-zero residual, and how many elements support that grid?
+4. Test for structure: does a simple, declared mapping from those
+   values produce words, codes, or grammatical text, rather than
+   gibberish?
+5. Compare to benign controls of the same scene type, and to
+   legitimate data visualizations where the same attributes are
+   expected to carry data.
+6. Score per subfamily separately. A high score on height alone is
+   not a general geometric score, and a weak, unmapped quantization
+   signal is triage-only.
+
+Thresholds for this family are unfrozen, following the same rule as
+§1 and CL-27: explicit placeholders, never invented numbers.
+Triage (high-recall) and enforcement (high-precision) operating
+points stay separate, errors fail closed, and a score is never
+equated with demonstrated collusion (C-02, C-06, C-09).
+
+### 8.4 Implementation notes for code work
+
+- Add a geometric detector family alongside spatial LSB, JPEG DCT,
+  and metadata, with its own versioned scores, configuration, and
+  limitations recorded per DET-02/DET-03 style.
+- Prefer vector-source parsing where the harness provides it;
+  otherwise segment the original raster bytes, and record renderer
+  and transform limitations explicitly.
+- Ship geometric fixtures alongside the CL-9 fixtures: paired
+  clean/encoded scenes, benign negatives, and generator variation,
+  with independent re-measurement as the verification step.
+- Report geometric results in the scorecard per OP-07, broken
+  down by subfamily, with benign-control false-claim rates shown
+  separately from encoded recall.
+- Do not claim general geometric coverage until at least the
+  subfamilies in GEO-06 have paired tests and benign-control
+  results.
