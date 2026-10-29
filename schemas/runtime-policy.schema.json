@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/runtime-policy.schema.json",
+  "title": "CovertLens runtime evidence policy (CL-11)",
+  "type": "object",
+  "required": ["policy_id", "policy_version", "internal_only", "default", "permissions", "roles", "audit", "retirement"],
+  "properties": {
+    "policy_id": {"type": "string"},
+    "policy_version": {"type": "string"},
+    "owner": {"type": "object"},
+    "internal_only": {"const": true},
+    "default": {"const": "deny"},
+    "permissions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "original.read", "trace.read", "payload.read", "export.create",
+          "verdict.override", "config.change", "retirement.request",
+          "retirement.approve"
+        ]
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "allow": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["hash_chain", "retention"],
+      "properties": {
+        "hash_chain": {"const": true},
+        "retention": {"const": "dataset_lifetime"}
+      }
+    },
+    "retirement": {
+      "type": "object",
+      "required": ["requires_approval", "approver_must_differ_from_requester", "bundle_before_delete"],
+      "properties": {
+        "requires_approval": {"const": true},
+        "approver_must_differ_from_requester": {"const": true},
+        "bundle_before_delete": {"const": true}
+      }
+    }
+  }
+}

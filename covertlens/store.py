@@ -250,6 +250,9 @@ class ArtifactStore:
 
     # -- lineage, versions, verdicts, history ----------------------------
 
+    def version_ids(self) -> list[str]:
+        return list(self._versions)
+
     def versions(self, artifact_id: str) -> list[ArtifactVersion]:
         return [self._versions[v] for v in self._by_artifact.get(artifact_id, [])]
 

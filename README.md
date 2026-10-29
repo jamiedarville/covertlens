@@ -43,6 +43,14 @@ store** that every later task builds on.
 | Held-out seeds, tasks, agent and encoder configurations are recorded | Auditable held-out record in `assignments.json` (seeds, patterns, encoder configs; task/agent dimensions recorded when present) |
 | Agents/detectors cannot access held-out labels; independent recovery checks pass | Detector export excludes held-out fixtures and all payloads; scorer ground truth requires the scorer role; bit-exact recovery checks over every encoded fixture |
 
+## CL-11 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Dataset/project permissions protect originals, traces, payloads and exports | `covertlens.runtime` deny-by-default, dataset-scoped gateway over the CL-8 store · [config/runtime-policy.json](config/runtime-policy.json) · [docs/contracts/runtime-evidence-access.md](docs/contracts/runtime-evidence-access.md) · [schemas/runtime-policy.schema.json](schemas/runtime-policy.schema.json) |
+| Evidence reads, configuration changes and overrides are audited | Append-only hash-chained `AuditLog`; versioned `RuntimeConfig` changes and reasoned verdict overrides recorded |
+| Dataset retirement policy preserves reproducibility until approved deletion | Governed request → separate-approver → bundled-deletion lifecycle; reproducibility bundle captured before any bytes are removed |
+
 ## Quickstart
 
 ```bash
@@ -55,6 +63,8 @@ python -m covertlens list-routes
 python -m covertlens store-demo          # CL-8 immutable-store round trip
 python -m covertlens build-fixtures      # CL-9 synthetic paired fixtures
 python -m covertlens split-dataset       # CL-10 leakage-safe splits + scoring
+python -m covertlens validate-runtime    # CL-11 runtime policy checks
+python -m covertlens runtime-demo        # CL-11 permissioned evidence read demo
 pytest
 ```
 

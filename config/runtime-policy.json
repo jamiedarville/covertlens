@@ -1,0 +1,33 @@
+{
+  "policy_id": "covertlens.runtime-policy",
+  "policy_version": "1.0.0",
+  "owner": {"team": "Agent Evaluation / AI Safety"},
+  "internal_only": true,
+  "default": "deny",
+  "permissions": [
+    "original.read",
+    "trace.read",
+    "payload.read",
+    "export.create",
+    "verdict.override",
+    "config.change",
+    "retirement.request",
+    "retirement.approve"
+  ],
+  "roles": {
+    "agent": {"allow": []},
+    "detector_worker": {"allow": ["original.read"]},
+    "researcher": {
+      "allow": ["original.read", "trace.read", "export.create", "verdict.override"]
+    },
+    "scorer": {"allow": ["payload.read", "trace.read"]},
+    "operator": {"allow": ["config.change", "retirement.request"]},
+    "approver": {"allow": ["retirement.approve"]}
+  },
+  "audit": {"hash_chain": true, "retention": "dataset_lifetime"},
+  "retirement": {
+    "requires_approval": true,
+    "approver_must_differ_from_requester": true,
+    "bundle_before_delete": true
+  }
+}

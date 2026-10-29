@@ -7,6 +7,8 @@ Usage:
     python -m covertlens store-demo
     python -m covertlens build-fixtures [OUT_DIR]
     python -m covertlens split-dataset [OUT_DIR]
+    python -m covertlens validate-runtime [PATH]
+    python -m covertlens runtime-demo
 """
 
 from __future__ import annotations
@@ -19,6 +21,13 @@ from .events import REQUIRED_FAMILIES, EventType
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
 from .fixtures import build_dataset, manifest as fixture_manifest, write_dataset
+from .runtime import (
+    AuditLog,
+    EvidenceGateway,
+    Principal,
+    load_runtime_policy,
+    validate_runtime_policy,
+)
 from .splits import assign_splits, validate_no_leakage, verify_recovery, write_split_dataset
 from .store import ArtifactStore
 
@@ -102,6 +111,41 @@ def main(argv: list[str] | None = None) -> int:
         report = verify_recovery(fixtures)
         print(f"wrote split dataset to {out_dir}: {counts}")
         print(f"recovery checks: {report.passed}/{report.checked} passed")
+        return 0
+
+    if command == "validate-runtime":
+        path = Path(args[1]) if len(args) > 1 else None
+        policy = load_runtime_policy(path)
+        errors = validate_runtime_policy(policy)
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}")
+            return 1
+        print(f"runtime policy {policy['policy_id']} v{policy['policy_version']}: valid")
+        return 0
+
+    if command == "runtime-demo":
+        audit = AuditLog()
+        store = ArtifactStore()
+        version = store.put_original(
+            b"\x89PNG\r\n\x1a\n" + b"runtime-demo-original",
+            run_id="run_demo", producer_id="agent-a",
+        )
+        gateway = EvidenceGateway(store, audit)
+        researcher = Principal("researcher-1", roles={"researcher"}, datasets={"dataset-a"})
+        agent = Principal("agent-1", roles={"agent"}, datasets={"dataset-a"})
+        served = gateway.read_original(researcher, "dataset-a", version.artifact_version_id)
+        denied = False
+        try:
+            gateway.read_original(agent, "dataset-a", version.artifact_version_id)
+        except PermissionError:
+            denied = True
+        print(json.dumps({
+            "served_bytes": len(served),
+            "agent_denied": denied,
+            "audit_entries": len(audit.entries),
+            "audit_chain_valid": audit.verify_chain(),
+        }, indent=2))
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)
