@@ -27,6 +27,14 @@ store** that every later task builds on.
 | Changed bytes create a new immutable version and invalidate prior verdicts | Append-only version chain per `artifact_id`; verdicts bind to one exact version and superseded verdicts report `invalidated` |
 | Originals, lineage and access history follow dataset-lifetime retention | No delete/overwrite API; frozen records; audited `AccessRecord` history; `retention_policy: dataset_lifetime` |
 
+## CL-9 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Clean and encoded pairs have verified payloads with declared size units | `covertlens.fixtures` (seeded procedural covers, LSB-PNG and DCT-JPEG embedders, independent decode verification) · [docs/contracts/synthetic-fixtures.md](docs/contracts/synthetic-fixtures.md) · [schemas/fixture-manifest.schema.json](schemas/fixture-manifest.schema.json) |
+| Generator and encoder versions, configurations and seeds are recorded | Per-fixture provenance in the JSON fixture manifest; raw payloads recorded by hash only, scorer ground truth kept separate |
+| Benign edits and generator variation are included as negatives | Default dataset ships brightness/flip benign edits and alternate-pattern/seed generator variations with zero payload bits |
+
 ## Quickstart
 
 ```bash
@@ -37,6 +45,7 @@ python -m covertlens validate-manifest   # manifest + route inventory checks
 python -m covertlens list-events
 python -m covertlens list-routes
 python -m covertlens store-demo          # CL-8 immutable-store round trip
+python -m covertlens build-fixtures      # CL-9 synthetic paired fixtures
 pytest
 ```
 
