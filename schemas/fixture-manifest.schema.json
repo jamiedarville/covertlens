@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/fixture-manifest.schema.json",
+  "title": "CovertLens synthetic fixture manifest (CL-9)",
+  "type": "object",
+  "required": ["schema", "version", "generator", "encoder_version", "fixtures"],
+  "properties": {
+    "schema": {"const": "covertlens.fixture-manifest"},
+    "version": {"type": "integer", "minimum": 1},
+    "generator": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    },
+    "encoder_version": {"type": "string"},
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fixture_id", "pair_id", "family", "role", "media_kind",
+          "content_hash", "payload_bits", "payload_bytes",
+          "bits_per_pixel", "payload_band", "payload_sha256",
+          "generator", "encoder"
+        ],
+        "properties": {
+          "fixture_id": {"type": "string"},
+          "pair_id": {"type": "string"},
+          "family": {"enum": ["spatial_lsb", "jpeg_dct"]},
+          "role": {"enum": ["clean", "encoded", "negative"]},
+          "negative_kind": {"type": ["string", "null"]},
+          "media_kind": {"enum": ["png", "jpeg"]},
+          "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "size_bytes": {"type": "integer", "minimum": 1},
+          "width": {"type": "integer", "minimum": 1},
+          "height": {"type": "integer", "minimum": 1},
+          "payload_bits": {"type": "integer", "minimum": 0},
+          "payload_bytes": {"type": "integer", "minimum": 0},
+          "bits_per_pixel": {"type": "number", "minimum": 0},
+          "payload_band": {"enum": ["none", "low", "medium", "high"]},
+          "payload_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "generator": {"type": "object"},
+          "encoder": {"type": "object"}
+        }
+      }
+    }
+  }
+}

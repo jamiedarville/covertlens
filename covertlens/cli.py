@@ -5,6 +5,7 @@ Usage:
     python -m covertlens list-events
     python -m covertlens list-routes
     python -m covertlens store-demo
+    python -m covertlens build-fixtures [OUT_DIR]
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from pathlib import Path
 from .events import REQUIRED_FAMILIES, EventType
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
+from .fixtures import build_dataset, manifest as fixture_manifest, write_dataset
 from .store import ArtifactStore
 
 
@@ -68,6 +70,18 @@ def main(argv: list[str] | None = None) -> int:
             "verify_all": store.verify_all(),
             "stats": store.stats(),
         }, indent=2))
+        return 0
+
+    if command == "build-fixtures":
+        out_dir = Path(args[1]) if len(args) > 1 else Path("fixtures-out")
+        fixtures = build_dataset()
+        write_dataset(out_dir, fixtures)
+        doc = fixture_manifest(fixtures)
+        roles: dict[str, int] = {}
+        for row in doc["fixtures"]:
+            roles[row["role"]] = roles.get(row["role"], 0) + 1
+        print(f"wrote {len(fixtures)} fixtures to {out_dir}: {roles}")
+        print(f"verified payloads: {sum(f.verify_payload() for f in fixtures)}/{len(fixtures)}")
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)
