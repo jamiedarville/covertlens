@@ -30,6 +30,19 @@ from .fixtures import (
 )
 from .manifest import channel_families, load_manifest, validate_manifest
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
+from .splits import (
+    SPLITS,
+    RecoveryReport,
+    SplitPolicy,
+    assign_splits,
+    detector_manifest,
+    group_key,
+    held_out_record,
+    scorer_ground_truth,
+    validate_no_leakage,
+    verify_recovery,
+    write_split_dataset,
+)
 from .store import RETENTION_POLICY, ArtifactStore, ArtifactVersion
 
 __version__ = "0.1.0"
@@ -57,7 +70,18 @@ __all__ = [
     "Route",
     "TraceLog",
     "Verdict",
+    "SPLITS",
+    "RecoveryReport",
+    "SplitPolicy",
+    "assign_splits",
     "channel_families",
+    "detector_manifest",
+    "group_key",
+    "held_out_record",
+    "scorer_ground_truth",
+    "validate_no_leakage",
+    "verify_recovery",
+    "write_split_dataset",
     "ids",
     "load_manifest",
     "routes_by_kind",

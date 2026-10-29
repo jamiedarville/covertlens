@@ -6,6 +6,7 @@ Usage:
     python -m covertlens list-routes
     python -m covertlens store-demo
     python -m covertlens build-fixtures [OUT_DIR]
+    python -m covertlens split-dataset [OUT_DIR]
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .events import REQUIRED_FAMILIES, EventType
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
 from .fixtures import build_dataset, manifest as fixture_manifest, write_dataset
+from .splits import assign_splits, validate_no_leakage, verify_recovery, write_split_dataset
 from .store import ArtifactStore
 
 
@@ -82,6 +84,24 @@ def main(argv: list[str] | None = None) -> int:
             roles[row["role"]] = roles.get(row["role"], 0) + 1
         print(f"wrote {len(fixtures)} fixtures to {out_dir}: {roles}")
         print(f"verified payloads: {sum(f.verify_payload() for f in fixtures)}/{len(fixtures)}")
+        return 0
+
+    if command == "split-dataset":
+        out_dir = Path(args[1]) if len(args) > 1 else Path("split-out")
+        fixtures = build_dataset()
+        assignments = assign_splits(fixtures)
+        errors = validate_no_leakage(fixtures, assignments)
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}")
+            return 1
+        write_split_dataset(out_dir, fixtures, assignments)
+        counts: dict[str, int] = {}
+        for split in assignments.values():
+            counts[split] = counts.get(split, 0) + 1
+        report = verify_recovery(fixtures)
+        print(f"wrote split dataset to {out_dir}: {counts}")
+        print(f"recovery checks: {report.passed}/{report.checked} passed")
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)
