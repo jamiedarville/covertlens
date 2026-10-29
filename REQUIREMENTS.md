@@ -1,17 +1,18 @@
 # CovertLens (CL) — Working Requirements
 
 Derived from a review of the Jira project **Covert Lens (CL)** on
-`rumination.atlassian.net` on 2026-10-28: 6 epics (CL-1…CL-6), 30 tasks
-(CL-7…CL-36), 6 planned sprints, board “CL board”. Jira is the source of
-truth; this document is my working interpretation, with every requirement
-traced to its Jira issue(s).
+`rumination.atlassian.net` on 2026-10-28: 7 epics (CL-1…CL-6, CL-37),
+35 tasks (CL-7…CL-36, CL-38…CL-42), 7 planned sprints, board “CL board”.
+Jira is the source of truth; this document is my working interpretation,
+with every requirement traced to its Jira issue(s).
 
 Source PRD referenced by all issues: **CovertLens PRD v0.2 — October 27,
 2026** (FR-01…FR-13, §§10–13). Owner: Agent Evaluation / AI Safety team.
 
-Addendum §8 (2026-10-28, proposed — not yet traced to a Jira issue)
-adds a fourth channel family, geometric/semantic encoding. It does not
-change the Jira-traced requirements in §2 unless explicitly noted.
+Addendum §8 (2026-10-28, proposed) adds a fourth channel family,
+geometric/semantic encoding, traced to Jira epic CL-37 and tasks
+CL-38…CL-42 in CL Sprint 7. It does not change the Jira-traced
+requirements in §2 unless explicitly noted.
 
 ## 1. Product summary
 
@@ -80,7 +81,7 @@ artifact delivered and scored.
   fixtures for geometric/semantic encoding, with benign negatives
   (legitimate charts, unencoded scenes, benign edits) and generator
   variation; lineage, units, and split rules matching the initial
-  dataset. (Proposed — not yet in Jira)
+  dataset. (`CL-38`)
 
 ### DET — Channel detection (Epic CL-3)
 
@@ -99,7 +100,7 @@ artifact delivered and scored.
   controls; all three families individually visible, run through pinned
   threshold configurations. (`CL-23`)
 
-### GEO — Geometric / semantic encoding (Proposed, not yet in Jira)
+### GEO — Geometric / semantic encoding (Epic CL-37, proposed)
 
 This family covers messages carried not in low-level pixel noise or
 metadata, but in the visible geometry and attributes of a generated
@@ -113,18 +114,18 @@ carry a structured message.
   order, and extract a numeric attribute sequence per element
   (height, vertical position, width, gap, angle/tilt, colour code,
   lit/dark state, or equivalent), with segmentation method,
-  tolerances, and failure modes recorded. (Proposed)
+  tolerances, and failure modes recorded. (`CL-39`)
 - **GEO-02** Quantization test: test whether attribute values snap
   to a small, regular grid or discrete set with near-zero residual,
   versus continuous natural variation; report grid step, residual,
   and count. A bare "pattern detected" verdict without these numbers
-  is not acceptable. (Proposed)
+  is not acceptable. (`CL-40`)
 - **GEO-03** Language/structure test: only where a quantized
   sequence maps through a simple, declared code (alphabet position,
   timing ratios, byte patterns, or equivalent) to a structured
   sequence (words, codes, grammatical text) may it be scored as a
   candidate encoding. A quantized sequence alone, without structure,
-  is a weak signal for triage only. (Proposed)
+  is a weak signal for triage only. (`CL-40`)
 - **GEO-04** Vector source: where a vector source is available,
   parse object attributes directly from the source, with lineage
   linking the source version to the rendered version; the verdict
@@ -132,7 +133,7 @@ carry a structured message.
   raster is available, segment on original raster bytes; renderer,
   resize, and recompression effects are recorded as limitations,
   and no resize or recompression is applied before analysis.
-  (Proposed)
+  (`CL-41`)
 - **GEO-05** Benign controls and legitimate encoding: height, size,
   and similar attributes are legitimate in data visualizations,
   charts, diagrams, and ordinary scenes. The detector must
@@ -140,19 +141,19 @@ carry a structured message.
   diagram?), by the quantization and structure tests, and by
   comparison to benign controls (benign generated scenes, skylines,
   charts, abstract art). Height or size alone never triggers
-  enforcement. (Proposed)
+  enforcement. (`CL-42`)
 - **GEO-06** Family coverage, not height-only: coverage must
   include, at minimum, height/position, gap/timing, lit/dark and
   colour-code sequences, and angle/tilt, and must report
   per-subfamily results separately. A detector tuned only to one
-  subfamily must not claim general geometric coverage. (Proposed)
+  subfamily must not claim general geometric coverage. (`CL-42`)
 - **GEO-07** Geometric fixtures and benchmark: build clean/encoded
   paired fixtures for geometric encoding analogous to CL-9: the
   same scene, with and without an encoded attribute sequence,
   verified by independent re-measurement; include benign negatives
   and generator variation; record generator, encoder, seeds,
   configs, and declared payload units; keep scorer ground truth
-  separate, with leakage-safe splits per DT-03/DT-04. (Proposed)
+  separate, with leakage-safe splits per DT-03/DT-04. (`CL-38`)
 
 ### ENF — Inline verdicts, quarantine, run failure (Epic CL-4)
 
@@ -230,8 +231,8 @@ carry a structured message.
 | Metric | Target | Source |
 |---|---|---|
 | Per-family recall (LSB, DCT, metadata) | ≥ 95%, prevalence/intervals reported | CL-28 |
-| Per-family recall (geometric/semantic, proposed) | ≥ 95%, prevalence/intervals reported, to be frozen per OP-03 — not yet a Jira target | §8 |
-| Geometric false claims on benign controls | Report separately; no invented target before calibration | §8 |
+| Per-family recall (geometric/semantic, proposed) | ≥ 95%, prevalence/intervals reported, to be frozen per OP-03 — proposed target under CL-37/CL-42, not yet frozen | §8, CL-37 |
+| Geometric false claims on benign controls | Report separately; no invented target before calibration | §8, CL-42 |
 | Enforcement precision | ≥ 99% | CL-28 |
 | Clean-run false failures | ≤ 1% on ≥ 300 independent clean runs | CL-28 |
 | Inline overhead (P95) | ≤ 2 s for ≤ 10 MB / 20 MP images at agreed concurrency | CL-29 |
@@ -259,17 +260,19 @@ carry a structured message.
 - **C-08** Consumer uploads and transports are out of scope. (Epic notes)
 - **C-09** A geometric score is evidence, never a decoded message.
   Attribute sequences and heatmaps are evidence aids, never decoded
-  messages. (Proposed, §8; extends REV-04)
+  messages. (Proposed, §8; extends REV-04) (`CL-37`, all GEO tasks)
 - **C-10** Where a vector source and a rendered raster both exist,
   lineage must link them. A verdict on the rendered version does
   not by itself prove source intent, and a clean raster score does
   not clear a vector source that was not intercepted. (Proposed, §8)
+  (`CL-41`)
 
 ## 5. Delivery plan
 
-Six planned two-week sprints, five tasks each. No active sprint; no dates,
-estimates, or assignees set yet. All 36 issues are To Do, all Medium
-priority.
+Seven planned two-week sprints, five tasks each (Sprint 7 proposed).
+No active sprint; no dates, estimates, or assignees set yet. Early Sprint 1
+tasks are complete (CL-7, CL-8 Done; CL-9 In Progress with its PR merged);
+all other issues are To Do, all Medium priority.
 
 | Sprint | Goal | Tasks |
 |---|---|---|
@@ -279,6 +282,7 @@ priority.
 | CL Sprint 4 (id 50) | Metadata, sequence context, researcher reports | CL-22, CL-23, CL-24, CL-25, CL-26 |
 | CL Sprint 5 (id 51) | Frozen benchmarks and live eval pilot | CL-27, CL-28, CL-29, CL-30, CL-31 |
 | CL Sprint 6 (id 52) | MVP hardening, scorecard, handoff | CL-32, CL-33, CL-34, CL-35, CL-36 |
+| CL Sprint 7 (id 53, proposed) | Geometric/semantic encoding | CL-38, CL-39, CL-40, CL-41, CL-42 (epic CL-37) |
 
 Dependency analysis (parsed from issue descriptions):
 
@@ -290,6 +294,9 @@ Dependency analysis (parsed from issue descriptions):
   mirrors CL-14 and is equally constraining in practice.)
 - Sprint 1 entry order: CL-7 first, then CL-8 and CL-9 in parallel, then
   CL-10, then CL-11.
+- Proposed GEO chain (Sprint 7): CL-9/CL-10 → CL-38 → CL-39 → CL-40 →
+  CL-42, with CL-13 → CL-39 and CL-8/CL-12 → CL-41; CL-42 links
+  (non-blocking) to CL-28 and CL-35 for benchmark/scorecard integration.
 
 ## 6. Readiness gaps and open questions
 
@@ -303,10 +310,10 @@ Dependency analysis (parsed from issue descriptions):
    Jira — link the PRD doc if you want requirements traced to it.
 5. CL-29’s latency target is marked “proposed” — needs owner agreement
    before Sprint 5.
-6. Geometric/semantic encoding (§8) is not in CL-7…CL-36 / PRD v0.2 —
-   confirm whether to add new Jira issues, extend an existing
-   detection task, or keep it as a proposed addendum; confirm
-   whether vector-source interception is in harness scope.
+6. Geometric/semantic encoding (§8) is now traced to epic CL-37 and
+   tasks CL-38…CL-42 in CL Sprint 7 (all proposed, To Do). Confirm at
+   refinement whether vector-source interception (CL-41) stays in
+   harness scope, and when GEO thresholds freeze under CL-27.
 
 ## 7. Jira working protocol
 
@@ -321,7 +328,7 @@ As we work through the sprints I will:
 - Ask before starting/completing sprints or editing issue scope —
   routine status and comment updates I will make directly.
 
-## 8. Addendum — Geometric / semantic encoding (proposed, 2026-10-28)
+## 8. Addendum — Geometric / semantic encoding (proposed, 2026-10-28; Jira: CL-37…CL-42)
 
 ### 8.1 Threat model
 
@@ -385,16 +392,16 @@ equated with demonstrated collusion (C-02, C-06, C-09).
 
 - Add a geometric detector family alongside spatial LSB, JPEG DCT,
   and metadata, with its own versioned scores, configuration, and
-  limitations recorded per DET-02/DET-03 style.
+  limitations recorded per DET-02/DET-03 style. (CL-39, CL-40)
 - Prefer vector-source parsing where the harness provides it;
   otherwise segment the original raster bytes, and record renderer
-  and transform limitations explicitly.
+  and transform limitations explicitly. (CL-41)
 - Ship geometric fixtures alongside the CL-9 fixtures: paired
   clean/encoded scenes, benign negatives, and generator variation,
-  with independent re-measurement as the verification step.
+  with independent re-measurement as the verification step. (CL-38)
 - Report geometric results in the scorecard per OP-07, broken
   down by subfamily, with benign-control false-claim rates shown
-  separately from encoded recall.
+  separately from encoded recall. (CL-42)
 - Do not claim general geometric coverage until at least the
   subfamilies in GEO-06 have paired tests and benign-control
   results.
