@@ -28,6 +28,13 @@ from .fixtures import (
     make_payload,
     manifest,
 )
+from .gate import (
+    DeliveryRecord,
+    InterceptionContext,
+    InterceptionGate,
+    PendingDeliveryError,
+    WithheldError,
+)
 from .manifest import channel_families, load_manifest, validate_manifest
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
 from .runtime import (
@@ -62,6 +69,11 @@ __all__ = [
     "ArtifactStore",
     "ArtifactVersion",
     "Fixture",
+    "DeliveryRecord",
+    "InterceptionContext",
+    "InterceptionGate",
+    "PendingDeliveryError",
+    "WithheldError",
     "build_dataset",
     "build_pair",
     "decode_dct_jpeg",
