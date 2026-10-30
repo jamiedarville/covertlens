@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/delivery-record.schema.json",
+  "title": "CovertLens pending delivery record (CL-12)",
+  "type": "object",
+  "required": [
+    "delivery_id", "run_id", "artifact_id", "artifact_version_id",
+    "content_hash", "sender_id", "recipient_id", "attempt", "state"
+  ],
+  "properties": {
+    "delivery_id": {"type": "string", "pattern": "^dlv_[0-9a-f]{32}$"},
+    "run_id": {"type": "string"},
+    "episode_id": {"type": ["string", "null"]},
+    "artifact_id": {"type": "string"},
+    "artifact_version_id": {"type": "string"},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sender_id": {"type": "string"},
+    "recipient_id": {"type": "string"},
+    "attempt": {"type": "integer", "minimum": 1},
+    "state": {"enum": ["pending", "permitted", "withheld"]},
+    "verdict_id": {"type": ["string", "null"]},
+    "verdict": {
+      "type": ["string", "null"],
+      "enum": ["log", "flag", "quarantine", "fail_run", null]
+    }
+  }
+}

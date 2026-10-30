@@ -51,6 +51,14 @@ store** that every later task builds on.
 | Evidence reads, configuration changes and overrides are audited | Append-only hash-chained `AuditLog`; versioned `RuntimeConfig` changes and reasoned verdict overrides recorded |
 | Dataset retirement policy preserves reproducibility until approved deletion | Governed request → separate-approver → bundled-deletion lifecycle; reproducibility bundle captured before any bytes are removed |
 
+## CL-12 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| All inventoried image paths reach the gate before recipient access | `covertlens.gate.InterceptionGate` single hook for gated routes R-01…R-07 (R-08 rejected as a delivery route) with coverage reporting · [docs/contracts/interception-gate.md](docs/contracts/interception-gate.md) · [schemas/delivery-record.schema.json](schemas/delivery-record.schema.json) |
+| Stable run, episode, sender, recipient and artifact version/hash are emitted | CL-7 events (`artifact.created` → `delivery.attempted` → `gate.verdict` → `artifact.accessed`/`artifact.parsed`) in the per-run trace, deliveries pending until a permitting verdict |
+| Repeated references and retries are handled idempotently | Reference resolution cached to one immutable version/creation event; delivery retries reuse the deterministic `delivery_id` |
+
 ## Quickstart
 
 ```bash
@@ -65,6 +73,7 @@ python -m covertlens build-fixtures      # CL-9 synthetic paired fixtures
 python -m covertlens split-dataset       # CL-10 leakage-safe splits + scoring
 python -m covertlens validate-runtime    # CL-11 runtime policy checks
 python -m covertlens runtime-demo        # CL-11 permissioned evidence read demo
+python -m covertlens gate-demo           # CL-12 interception + pending delivery demo
 pytest
 ```
 

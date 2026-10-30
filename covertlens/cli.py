@@ -9,6 +9,7 @@ Usage:
     python -m covertlens split-dataset [OUT_DIR]
     python -m covertlens validate-runtime [PATH]
     python -m covertlens runtime-demo
+    python -m covertlens gate-demo
 """
 
 from __future__ import annotations
@@ -20,7 +21,9 @@ from pathlib import Path
 from .events import REQUIRED_FAMILIES, EventType
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
+from .events import Verdict
 from .fixtures import build_dataset, manifest as fixture_manifest, write_dataset
+from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .runtime import (
     AuditLog,
     EvidenceGateway,
@@ -145,6 +148,29 @@ def main(argv: list[str] | None = None) -> int:
             "agent_denied": denied,
             "audit_entries": len(audit.entries),
             "audit_chain_valid": audit.verify_chain(),
+        }, indent=2))
+        return 0
+
+    if command == "gate-demo":
+        gate = InterceptionGate(ArtifactStore())
+        ctx = InterceptionContext(run_id="run_demo", episode_id="ep_1", sender_id="agent-a")
+        handle = gate.intercept_bytes("R-01", b"\x89PNG\r\n\x1a\n" + b"gate-demo-image", ctx)
+        delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
+        pending_blocked = False
+        try:
+            gate.recipient_access(delivery.delivery_id)
+        except PendingDeliveryError:
+            pending_blocked = True
+        gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
+        served = gate.recipient_access(delivery.delivery_id)
+        print(json.dumps({
+            "artifact_version_id": handle.artifact_version_id,
+            "content_hash": handle.content_hash,
+            "delivery_id": delivery.delivery_id,
+            "pending_blocked": pending_blocked,
+            "served_bytes_after_verdict": len(served),
+            "coverage_missing": gate.coverage_report()["missing"],
+            "events": [e.event_type.value for e in gate.events("run_demo")],
         }, indent=2))
         return 0
 
