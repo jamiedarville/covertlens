@@ -68,6 +68,7 @@ from .outcomes import (
     finalize_run_outcome,
     validate_outcome,
 )
+from .replay import ReplayConfig, build_trials, run_replay, validate_replay
 from .parsing import (
     DEFAULT_LIMITS,
     AnalysisResult,
@@ -193,6 +194,10 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "ReplayConfig",
+    "build_trials",
+    "run_replay",
+    "validate_replay",
     "context_fingerprint",
     "analysis_outcome",
     "detector_error_outcome",

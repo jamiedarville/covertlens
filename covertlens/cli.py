@@ -17,6 +17,7 @@ Usage:
     python -m covertlens benchmark-dct
     python -m covertlens trace-demo
     python -m covertlens verdict-demo
+    python -m covertlens replay-demo
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from .dct import analyze_dct_bytes, benchmark_dct
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
+from .replay import run_replay
 from .verdicts import decide_verdict
 from .parsing import ParserLimits, analyze_bytes, analyze_version
 from .runtime import (
@@ -308,6 +310,15 @@ def main(argv: list[str] | None = None) -> int:
                 for d in report["deliveries"]
             ],
             "actions": report["actions"],
+        }, indent=2))
+        return 0
+
+    if command == "replay-demo":
+        report = run_replay(build_dataset())
+        print(json.dumps({
+            "config": report["config"],
+            "by_condition": report["by_condition"],
+            "by_payload_band": report["by_payload_band"],
         }, indent=2))
         return 0
 

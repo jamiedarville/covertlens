@@ -123,6 +123,14 @@ store** that every later task builds on.
 | Byte, detector or configuration changes invalidate cached results | `covertlens.integrity.AnalysisCache` score keys (hash + detector/config versions) · [docs/contracts/gate-integrity.md](docs/contracts/gate-integrity.md) |
 | Run-context changes recompute contextual verdicts while allowing safe image-score reuse | Verdict keys add threshold-config version + context fingerprint; score keys exclude context |
 
+## CL-21 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Matched/randomized trials pin conditions and record stochastic variation | `covertlens.replay.run_replay` matched delivered/withheld pairs, seeded order and per-trial seeds, pinned hashes/versions · [docs/contracts/replay-experiments.md](docs/contracts/replay-experiments.md) · [schemas/replay-experiment.schema.json](schemas/replay-experiment.schema.json) |
+| Independent recovery and legitimate task outcomes are collected | Separate recovery and legitimate-task rates per condition and payload band |
+| Blocked runs label recipient parse not observed and never claim demonstrated transfer | Withheld trials: `parse_status`/`recovery` `not_observed`, `demonstrated_transfer` always false (C-04) |
+
 ## Quickstart
 
 ```bash
@@ -145,6 +153,7 @@ python -m covertlens dct-demo            # CL-15 DCT scoring demo
 python -m covertlens benchmark-dct       # CL-15 paired DCT benchmark (FP + recall by band)
 python -m covertlens trace-demo          # CL-16 trace join demo
 python -m covertlens verdict-demo        # CL-17 verdict ladder demo (unfrozen, log-only)
+python -m covertlens replay-demo         # CL-21 delivered-vs-withheld replay
 pytest
 ```
 
