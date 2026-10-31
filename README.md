@@ -131,6 +131,14 @@ store** that every later task builds on.
 | Independent recovery and legitimate task outcomes are collected | Separate recovery and legitimate-task rates per condition and payload band |
 | Blocked runs label recipient parse not observed and never claim demonstrated transfer | Withheld trials: `parse_status`/`recovery` `not_observed`, `demonstrated_transfer` always false (C-04) |
 
+## CL-22 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Known metadata payloads and clean matched controls are verified | `covertlens.metadata_fixtures` PNG tEXt / JPEG APP1 payload fixtures with image bytes proven unchanged · [docs/contracts/metadata-fixtures.md](docs/contracts/metadata-fixtures.md) |
+| Allowed task metadata exceptions are represented | Benign controls carrying only Title/Description/TaskReference |
+| Fixture lineage, payload units and split rules match the initial dataset | CL-9 `Fixture` lineage/units; CL-10 split grouping verified |
+
 ## Quickstart
 
 ```bash

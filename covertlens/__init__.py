@@ -60,6 +60,14 @@ from .lsb import (
 )
 from .integrity import AnalysisCache, context_fingerprint
 from .manifest import channel_families, load_manifest, validate_manifest
+from .metadata_fixtures import (
+    ALLOWED_TASK_METADATA,
+    build_metadata_dataset,
+    build_metadata_pair,
+    extract_metadata_payload,
+    metadata_entries,
+    verify_metadata_fixture,
+)
 from .outcomes import (
     analysis_outcome,
     detector_error_outcome,
@@ -194,6 +202,12 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "ALLOWED_TASK_METADATA",
+    "build_metadata_dataset",
+    "build_metadata_pair",
+    "extract_metadata_payload",
+    "metadata_entries",
+    "verify_metadata_fixture",
     "ReplayConfig",
     "build_trials",
     "run_replay",
