@@ -20,6 +20,7 @@ Usage:
     python -m covertlens replay-demo
     python -m covertlens metadata-demo
     python -m covertlens sequence-demo
+    python -m covertlens report-demo
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
+from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
 from .metadata_fixtures import build_metadata_dataset
 from .replay import run_replay
@@ -333,6 +335,30 @@ def main(argv: list[str] | None = None) -> int:
         report = benchmark_metadata(fixtures)
         print(json.dumps({"rows": rows[:4], "roc_auc": report["roc_auc"],
                           "by_payload_band": report["by_payload_band"]}, indent=2))
+        return 0
+
+    if command == "report-demo":
+        gate = InterceptionGate(ArtifactStore())
+        ctx = InterceptionContext(
+            run_id="run_demo", episode_id="ep_1", sender_id="agent-a")
+        clean, encoded = build_pair(
+            "spatial_lsb", width=64, height=48, payload_bytes=64)
+        results = []
+        for fixture in (clean, encoded):
+            handle = gate.intercept_bytes("R-01", fixture.data, ctx)
+            results.append(analyze_lsb_version(
+                gate.store, handle.artifact_version_id, actor_id="detector"))
+            delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
+            gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
+            gate.recipient_access(delivery.delivery_id)
+            gate.record_parse(delivery.delivery_id, ParseStatus.PARSED)
+        report = build_run_report(gate.events("run_demo"), results, report_id="rpt_demo")
+        print(json.dumps({
+            "run_id": report["run_id"],
+            "originals": len(report["originals"]),
+            "triage_queue": report["triage_queue"],
+            "disposition_counts": report["disposition_counts"],
+        }, indent=2))
         return 0
 
     if command == "sequence-demo":
