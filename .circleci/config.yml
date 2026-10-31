@@ -1,17 +1,25 @@
 version: 2.1
 
 jobs:
-  placeholder:
+  test:
     docker:
-      - image: cimg/base:stable
+      - image: cimg/python:3.12
     steps:
       - checkout
       - run:
-          name: Confirm starter pipeline
+          name: Install dev dependencies
+          command: pip install -e ".[dev]"
+      - run:
+          name: Run test suite
+          command: python -m pytest -q
+      - run:
+          name: Contract smoke checks
           command: |
-            echo "No build, test, or lint tooling is present in this revision."
+            python -m covertlens validate-manifest
+            python -m covertlens validate-runtime
+            python -m covertlens parse-demo > /dev/null
 
 workflows:
   checks:
     jobs:
-      - placeholder
+      - test

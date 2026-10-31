@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/analysis-result.schema.json",
+  "title": "CovertLens bounded analysis result (CL-13)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "artifact_id", "artifact_version_id",
+    "content_hash", "media_kind", "status", "transform_applied",
+    "parser", "limits", "image", "input_bytes", "coverage",
+    "findings", "errors", "limitations", "elapsed_ms"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.analysis-result"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "artifact_id": {"type": ["string", "null"]},
+    "artifact_version_id": {"type": ["string", "null"]},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "media_kind": {"type": ["string", "null"], "enum": ["png", "jpeg", null]},
+    "status": {
+      "enum": [
+        "parsed", "corrupt", "unsupported_format",
+        "unsupported_encoding", "oversized", "timeout"
+      ]
+    },
+    "transform_applied": {"const": false},
+    "parser": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "version", "max_input_bytes", "max_pixels", "max_width",
+        "max_height", "max_decompressed_bytes", "max_runtime_s"
+      ],
+      "properties": {
+        "version": {"type": "string"},
+        "max_input_bytes": {"type": "integer", "minimum": 1},
+        "max_pixels": {"type": "integer", "minimum": 1},
+        "max_width": {"type": "integer", "minimum": 1},
+        "max_height": {"type": "integer", "minimum": 1},
+        "max_decompressed_bytes": {"type": "integer", "minimum": 1},
+        "max_runtime_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "image": {
+      "type": ["object", "null"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "input_bytes": {"type": "integer", "minimum": 0},
+    "coverage": {"type": "object"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "detail"],
+        "properties": {
+          "code": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "elapsed_ms": {"type": "number", "minimum": 0}
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": [
+        "family", "detector_name", "detector_version", "score",
+        "coverage", "evidence", "limitations", "schema_version"
+      ],
+      "properties": {
+        "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+        "detector_name": {"type": "string", "minLength": 1},
+        "detector_version": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage": {"type": "object"},
+        "evidence": {"type": "object"},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "schema_version": {"const": "1.0.0"}
+      }
+    }
+  }
+}

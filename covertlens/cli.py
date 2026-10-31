@@ -10,6 +10,7 @@ Usage:
     python -m covertlens validate-runtime [PATH]
     python -m covertlens runtime-demo
     python -m covertlens gate-demo
+    python -m covertlens parse-demo
 """
 
 from __future__ import annotations
@@ -22,8 +23,9 @@ from .events import REQUIRED_FAMILIES, EventType
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
 from .events import Verdict
-from .fixtures import build_dataset, manifest as fixture_manifest, write_dataset
+from .fixtures import build_dataset, build_pair, manifest as fixture_manifest, write_dataset
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
+from .parsing import ParserLimits, analyze_bytes, analyze_version
 from .runtime import (
     AuditLog,
     EvidenceGateway,
@@ -172,6 +174,25 @@ def main(argv: list[str] | None = None) -> int:
             "coverage_missing": gate.coverage_report()["missing"],
             "events": [e.event_type.value for e in gate.events("run_demo")],
         }, indent=2))
+        return 0
+
+    if command == "parse-demo":
+        store = ArtifactStore()
+        results = []
+        for family in ("spatial_lsb", "jpeg_dct"):
+            clean, _ = build_pair(family, width=32, height=24, payload_bytes=8)
+            version = store.put_original(
+                clean.data, run_id="run_demo", producer_id="agent-a")
+            results.append(analyze_version(
+                store, version.artifact_version_id, actor_id="detector").to_dict())
+        good, _ = build_pair("spatial_lsb", width=32, height=24, payload_bytes=8)
+        results.append(analyze_bytes(good.data[: len(good.data) // 2]).to_dict())
+        results.append(analyze_bytes(
+            good.data, limits=ParserLimits(max_input_bytes=16)).to_dict())
+        print(json.dumps(
+            [{"status": r["status"], "media_kind": r["media_kind"],
+              "content_hash": r["content_hash"], "coverage": r["coverage"],
+              "errors": r["errors"]} for r in results], indent=2))
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)

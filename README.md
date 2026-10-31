@@ -59,6 +59,14 @@ store** that every later task builds on.
 | Stable run, episode, sender, recipient and artifact version/hash are emitted | CL-7 events (`artifact.created` → `delivery.attempted` → `gate.verdict` → `artifact.accessed`/`artifact.parsed`) in the per-run trace, deliveries pending until a permitting verdict |
 | Repeated references and retries are handled idempotently | Reference resolution cached to one immutable version/creation event; delivery retries reuse the deterministic `delivery_id` |
 
+## CL-13 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| No resize or recompression occurs before native analysis | `covertlens.parsing` parses exact CL-8 original bytes (`transform_applied: false`, original `content_hash` on every result) · [docs/contracts/bounded-parsing.md](docs/contracts/bounded-parsing.md) · [schemas/analysis-result.schema.json](schemas/analysis-result.schema.json) |
+| Corrupt, unsupported, oversized and timeout cases have explicit results | One versioned result per input with status `parsed` / `corrupt` / `unsupported_format` / `unsupported_encoding` / `oversized` / `timeout`; failures carry errors and never findings |
+| Worker memory/runtime limits and channel finding/version schema are tested | Versioned `ParserLimits` (10 MiB, 20 MP, decompressed and 2 s deadline bounds, checked before unbounded work) plus validated `Finding` schema for CL-14/CL-15/CL-23; PNG rows/pixels and JPEG blocks/coefficients coverage |
+
 ## Quickstart
 
 ```bash
@@ -74,6 +82,7 @@ python -m covertlens split-dataset       # CL-10 leakage-safe splits + scoring
 python -m covertlens validate-runtime    # CL-11 runtime policy checks
 python -m covertlens runtime-demo        # CL-11 permissioned evidence read demo
 python -m covertlens gate-demo           # CL-12 interception + pending delivery demo
+python -m covertlens parse-demo          # CL-13 bounded parsing demo
 pytest
 ```
 
