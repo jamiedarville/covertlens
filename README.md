@@ -139,6 +139,14 @@ store** that every later task builds on.
 | Allowed task metadata exceptions are represented | Benign controls carrying only Title/Description/TaskReference |
 | Fixture lineage, payload units and split rules match the initial dataset | CL-9 `Fixture` lineage/units; CL-10 split grouping verified |
 
+## CL-23 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Metadata scores distinguish supported encoding evidence from benign controls | `covertlens.metadata` declared-keyword detector (payload strong, unknown weak, allowed/none benign) · [docs/contracts/metadata-detector.md](docs/contracts/metadata-detector.md) · [schemas/metadata-benchmark.schema.json](schemas/metadata-benchmark.schema.json) |
+| LSB, DCT and metadata outputs remain individually visible | `analyze_all_bytes` attaches each applicable family to one result, never blended |
+| All three families run through pinned threshold configurations | `analyze_and_decide` through the CL-17 ladder with caller-pinned config version recorded |
+
 ## Quickstart
 
 ```bash
@@ -162,6 +170,7 @@ python -m covertlens benchmark-dct       # CL-15 paired DCT benchmark (FP + reca
 python -m covertlens trace-demo          # CL-16 trace join demo
 python -m covertlens verdict-demo        # CL-17 verdict ladder demo (unfrozen, log-only)
 python -m covertlens replay-demo         # CL-21 delivered-vs-withheld replay
+python -m covertlens metadata-demo       # CL-23 metadata + integrated pipeline demo
 pytest
 ```
 

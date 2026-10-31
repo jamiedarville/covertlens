@@ -25,6 +25,7 @@ jobs:
             python -m covertlens trace-demo > /dev/null
             python -m covertlens verdict-demo > /dev/null
             python -m covertlens replay-demo > /dev/null
+            python -m covertlens metadata-demo > /dev/null
 
 workflows:
   checks:

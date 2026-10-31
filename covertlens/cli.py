@@ -18,6 +18,7 @@ Usage:
     python -m covertlens trace-demo
     python -m covertlens verdict-demo
     python -m covertlens replay-demo
+    python -m covertlens metadata-demo
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ from .dct import analyze_dct_bytes, benchmark_dct
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
+from .metadata import analyze_all_bytes, benchmark_metadata
+from .metadata_fixtures import build_metadata_dataset
 from .replay import run_replay
 from .verdicts import decide_verdict
 from .parsing import ParserLimits, analyze_bytes, analyze_version
@@ -311,6 +314,23 @@ def main(argv: list[str] | None = None) -> int:
             ],
             "actions": report["actions"],
         }, indent=2))
+        return 0
+
+    if command == "metadata-demo":
+        fixtures = build_metadata_dataset()
+        rows = []
+        for fixture in fixtures:
+            if fixture.role not in ("encoded", "negative"):
+                continue
+            result = analyze_all_bytes(fixture.data)
+            rows.append({
+                "role": fixture.role,
+                "media_kind": fixture.media_kind,
+                "findings": {f.family: f.score for f in result.findings},
+            })
+        report = benchmark_metadata(fixtures)
+        print(json.dumps({"rows": rows[:4], "roc_auc": report["roc_auc"],
+                          "by_payload_band": report["by_payload_band"]}, indent=2))
         return 0
 
     if command == "replay-demo":

@@ -60,6 +60,16 @@ from .lsb import (
 )
 from .integrity import AnalysisCache, context_fingerprint
 from .manifest import channel_families, load_manifest, validate_manifest
+from .metadata import (
+    METADATA_DETECTOR_NAME,
+    METADATA_DETECTOR_VERSION,
+    MetadataConfig,
+    analyze_all_bytes,
+    analyze_and_decide,
+    benchmark_metadata,
+    detect_metadata,
+    validate_metadata_benchmark,
+)
 from .metadata_fixtures import (
     ALLOWED_TASK_METADATA,
     build_metadata_dataset,
@@ -202,6 +212,14 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "METADATA_DETECTOR_NAME",
+    "METADATA_DETECTOR_VERSION",
+    "MetadataConfig",
+    "analyze_all_bytes",
+    "analyze_and_decide",
+    "benchmark_metadata",
+    "detect_metadata",
+    "validate_metadata_benchmark",
     "ALLOWED_TASK_METADATA",
     "build_metadata_dataset",
     "build_metadata_pair",
