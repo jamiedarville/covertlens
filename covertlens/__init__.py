@@ -99,6 +99,13 @@ from .calibration import (
     load_frozen_thresholds,
     validate_calibration,
 )
+from .frozen_benchmark import (
+    clean_run_stability,
+    evaluate_held_out,
+    run_frozen_evaluation,
+    validate_frozen_benchmark,
+    wilson_interval,
+)
 from .pinning import (
     build_pin,
     export_bundle,
@@ -242,6 +249,11 @@ __all__ = [
     "AnalysisCache",
     "build_pin",
     "calibrate_family",
+    "clean_run_stability",
+    "evaluate_held_out",
+    "run_frozen_evaluation",
+    "validate_frozen_benchmark",
+    "wilson_interval",
     "calibrate_thresholds",
     "load_frozen_thresholds",
     "validate_calibration",

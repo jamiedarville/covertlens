@@ -30,6 +30,7 @@ jobs:
             python -m covertlens report-demo > /dev/null
             python -m covertlens pinning-demo > /dev/null
             python -m covertlens calibrate-demo > /dev/null
+            python -m covertlens frozen-demo > /dev/null
 
 workflows:
   checks:

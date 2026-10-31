@@ -179,6 +179,14 @@ store** that every later task builds on.
 | Owners freeze coverage/payload ranges, thresholds and acceptance targets | `config/frozen-thresholds.json` (`frozen-1.0.0`, triage recall ≥0.95 / enforcement precision ≥0.99 targets, calibrated bands low+medium, high uncalibrated) |
 | Calibration uses no held-out test labels | Held-out fixtures in calibration input raise (C-07); frozen artifact records `held_out_labels_used: false` and the development dataset hash |
 
+## CL-28 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Target ≥95% per-family recall and ≥99% enforcement precision with prevalence/intervals reported | `covertlens.frozen_benchmark.run_frozen_evaluation` held-out-only benchmark (Wilson 95% intervals, per-band recall) · [docs/contracts/frozen-benchmark.md](docs/contracts/frozen-benchmark.md) · [schemas/frozen-benchmark.schema.json](schemas/frozen-benchmark.schema.json) |
+| Target ≤1% clean-run false failures using ≥300 independent clean runs | 320 fresh-seed clean runs through the frozen ladder: 0 false failures within claimed coverage |
+| Missed targets produce explicit tradeoffs or narrowed coverage rather than universal claims | Report records `universal_claim: false` with tradeoffs: high-band-only held-out positives, tiny-n intervals, smooth/blocks covers excluded from the stability claim (measured false-fail probes), ~14% clean triage flag rate |
+
 ## Quickstart
 
 ```bash
@@ -207,6 +215,7 @@ python -m covertlens sequence-demo       # CL-24 sequence benchmark demo
 python -m covertlens report-demo         # CL-25 researcher report demo
 python -m covertlens pinning-demo        # CL-26 pin + reproducibility demo
 python -m covertlens calibrate-demo      # CL-27 frozen threshold points
+python -m covertlens frozen-demo         # CL-28 frozen benchmark + clean stability
 pytest
 ```
 
