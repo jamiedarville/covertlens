@@ -72,6 +72,7 @@ class DeliveryRecord:
     state: str = "pending"  # pending | permitted | withheld
     verdict_id: str | None = None
     verdict: Verdict | None = None
+    infrastructure_error: str | None = None  # CL-19: withheld without a verdict
 
 
 def _now() -> str:
@@ -326,6 +327,25 @@ class InterceptionGate:
             sender_id=record.sender_id,
             recipient_id=record.recipient_id,
         )
+
+    def withhold_for_infrastructure(
+        self, delivery_id: str, error_class: str
+    ) -> DeliveryRecord:
+        """Withhold a pending delivery for an infrastructure reason (CL-19).
+
+        No verdict is recorded and no clean outcome is implied: the
+        delivery is withheld, the manifest error class is stored on
+        the record, and recipient access raises `WithheldError`.
+        """
+        with self._lock:
+            record = self._delivery(delivery_id)
+            if record.state != "pending":
+                raise ValueError(
+                    f"delivery {delivery_id} already decided ({record.state})"
+                )
+            record.state = "withheld"
+            record.infrastructure_error = error_class
+            return record
 
     # -- CL-18: uniform enforcement on every access path -------------------
 

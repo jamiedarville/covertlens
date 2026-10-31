@@ -107,6 +107,14 @@ store** that every later task builds on.
 | No access occurs before verdict under concurrent delivery attempts | One gate lock makes verdict check + serve atomic; `access_attempt_report()` audits every attempt |
 | Quarantined originals remain available only to authorized reviewers | `reviewer_access` (R-08 evidence path, audited store read); recipients stay withheld |
 
+## CL-19 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Detection thresholds emit structured eval-failure reasons | `covertlens.outcomes.failure_reason` (family, score, point crossed, detectors, config version) · [docs/contracts/run-outcomes.md](docs/contracts/run-outcomes.md) · [schemas/run-outcome.schema.json](schemas/run-outcome.schema.json) |
+| Parsing/timeouts/unsupported inputs obey the manifest without a clean verdict | Manifest error classes with `clean_verdict: false` and withheld delivery |
+| Enforcement errors withhold delivery and record an infrastructure outcome | `evaluate_delivery` pipeline + `gate.withhold_for_infrastructure` (no verdict recorded) |
+
 ## Quickstart
 
 ```bash
