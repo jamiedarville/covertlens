@@ -11,6 +11,8 @@ Usage:
     python -m covertlens runtime-demo
     python -m covertlens gate-demo
     python -m covertlens parse-demo
+    python -m covertlens lsb-demo
+    python -m covertlens benchmark-lsb
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from .routes import ROUTES, validate_inventory
 from .events import Verdict
 from .fixtures import build_dataset, build_pair, manifest as fixture_manifest, write_dataset
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
+from .lsb import analyze_lsb_bytes, benchmark_lsb
 from .parsing import ParserLimits, analyze_bytes, analyze_version
 from .runtime import (
     AuditLog,
@@ -193,6 +196,37 @@ def main(argv: list[str] | None = None) -> int:
             [{"status": r["status"], "media_kind": r["media_kind"],
               "content_hash": r["content_hash"], "coverage": r["coverage"],
               "errors": r["errors"]} for r in results], indent=2))
+        return 0
+
+    if command == "lsb-demo":
+        clean, medium = build_pair(
+            "spatial_lsb", width=64, height=48, payload_bytes=64)
+        _, high = build_pair(
+            "spatial_lsb", width=64, height=48, payload_bytes=192)
+        rows = []
+        for fixture in (clean, medium, high):
+            result = analyze_lsb_bytes(fixture.data)
+            finding = result.findings[0] if result.findings else None
+            rows.append({
+                "role": fixture.role,
+                "payload_band": fixture.payload_band,
+                "status": result.status.value,
+                "score": finding.score if finding else None,
+                "coverage": finding.coverage if finding else None,
+            })
+        print(json.dumps(rows, indent=2))
+        return 0
+
+    if command == "benchmark-lsb":
+        report = benchmark_lsb(build_dataset())
+        print(json.dumps({
+            "detector": report["detector"],
+            "positive_count": report["positive_count"],
+            "negative_count": report["negative_count"],
+            "roc_auc": report["roc_auc"],
+            "pr_auc": report["pr_auc"],
+            "by_payload_band": report["by_payload_band"],
+        }, indent=2))
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)
