@@ -116,6 +116,7 @@ from .latency import (
     validate_latency_report,
 )
 from .ablations import run_ablations, validate_ablations
+from .route_audit import run_route_audit, validate_route_audit
 from .pilot import (
     PilotTrace,
     build_seeded_traces,
@@ -275,6 +276,8 @@ __all__ = [
     "percentile",
     "PilotTrace",
     "run_ablations",
+    "run_route_audit",
+    "validate_route_audit",
     "validate_ablations",
     "build_seeded_traces",
     "build_unseeded_traces",

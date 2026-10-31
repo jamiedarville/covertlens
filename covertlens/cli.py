@@ -27,6 +27,7 @@ Usage:
     python -m covertlens latency-demo
     python -m covertlens pilot-demo
     python -m covertlens ablation-demo
+    python -m covertlens route-audit-demo
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ from .calibration import calibrate_thresholds
 from .frozen_benchmark import run_frozen_evaluation
 from .latency import run_reliability_report
 from .ablations import run_ablations
+from .route_audit import run_route_audit
 from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
@@ -472,6 +474,16 @@ def main(argv: list[str] | None = None) -> int:
                 "attempts": report["prevention"]["attempts"],
                 "clean_controls": report["prevention"]["clean_controls"],
             },
+        }, indent=2))
+        return 0
+
+    if command == "route-audit-demo":
+        report = run_route_audit()
+        print(json.dumps({
+            "routes": {r["route_id"]: r["status"] for r in report["routes"]},
+            "coverage": report["coverage"],
+            "trace_missing_reasons": report["trace"]["missing_link_reasons"],
+            "gaps": report["gaps"],
         }, indent=2))
         return 0
 

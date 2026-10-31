@@ -34,6 +34,7 @@ jobs:
             python -m covertlens latency-demo > /dev/null
             python -m covertlens pilot-demo > /dev/null
             python -m covertlens ablation-demo > /dev/null
+            python -m covertlens route-audit-demo > /dev/null
 
 workflows:
   checks:

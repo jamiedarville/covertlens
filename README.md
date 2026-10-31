@@ -212,6 +212,14 @@ store** that every later task builds on.
 | Delivered/withheld trials report recovery and legitimate task success separately | Prevention table per condition: delivered attempts recovered 7/7; clean controls legitimate success 18/18; quantities never merged |
 | Blocked artifacts are never counted as observed successful transfer | `blocked_counted_as_transfer: 0` enforced by construction (withheld = `not_observed`, C-04) and asserted in validation/tests; CL-21 replay cross-check included |
 
+## CL-32 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Every inventoried route passes creation/hash/gate/access checks | `covertlens.route_audit.run_route_audit`: R-01..R-05, R-07 pass end-to-end (creation, hash, pending/withheld denied, permitted exact bytes); R-08 exemption verified · [docs/contracts/route-trace-audit.md](docs/contracts/route-trace-audit.md) · [schemas/route-trace-audit.schema.json](schemas/route-trace-audit.schema.json) |
+| Missing parse/action links have explicit reasons | Mixed-run trace audit classifies every missing link (pending verdict, unrecorded parse, withheld `not_observed`) |
+| Final coverage report identifies any remaining gaps | R-06 marked `partial`: no dedicated gate derivative API, derivative enforcement is procedural — named in `gaps`, no full-coverage claim |
+
 ## Quickstart
 
 ```bash
@@ -244,6 +252,7 @@ python -m covertlens frozen-demo         # CL-28 frozen benchmark + clean stabil
 python -m covertlens latency-demo        # CL-29 latency + reliability report
 python -m covertlens pilot-demo          # CL-30 seeded pilot + adjudication
 python -m covertlens ablation-demo       # CL-31 ablations + prevention
+python -m covertlens route-audit-demo    # CL-32 route + trace coverage audit
 pytest
 ```
 
