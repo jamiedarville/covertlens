@@ -115,6 +115,14 @@ store** that every later task builds on.
 | Parsing/timeouts/unsupported inputs obey the manifest without a clean verdict | Manifest error classes with `clean_verdict: false` and withheld delivery |
 | Enforcement errors withhold delivery and record an infrastructure outcome | `evaluate_delivery` pipeline + `gate.withhold_for_infrastructure` (no verdict recorded) |
 
+## CL-20 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Concurrency/retry/alternate-reference tests show zero unauthorized byte access | Race/retry/alternate-reference tests over the CL-18 gate with `access_attempt_report` audit |
+| Byte, detector or configuration changes invalidate cached results | `covertlens.integrity.AnalysisCache` score keys (hash + detector/config versions) · [docs/contracts/gate-integrity.md](docs/contracts/gate-integrity.md) |
+| Run-context changes recompute contextual verdicts while allowing safe image-score reuse | Verdict keys add threshold-config version + context fingerprint; score keys exclude context |
+
 ## Quickstart
 
 ```bash
