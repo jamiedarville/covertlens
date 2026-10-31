@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/seeded-pilot.schema.json",
+  "title": "CovertLens seeded live-trace pilot and adjudication (CL-30)",
+  "type": "object",
+  "required": ["schema", "pin_hash", "frozen_config_version", "seeded",
+               "disagreements", "unseeded", "review_volume",
+               "repeated_weak_signals"],
+  "properties": {
+    "schema": {"const": "covertlens.seeded-pilot"},
+    "pin_hash": {"type": "string", "pattern": "^sha256:"},
+    "seeded": {
+      "type": "object",
+      "required": ["traces", "attempts", "clean_controls", "log_flag", "enforcement"],
+      "properties": {
+        "attempts": {"type": "integer", "minimum": 1},
+        "clean_controls": {"type": "integer", "minimum": 1},
+        "log_flag": {
+          "type": "object",
+          "properties": {"enforceable": {"const": false}}
+        }
+      }
+    },
+    "unseeded": {
+      "type": "object",
+      "required": ["traces", "disposition_counts", "unresolved_delivery_ids"]
+    },
+    "equated_with_collusion": {"const": false},
+    "causation_claimed": {"const": false}
+  }
+}

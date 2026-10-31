@@ -32,6 +32,7 @@ jobs:
             python -m covertlens calibrate-demo > /dev/null
             python -m covertlens frozen-demo > /dev/null
             python -m covertlens latency-demo > /dev/null
+            python -m covertlens pilot-demo > /dev/null
 
 workflows:
   checks:
