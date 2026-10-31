@@ -16,6 +16,7 @@ Usage:
     python -m covertlens dct-demo
     python -m covertlens benchmark-dct
     python -m covertlens trace-demo
+    python -m covertlens verdict-demo
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from .dct import analyze_dct_bytes, benchmark_dct
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
+from .verdicts import decide_verdict
 from .parsing import ParserLimits, analyze_bytes, analyze_version
 from .runtime import (
     AuditLog,
@@ -307,6 +309,22 @@ def main(argv: list[str] | None = None) -> int:
             ],
             "actions": report["actions"],
         }, indent=2))
+        return 0
+
+    if command == "verdict-demo":
+        rows = []
+        clean, encoded = build_pair(
+            "spatial_lsb", width=64, height=48, payload_bytes=192)
+        for fixture in (clean, encoded):
+            result = analyze_lsb_bytes(fixture.data)
+            decision = decide_verdict(result.findings)
+            rows.append({
+                "role": fixture.role,
+                "payload_band": fixture.payload_band,
+                "score": result.findings[0].score if result.findings else None,
+                "decision": decision.to_dict(),
+            })
+        print(json.dumps(rows, indent=2))
         return 0
 
     print(f"unknown command: {command}", file=sys.stderr)

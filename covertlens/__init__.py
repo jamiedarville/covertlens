@@ -98,6 +98,21 @@ from .trace_join import (
     join_trace,
     validate_trace_join,
 )
+from .verdicts import (
+    CONFIG_VERSION as THRESHOLD_CONFIG_VERSION,
+    LADDER_VERSION,
+    DecisionContext,
+    FamilyThresholds,
+    LookaheadError,
+    ThresholdConfig,
+    VerdictDecision,
+    decide_and_record,
+    decide_verdict,
+    delivery_for_verdict,
+    threshold_config_from_manifest,
+    validate_decision,
+    validate_threshold_config,
+)
 
 __version__ = "0.1.0"
 
@@ -181,6 +196,19 @@ __all__ = [
     "TRACE_JOIN_VERSION",
     "join_trace",
     "validate_trace_join",
+    "THRESHOLD_CONFIG_VERSION",
+    "LADDER_VERSION",
+    "DecisionContext",
+    "FamilyThresholds",
+    "LookaheadError",
+    "ThresholdConfig",
+    "VerdictDecision",
+    "decide_and_record",
+    "decide_verdict",
+    "delivery_for_verdict",
+    "threshold_config_from_manifest",
+    "validate_decision",
+    "validate_threshold_config",
     "validate_event",
     "validate_inventory",
     "validate_manifest",
