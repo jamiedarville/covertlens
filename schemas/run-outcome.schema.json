@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/run-outcome.schema.json",
+  "title": "CovertLens run outcome (CL-19)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "outcome_version", "kind",
+    "delivery_id", "delivery", "clean_verdict", "equated_with_collusion"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.run-outcome"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "outcome_version": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["detection_failure", "infrastructure", "decision"]},
+    "delivery_id": {"type": ["string", "null"]},
+    "delivery": {"enum": ["permit", "withhold"]},
+    "clean_verdict": {"type": "boolean"},
+    "equated_with_collusion": {"const": false},
+    "error_class": {
+      "type": ["string", "null"],
+      "enum": [
+        "corrupt_input", "unsupported_format", "oversized_input",
+        "analysis_timeout", "detector_error", "gate_error", null
+      ]
+    },
+    "verdict": {"enum": ["log", "flag", "quarantine", "fail_run", null]},
+    "halt_execution": {"type": "boolean"},
+    "run_outcome": {
+      "enum": ["completed", "failed_detection", "failed_infrastructure"]
+    },
+    "reason": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {"const": "enforcement_threshold_exceeded"},
+        "families": {"type": "array", "items": {"type": "object"}},
+        "config_version": {"type": "string"}
+      }
+    }
+  }
+}

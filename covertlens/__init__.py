@@ -59,6 +59,14 @@ from .lsb import (
     validate_benchmark,
 )
 from .manifest import channel_families, load_manifest, validate_manifest
+from .outcomes import (
+    analysis_outcome,
+    detector_error_outcome,
+    evaluate_delivery,
+    failure_reason,
+    finalize_run_outcome,
+    validate_outcome,
+)
 from .parsing import (
     DEFAULT_LIMITS,
     AnalysisResult,
@@ -183,6 +191,12 @@ __all__ = [
     "Principal",
     "RuntimeConfig",
     "channel_families",
+    "analysis_outcome",
+    "detector_error_outcome",
+    "evaluate_delivery",
+    "failure_reason",
+    "finalize_run_outcome",
+    "validate_outcome",
     "detector_manifest",
     "group_key",
     "held_out_record",
