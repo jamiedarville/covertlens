@@ -58,6 +58,7 @@ from .lsb import (
     detect_lsb,
     validate_benchmark,
 )
+from .integrity import AnalysisCache, context_fingerprint
 from .manifest import channel_families, load_manifest, validate_manifest
 from .outcomes import (
     analysis_outcome,
@@ -191,6 +192,8 @@ __all__ = [
     "Principal",
     "RuntimeConfig",
     "channel_families",
+    "AnalysisCache",
+    "context_fingerprint",
     "analysis_outcome",
     "detector_error_outcome",
     "evaluate_delivery",
