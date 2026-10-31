@@ -83,6 +83,14 @@ store** that every later task builds on.
 | DCT scores, configuration and limitations are recorded | `dct-coefficient-pov-chisquare` v1.0.0 findings with `DctConfig` v1.0.0, carrier/block coverage and recorded limitations |
 | Paired tests report false positives and recall by payload band | `benchmark_dct` sweep (FP/FPR per threshold) plus per-band recall sweeps · [schemas/dct-benchmark.schema.json](schemas/dct-benchmark.schema.json) |
 
+## CL-16 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Every attempted delivery has an original hash and verdict reference | `covertlens.trace_join.join_trace` per-delivery records with original `content_hash` and verdict reference (missing verdicts flagged, never dropped) · [docs/contracts/trace-join.md](docs/contracts/trace-join.md) · [schemas/trace-join.schema.json](schemas/trace-join.schema.json) |
+| Delivered artifacts link to parse/next action or an explicit missing status | Parse/next-action linkage per delivery with explicit `missing` status when absent |
+| Multiple candidate input artifacts remain visible without claiming causation | Per-action candidate lists with `causation_claimed: false` throughout |
+
 ## Quickstart
 
 ```bash
@@ -103,6 +111,7 @@ python -m covertlens lsb-demo            # CL-14 LSB scoring demo
 python -m covertlens benchmark-lsb       # CL-14 threshold-free LSB benchmark
 python -m covertlens dct-demo            # CL-15 DCT scoring demo
 python -m covertlens benchmark-dct       # CL-15 paired DCT benchmark (FP + recall by band)
+python -m covertlens trace-demo          # CL-16 trace join demo
 pytest
 ```
 

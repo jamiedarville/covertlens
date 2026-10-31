@@ -22,6 +22,7 @@ jobs:
             python -m covertlens benchmark-lsb > /dev/null
             python -m covertlens dct-demo > /dev/null
             python -m covertlens benchmark-dct > /dev/null
+            python -m covertlens trace-demo > /dev/null
 
 workflows:
   checks:
