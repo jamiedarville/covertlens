@@ -23,6 +23,7 @@ Usage:
     python -m covertlens report-demo
     python -m covertlens pinning-demo
     python -m covertlens calibrate-demo
+    python -m covertlens frozen-demo
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
 from .calibration import calibrate_thresholds
+from .frozen_benchmark import run_frozen_evaluation
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
@@ -396,6 +398,25 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 for family, block in report["families"].items()
             },
+        }, indent=2))
+        return 0
+
+    if command == "frozen-demo":
+        report = run_frozen_evaluation()
+        print(json.dumps({
+            "frozen_config_version": report["frozen_config_version"],
+            "held_out_families": {
+                family: {
+                    "recall": block["recall_at_triage"]["value"],
+                    "precision": block["enforcement_precision"]["value"],
+                    "positives": block["positives"],
+                }
+                for family, block in report["held_out"]["families"].items()
+            },
+            "clean_runs": report["clean_run_stability"]["runs"],
+            "clean_false_failure_rate":
+                report["clean_run_stability"]["false_failure_rate"]["value"],
+            "assessment": report["assessment"],
         }, indent=2))
         return 0
 

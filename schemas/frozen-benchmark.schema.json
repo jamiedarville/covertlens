@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/frozen-benchmark.schema.json",
+  "title": "CovertLens frozen benchmark and clean-run stability (CL-28)",
+  "type": "object",
+  "required": ["schema", "frozen_config_version", "evaluation_set", "targets",
+               "held_out", "clean_run_stability", "assessment", "tradeoffs"],
+  "properties": {
+    "schema": {"const": "covertlens.frozen-benchmark"},
+    "frozen_config_version": {"type": "string"},
+    "evaluation_set": {"const": "held_out_only"},
+    "calibration_overlap_fixture_ids": {"type": "array", "maxItems": 0},
+    "targets": {
+      "type": "object",
+      "required": ["per_family_recall_at_least", "enforcement_precision_at_least",
+                   "clean_false_failure_rate_at_most", "min_clean_runs"]
+    },
+    "clean_run_stability": {
+      "type": "object",
+      "required": ["runs", "false_failure_rate"],
+      "properties": {"runs": {"type": "integer", "minimum": 300}}
+    },
+    "assessment": {
+      "type": "object",
+      "required": ["universal_claim"],
+      "properties": {"universal_claim": {"const": false}}
+    },
+    "equated_with_collusion": {"const": false}
+  }
+}
