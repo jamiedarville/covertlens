@@ -106,6 +106,15 @@ from .frozen_benchmark import (
     validate_frozen_benchmark,
     wilson_interval,
 )
+from .latency import (
+    gate_reliability_check,
+    limit_behavior_checks,
+    measure_class,
+    measure_concurrent,
+    percentile,
+    run_reliability_report,
+    validate_latency_report,
+)
 from .pinning import (
     build_pin,
     export_bundle,
@@ -251,6 +260,13 @@ __all__ = [
     "calibrate_family",
     "clean_run_stability",
     "evaluate_held_out",
+    "gate_reliability_check",
+    "limit_behavior_checks",
+    "measure_class",
+    "measure_concurrent",
+    "percentile",
+    "run_reliability_report",
+    "validate_latency_report",
     "run_frozen_evaluation",
     "validate_frozen_benchmark",
     "wilson_interval",

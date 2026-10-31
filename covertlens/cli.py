@@ -24,6 +24,7 @@ Usage:
     python -m covertlens pinning-demo
     python -m covertlens calibrate-demo
     python -m covertlens frozen-demo
+    python -m covertlens latency-demo
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
 from .calibration import calibrate_thresholds
 from .frozen_benchmark import run_frozen_evaluation
+from .latency import run_reliability_report
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
@@ -416,6 +418,23 @@ def main(argv: list[str] | None = None) -> int:
             "clean_runs": report["clean_run_stability"]["runs"],
             "clean_false_failure_rate":
                 report["clean_run_stability"]["false_failure_rate"]["value"],
+            "assessment": report["assessment"],
+        }, indent=2))
+        return 0
+
+    if command == "latency-demo":
+        report = run_reliability_report()
+        print(json.dumps({
+            "proposal": report["proposal"],
+            "classes": {
+                f"{row['class']}/{row['media']}": {
+                    "p95_s": row["p95_s"], "meets": row["meets_proposal"],
+                    "statuses": row["statuses"],
+                }
+                for row in report["classes"]
+            },
+            "concurrent_p95_s": report["concurrent"]["p95_s"],
+            "limits": report["limit_behavior"],
             "assessment": report["assessment"],
         }, indent=2))
         return 0

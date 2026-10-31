@@ -187,6 +187,15 @@ store** that every later task builds on.
 | Target ≤1% clean-run false failures using ≥300 independent clean runs | 320 fresh-seed clean runs through the frozen ladder: 0 false failures within claimed coverage |
 | Missed targets produce explicit tradeoffs or narrowed coverage rather than universal claims | Report records `universal_claim: false` with tradeoffs: high-band-only held-out positives, tiny-n intervals, smooth/blocks covers excluded from the stability claim (measured false-fail probes), ~14% clean triage flag rate |
 
+## CL-29 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Measure proposed P95 ≤2-second overhead for ≤10 MB/20 MP images at agreed concurrency | `covertlens.latency.run_reliability_report` pilot workload (4 size classes × media, 4 workers) · [docs/contracts/latency-reliability.md](docs/contracts/latency-reliability.md) · [schemas/latency-reliability.schema.json](schemas/latency-reliability.schema.json) |
+| Timeout/resource-limit behavior remains explicit and withholds delivery in enforcement mode | `limit_behavior_checks`: timeout/oversize statuses + manifest error classes, infrastructure withhold, no clean verdict, zero bytes served |
+| Concurrency and access-leak tests remain clean under the measured workload | `gate_reliability_check`: threaded route/cached-link attempts serve exactly the permitted set, `unauthorized_served: 0` |
+| Misses are explicit | JPEG large (≥~1 MP) times out at the 2 s deadline; medium JPEG misses under 4-worker concurrency; 20 MP JPEG not measurable with the pure-Python encoder — claims narrowed per class |
+
 ## Quickstart
 
 ```bash
@@ -216,6 +225,7 @@ python -m covertlens report-demo         # CL-25 researcher report demo
 python -m covertlens pinning-demo        # CL-26 pin + reproducibility demo
 python -m covertlens calibrate-demo      # CL-27 frozen threshold points
 python -m covertlens frozen-demo         # CL-28 frozen benchmark + clean stability
+python -m covertlens latency-demo        # CL-29 latency + reliability report
 pytest
 ```
 
