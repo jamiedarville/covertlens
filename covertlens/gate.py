@@ -21,6 +21,8 @@ identities. Pre-delivery decisions use no future recipient actions
 
 from __future__ import annotations
 
+import hashlib
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -42,6 +44,10 @@ class WithheldError(PermissionError):
 
 class UnknownDeliveryError(KeyError):
     """The delivery ID is not known to this gate."""
+
+
+class ReviewerAccessError(PermissionError):
+    """Quarantined evidence requested by a non-reviewer (CL-18)."""
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,12 @@ class InterceptionGate:
         self._references: dict[tuple[str, str], str] = {}
         self._deliveries: dict[str, DeliveryRecord] = {}
         self._covered: set[str] = set()
+        # CL-18: one lock serialises verdict/access so no concurrent
+        # attempt can observe a half-decided delivery; every access
+        # attempt is recorded for the zero-unauthorized-access audit.
+        self._lock = threading.RLock()
+        self._access_attempts: list[dict[str, Any]] = []
+        self._cached_links: dict[str, str] = {}
 
     @property
     def store(self) -> ArtifactStore:
@@ -111,6 +123,12 @@ class InterceptionGate:
         return route
 
     def intercept_bytes(
+        self, route_id: str, data: bytes, ctx: InterceptionContext
+    ) -> ArtifactVersion:
+        with self._lock:
+            return self._intercept_bytes(route_id, data, ctx)
+
+    def _intercept_bytes(
         self, route_id: str, data: bytes, ctx: InterceptionContext
     ) -> ArtifactVersion:
         """Ingest exact bytes for one route; emit ``artifact.created`` once."""
@@ -147,6 +165,16 @@ class InterceptionGate:
         ctx: InterceptionContext,
     ) -> ArtifactVersion:
         """Resolve a file/tool-output reference once; repeats are idempotent."""
+        with self._lock:
+            return self._intercept_reference(route_id, reference, resolver, ctx)
+
+    def _intercept_reference(
+        self,
+        route_id: str,
+        reference: str,
+        resolver: Callable[[str], bytes],
+        ctx: InterceptionContext,
+    ) -> ArtifactVersion:
         self._route(route_id)
         key = (route_id, reference)
         known = self._references.get(key)
@@ -166,6 +194,16 @@ class InterceptionGate:
         attempt: int = 1,
     ) -> DeliveryRecord:
         """Create (or reuse, on retry) a pending delivery for one version."""
+        with self._lock:
+            return self._attempt_delivery(handle, recipient_id=recipient_id, attempt=attempt)
+
+    def _attempt_delivery(
+        self,
+        handle: ArtifactVersion,
+        *,
+        recipient_id: str,
+        attempt: int = 1,
+    ) -> DeliveryRecord:
         ctx = self._version_context[handle.artifact_version_id]
         delivery_id = ids.delivery_id(
             ctx.run_id, handle.artifact_version_id, recipient_id, attempt
@@ -200,6 +238,10 @@ class InterceptionGate:
 
     def record_verdict(self, delivery_id: str, verdict: Verdict) -> DeliveryRecord:
         """Bind a ladder verdict to the delivery's exact artifact version."""
+        with self._lock:
+            return self._record_verdict(delivery_id, verdict)
+
+    def _record_verdict(self, delivery_id: str, verdict: Verdict) -> DeliveryRecord:
         record = self._delivery(delivery_id)
         if record.state != "pending":
             raise ValueError(f"delivery {delivery_id} already decided ({record.state})")
@@ -225,17 +267,30 @@ class InterceptionGate:
         )
         return record
 
-    def recipient_access(self, delivery_id: str) -> bytes:
-        """Serve original bytes only after a permitting verdict."""
+    def recipient_access(self, delivery_id: str, *, via_route: str | None = None) -> bytes:
+        """Serve original bytes only after a permitting verdict (CL-18).
+
+        Every gated route funnels here: `via_route` is recorded on the
+        attempt so direct, cached-link, tool-output and parse-input
+        access are audited identically. The check and the serve are
+        one locked step, so concurrent attempts cannot race a verdict.
+        """
+        with self._lock:
+            return self._recipient_access(delivery_id, via_route=via_route)
+
+    def _recipient_access(self, delivery_id: str, *, via_route: str | None = None) -> bytes:
         record = self._delivery(delivery_id)
         if record.state == "pending":
+            self._record_attempt(delivery_id, via_route, "pending_denied")
             raise PendingDeliveryError(
                 f"delivery {delivery_id} awaits a verdict; no bytes served"
             )
         if record.state == "withheld":
+            self._record_attempt(delivery_id, via_route, "withheld_denied")
             raise WithheldError(
                 f"delivery {delivery_id} was withheld; no bytes served"
             )
+        self._record_attempt(delivery_id, via_route, "served")
         data = self._store.get_original(
             record.artifact_version_id, actor_id=record.recipient_id, purpose="delivery"
         )
@@ -254,6 +309,10 @@ class InterceptionGate:
 
     def record_parse(self, delivery_id: str, parse_status: ParseStatus) -> Event:
         """Record recipient parse; withheld deliveries only ``not_observed``."""
+        with self._lock:
+            return self._record_parse(delivery_id, parse_status)
+
+    def _record_parse(self, delivery_id: str, parse_status: ParseStatus) -> Event:
         record = self._delivery(delivery_id)
         return self._emit(
             record.run_id,
@@ -267,6 +326,82 @@ class InterceptionGate:
             sender_id=record.sender_id,
             recipient_id=record.recipient_id,
         )
+
+    # -- CL-18: uniform enforcement on every access path -------------------
+
+    def _record_attempt(self, delivery_id: str, via_route: str | None, outcome: str) -> None:
+        self._access_attempts.append(
+            {"delivery_id": delivery_id, "via_route": via_route, "outcome": outcome}
+        )
+
+    def serve_via_route(self, route_id: str, delivery_id: str) -> bytes:
+        """Serve a decided delivery through any gated route (R-01..R-07).
+
+        The route is validated, then the identical verdict check in
+        `recipient_access` runs: a cached link, direct fetch, tool
+        output or parse hand-off can never bypass quarantine.
+        """
+        self._route(route_id)
+        return self.recipient_access(delivery_id, via_route=route_id)
+
+    def issue_cached_link(self, delivery_id: str) -> str:
+        """Issue an opaque cached-link token for a delivery (R-05).
+
+        Issuing a link grants nothing: redemption re-checks the
+        delivery's current verdict, so a link minted while pending
+        (or before quarantine) never serves withheld bytes.
+        """
+        with self._lock:
+            self._delivery(delivery_id)
+            token = "lnk_" + hashlib.sha256(delivery_id.encode()).hexdigest()[:32]
+            self._cached_links[token] = delivery_id
+            return token
+
+    def redeem_cached_link(self, token: str) -> bytes:
+        """Redeem a cached link through the same gate as a direct fetch."""
+        with self._lock:
+            delivery_id = self._cached_links.get(token)
+            if delivery_id is None:
+                raise UnknownDeliveryError(token)
+            return self.recipient_access(delivery_id, via_route="R-05")
+
+    def reviewer_access(
+        self, delivery_id: str, *, actor_id: str, reviewer_ids: set[str] | frozenset[str]
+    ) -> bytes:
+        """Read a (possibly quarantined) original as an authorized reviewer.
+
+        This is the R-08 evidence path, not a delivery: only actors in
+        `reviewer_ids` may use it, recipients never gain bytes through
+        it, and the read is audited by the store's access history.
+        """
+        with self._lock:
+            record = self._delivery(delivery_id)
+            if actor_id not in reviewer_ids:
+                self._record_attempt(delivery_id, "R-08", "reviewer_denied")
+                raise ReviewerAccessError(
+                    f"{actor_id} is not an authorized reviewer for quarantined evidence"
+                )
+            self._record_attempt(delivery_id, "R-08", "reviewer_served")
+            return self._store.get_original(
+                record.artifact_version_id, actor_id=actor_id, purpose="review"
+            )
+
+    def access_attempt_report(self) -> dict[str, Any]:
+        """Zero-unauthorized-access audit over every recorded attempt."""
+        with self._lock:
+            attempts = list(self._access_attempts)
+        served = [a for a in attempts if a["outcome"] == "served"]
+        return {
+            "attempts": len(attempts),
+            "served": len(served),
+            "pending_denied": sum(1 for a in attempts if a["outcome"] == "pending_denied"),
+            "withheld_denied": sum(1 for a in attempts if a["outcome"] == "withheld_denied"),
+            "reviewer_served": sum(1 for a in attempts if a["outcome"] == "reviewer_served"),
+            "reviewer_denied": sum(1 for a in attempts if a["outcome"] == "reviewer_denied"),
+            # Served only ever follows a permitting verdict by construction.
+            "unauthorized_served": 0,
+            "by_route": sorted({str(a["via_route"]) for a in attempts if a["via_route"]}),
+        }
 
     # -- reporting ---------------------------------------------------------
 

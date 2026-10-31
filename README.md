@@ -99,6 +99,14 @@ store** that every later task builds on.
 | Triage and enforcement operating points are separately configured | Versioned per-family `ThresholdConfig` from the CL-7 manifest (high-recall triage vs high-precision enforcement); shipped unfrozen, frozen by CL-27 |
 | Pre-delivery decisions cannot use future recipient actions | `LookaheadError` on recipient-action or post-cutoff evidence (C-03) |
 
+## CL-18 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Direct references, cached links and tool outputs enforce the same gate | `InterceptionGate.serve_via_route` / cached-link redemption funnel every gated route (R-01…R-07) through one verdict check · [docs/contracts/quarantine-enforcement.md](docs/contracts/quarantine-enforcement.md) |
+| No access occurs before verdict under concurrent delivery attempts | One gate lock makes verdict check + serve atomic; `access_attempt_report()` audits every attempt |
+| Quarantined originals remain available only to authorized reviewers | `reviewer_access` (R-08 evidence path, audited store read); recipients stay withheld |
+
 ## Quickstart
 
 ```bash
