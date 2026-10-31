@@ -44,6 +44,7 @@ from .gate import (
     InterceptionContext,
     InterceptionGate,
     PendingDeliveryError,
+    ReviewerAccessError,
     WithheldError,
 )
 from .lsb import (
@@ -153,6 +154,7 @@ __all__ = [
     "InterceptionContext",
     "InterceptionGate",
     "PendingDeliveryError",
+    "ReviewerAccessError",
     "WithheldError",
     "build_dataset",
     "build_pair",
