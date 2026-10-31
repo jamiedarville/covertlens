@@ -123,6 +123,7 @@ from .review_export import (
     validate_review_package,
     verify_evidence_access,
 )
+from .robustness import run_robustness, validate_robustness
 from .route_audit import run_route_audit, validate_route_audit
 from .pilot import (
     PilotTrace,
@@ -284,6 +285,8 @@ __all__ = [
     "PilotTrace",
     "run_ablations",
     "run_route_audit",
+    "run_robustness",
+    "validate_robustness",
     "build_review_package",
     "create_review_export",
     "run_export_verification",

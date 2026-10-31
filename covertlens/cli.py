@@ -29,6 +29,7 @@ Usage:
     python -m covertlens ablation-demo
     python -m covertlens route-audit-demo
     python -m covertlens export-demo
+    python -m covertlens robustness-demo
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from .frozen_benchmark import run_frozen_evaluation
 from .latency import run_reliability_report
 from .ablations import run_ablations
 from .review_export import run_export_verification
+from .robustness import run_robustness
 from .route_audit import run_route_audit
 from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
@@ -501,6 +503,16 @@ def main(argv: list[str] | None = None) -> int:
             "researcher_read_ok": result["researcher_read_ok"],
             "denials": result["denials"],
             "verification": result["verification"],
+        }, indent=2))
+        return 0
+
+    if command == "robustness-demo":
+        report = run_robustness()
+        print(json.dumps({
+            "frozen_config_version": report["frozen_config_version"],
+            "separate_from_frozen_benchmark": report["separate_from_frozen_benchmark"],
+            "outcomes": report["outcomes"],
+            "unresolved": report["unresolved"],
         }, indent=2))
         return 0
 
