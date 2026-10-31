@@ -31,6 +31,7 @@ jobs:
             python -m covertlens pinning-demo > /dev/null
             python -m covertlens calibrate-demo > /dev/null
             python -m covertlens frozen-demo > /dev/null
+            python -m covertlens latency-demo > /dev/null
 
 workflows:
   checks:

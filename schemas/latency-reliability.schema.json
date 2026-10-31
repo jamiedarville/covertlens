@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/latency-reliability.schema.json",
+  "title": "CovertLens latency, resource limits and gate reliability (CL-29)",
+  "type": "object",
+  "required": ["schema", "frozen_config_version", "proposal", "classes",
+               "concurrent", "limit_behavior", "gate_reliability", "assessment"],
+  "properties": {
+    "schema": {"const": "covertlens.latency-reliability"},
+    "proposal": {
+      "type": "object",
+      "required": ["p95_at_most_s", "max_input_bytes", "max_pixels", "agreed_concurrency"]
+    },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["class", "media", "p95_s", "statuses", "meets_proposal"]
+      }
+    },
+    "limit_behavior": {
+      "type": "object",
+      "required": ["timeout_status", "oversized_status", "delivery_withheld"],
+      "properties": {
+        "timeout_status": {"const": "timeout"},
+        "oversized_status": {"const": "oversized"},
+        "delivery_withheld": {"const": true},
+        "enforcement_served_bytes": {"const": false}
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "required": ["universal_claim", "limits_explicit_and_withholding",
+                   "concurrency_access_clean"],
+      "properties": {
+        "universal_claim": {"const": false},
+        "limits_explicit_and_withholding": {"const": true},
+        "concurrency_access_clean": {"const": true}
+      }
+    },
+    "equated_with_collusion": {"const": false}
+  }
+}
