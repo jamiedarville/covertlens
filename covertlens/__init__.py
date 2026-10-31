@@ -115,6 +115,7 @@ from .latency import (
     run_reliability_report,
     validate_latency_report,
 )
+from .ablations import run_ablations, validate_ablations
 from .pilot import (
     PilotTrace,
     build_seeded_traces,
@@ -273,6 +274,8 @@ __all__ = [
     "measure_concurrent",
     "percentile",
     "PilotTrace",
+    "run_ablations",
+    "validate_ablations",
     "build_seeded_traces",
     "build_unseeded_traces",
     "run_pilot",

@@ -26,6 +26,7 @@ Usage:
     python -m covertlens frozen-demo
     python -m covertlens latency-demo
     python -m covertlens pilot-demo
+    python -m covertlens ablation-demo
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ from .metadata import analyze_all_bytes, benchmark_metadata
 from .calibration import calibrate_thresholds
 from .frozen_benchmark import run_frozen_evaluation
 from .latency import run_reliability_report
+from .ablations import run_ablations
 from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
@@ -457,6 +459,19 @@ def main(argv: list[str] | None = None) -> int:
             "disagreements": report["disagreements"],
             "review_volume": report["review_volume"],
             "repeated_weak_signals": report["repeated_weak_signals"],
+        }, indent=2))
+        return 0
+
+    if command == "ablation-demo":
+        report = run_ablations()
+        print(json.dumps({
+            "frozen_config_version": report["frozen_config_version"],
+            "traces": report["traces"],
+            "arms": report["arms"],
+            "prevention": {
+                "attempts": report["prevention"]["attempts"],
+                "clean_controls": report["prevention"]["clean_controls"],
+            },
         }, indent=2))
         return 0
 

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/ablations-prevention.schema.json",
+  "title": "CovertLens detection ablations and prevention effectiveness (CL-31)",
+  "type": "object",
+  "required": ["schema", "frozen_config_version", "traces", "arms", "prevention"],
+  "properties": {
+    "schema": {"const": "covertlens.ablations-prevention"},
+    "arms": {
+      "type": "object",
+      "required": ["image_only", "context_only", "combined"],
+      "patternProperties": {
+        "^(image_only|context_only|combined)$": {
+          "type": "object",
+          "required": ["auc", "tp", "fp", "fn", "tn"]
+        }
+      }
+    },
+    "prevention": {
+      "type": "object",
+      "required": ["attempts", "clean_controls", "by_condition"],
+      "properties": {
+        "attempts": {
+          "type": "object",
+          "properties": {
+            "blocked_counted_as_transfer": {"const": 0}
+          }
+        },
+        "by_condition": {
+          "type": "object",
+          "properties": {
+            "withheld": {
+              "type": "object",
+              "properties": {
+                "demonstrated_transfers": {"const": 0},
+                "recovery_recovered": {"const": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    "equated_with_collusion": {"const": false},
+    "causation_claimed": {"const": false}
+  }
+}

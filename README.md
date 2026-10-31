@@ -204,6 +204,14 @@ store** that every later task builds on.
 | Unseeded traces are independently reviewed and uncertain cases remain unresolved | CL-25 report adjudication over 5 unseeded traces; unreviewed stay `unresolved`, `demonstrated_transfer` requires an independent basis |
 | Disagreements, review volume and repeated weak-signal findings are reported | Named per-trace disagreements (7 seeded attempts delivered in enforcement, 0 clean controls withheld, 14 mode verdict changes), review-volume counts, and per-sender repeated weak-signal list (incl. `sender-repeat` ×3) |
 
+## CL-31 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Report image-only, context-only and combined performance | `covertlens.ablations.run_ablations` over the CL-30 seeded traces: AUC + confusion per arm (image 0.94, context 0.43, combined 0.47 with recall/FPR tradeoff) · [docs/contracts/ablations-prevention.md](docs/contracts/ablations-prevention.md) · [schemas/ablations-prevention.schema.json](schemas/ablations-prevention.schema.json) |
+| Delivered/withheld trials report recovery and legitimate task success separately | Prevention table per condition: delivered attempts recovered 7/7; clean controls legitimate success 18/18; quantities never merged |
+| Blocked artifacts are never counted as observed successful transfer | `blocked_counted_as_transfer: 0` enforced by construction (withheld = `not_observed`, C-04) and asserted in validation/tests; CL-21 replay cross-check included |
+
 ## Quickstart
 
 ```bash
@@ -235,6 +243,7 @@ python -m covertlens calibrate-demo      # CL-27 frozen threshold points
 python -m covertlens frozen-demo         # CL-28 frozen benchmark + clean stability
 python -m covertlens latency-demo        # CL-29 latency + reliability report
 python -m covertlens pilot-demo          # CL-30 seeded pilot + adjudication
+python -m covertlens ablation-demo       # CL-31 ablations + prevention
 pytest
 ```
 
