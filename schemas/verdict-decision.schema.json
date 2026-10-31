@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/verdict-decision.schema.json",
+  "title": "CovertLens verdict decision (CL-17)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "verdict", "delivery", "halt_execution",
+    "enforceable", "equated_with_collusion", "config_version",
+    "ladder_version", "artifact_version_id", "content_hash",
+    "delivery_id", "per_family", "findings_count",
+    "families_without_findings"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.verdict-decision"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "verdict": {"enum": ["log", "flag", "quarantine", "fail_run"]},
+    "delivery": {"enum": ["permit", "withhold"]},
+    "halt_execution": {"type": "boolean"},
+    "enforceable": {"type": "boolean"},
+    "equated_with_collusion": {"const": false},
+    "config_version": {"type": "string", "minLength": 1},
+    "ladder_version": {"type": "string", "minLength": 1},
+    "artifact_version_id": {"type": ["string", "null"]},
+    "content_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "delivery_id": {"type": ["string", "null"]},
+    "per_family": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "family", "max_score", "findings", "detectors",
+          "thresholds_status", "triage_flag_at",
+          "enforcement_quarantine_at", "enforcement_fail_run_at",
+          "verdict"
+        ],
+        "properties": {
+          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+          "max_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "findings": {"type": "integer", "minimum": 1},
+          "detectors": {"type": "array", "items": {"type": "string"}},
+          "thresholds_status": {"enum": ["unfrozen_placeholder", "frozen"]},
+          "triage_flag_at": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "enforcement_quarantine_at": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "enforcement_fail_run_at": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "verdict": {"enum": ["log", "flag", "quarantine", "fail_run"]}
+        }
+      }
+    },
+    "findings_count": {"type": "integer", "minimum": 0},
+    "families_without_findings": {
+      "type": "array",
+      "items": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]}
+    }
+  }
+}

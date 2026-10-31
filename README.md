@@ -91,6 +91,14 @@ store** that every later task builds on.
 | Delivered artifacts link to parse/next action or an explicit missing status | Parse/next-action linkage per delivery with explicit `missing` status when absent |
 | Multiple candidate input artifacts remain visible without claiming causation | Per-action candidate lists with `causation_claimed: false` throughout |
 
+## CL-17 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Log and flag permit delivery; quarantine withholds; fail halts execution/delivery | `covertlens.verdicts` ladder (`delivery_for_verdict`, `decide_verdict`, `decide_and_record` through the CL-12 gate; `halt_execution` only for `fail_run`) · [docs/contracts/verdict-ladder.md](docs/contracts/verdict-ladder.md) · [schemas/verdict-decision.schema.json](schemas/verdict-decision.schema.json) |
+| Triage and enforcement operating points are separately configured | Versioned per-family `ThresholdConfig` from the CL-7 manifest (high-recall triage vs high-precision enforcement); shipped unfrozen, frozen by CL-27 |
+| Pre-delivery decisions cannot use future recipient actions | `LookaheadError` on recipient-action or post-cutoff evidence (C-03) |
+
 ## Quickstart
 
 ```bash
@@ -112,6 +120,7 @@ python -m covertlens benchmark-lsb       # CL-14 threshold-free LSB benchmark
 python -m covertlens dct-demo            # CL-15 DCT scoring demo
 python -m covertlens benchmark-dct       # CL-15 paired DCT benchmark (FP + recall by band)
 python -m covertlens trace-demo          # CL-16 trace join demo
+python -m covertlens verdict-demo        # CL-17 verdict ladder demo (unfrozen, log-only)
 pytest
 ```
 
