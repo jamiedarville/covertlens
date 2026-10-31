@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/release-scorecard.schema.json",
+  "title": "CovertLens MVP release scorecard and owner decision (CL-35)",
+  "type": "object",
+  "required": ["schema", "release", "frozen_config_version", "sections", "decision"],
+  "properties": {
+    "schema": {"const": "covertlens.release-scorecard"},
+    "sections": {
+      "type": "object",
+      "required": ["detection_frozen_benchmark", "latency_reliability",
+                   "gate_and_trace", "evidence_exports", "pilot_adjudication",
+                   "sequence_value", "prevention", "robustness_bounds"]
+    },
+    "decision": {
+      "type": "object",
+      "required": ["value", "decision_owner", "limitations", "target_revisions"],
+      "properties": {
+        "value": {"enum": ["release", "release_with_limitations", "no_release"]}
+      }
+    },
+    "equated_with_collusion": {"const": false},
+    "universal_claim": {"const": false}
+  }
+}
