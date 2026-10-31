@@ -35,6 +35,7 @@ jobs:
             python -m covertlens pilot-demo > /dev/null
             python -m covertlens ablation-demo > /dev/null
             python -m covertlens route-audit-demo > /dev/null
+            python -m covertlens export-demo > /dev/null
 
 workflows:
   checks:

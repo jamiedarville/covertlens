@@ -220,6 +220,14 @@ store** that every later task builds on.
 | Missing parse/action links have explicit reasons | Mixed-run trace audit classifies every missing link (pending verdict, unrecorded parse, withheld `not_observed`) |
 | Final coverage report identifies any remaining gaps | R-06 marked `partial`: no dedicated gate derivative API, derivative enforcement is procedural — named in `gaps`, no full-coverage claim |
 
+## CL-33 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Exports contain findings, versions, hashes, policy and dispositions | `covertlens.review_export.build_review_package`: sealed byte-free package over the CL-25 report + CL-26 pin · [docs/contracts/review-exports.md](docs/contracts/review-exports.md) · [schemas/review-export.schema.json](schemas/review-export.schema.json) |
+| Original-byte reads and exports appear in audit logs | `verify_evidence_access` cross-checks the hash-chained CL-11 audit log (allowed + denied) and the CL-8 store access history |
+| Dataset/project permission tests prevent unauthorized evidence access | Agent and wrong-dataset researcher denied on both read and export (`export.create`/`original.read` are dataset-scoped, deny-by-default); tampered package/audit entries detected |
+
 ## Quickstart
 
 ```bash
@@ -253,6 +261,7 @@ python -m covertlens latency-demo        # CL-29 latency + reliability report
 python -m covertlens pilot-demo          # CL-30 seeded pilot + adjudication
 python -m covertlens ablation-demo       # CL-31 ablations + prevention
 python -m covertlens route-audit-demo    # CL-32 route + trace coverage audit
+python -m covertlens export-demo         # CL-33 review export + access verification
 pytest
 ```
 
