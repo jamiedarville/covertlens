@@ -75,6 +75,14 @@ store** that every later task builds on.
 | Clean/encoded test performance is broken down by payload band | `benchmark_lsb` rows and `by_payload_band` (none/low/medium/high) over the CL-9 fixtures · [schemas/lsb-benchmark.schema.json](schemas/lsb-benchmark.schema.json) |
 | Threshold-free results include precision/recall and uncertainty | Threshold sweep with Wilson precision/recall intervals plus ROC-AUC and average-precision bootstrap intervals; thresholds stay unfrozen until CL-27 |
 
+## CL-15 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Original JPEG coefficient-domain evidence is analyzed | `covertlens.dct` scores quantized AC coefficients from CL-13 on exact original bytes (no IDCT/recompression) · [docs/contracts/dct-detector.md](docs/contracts/dct-detector.md) |
+| DCT scores, configuration and limitations are recorded | `dct-coefficient-pov-chisquare` v1.0.0 findings with `DctConfig` v1.0.0, carrier/block coverage and recorded limitations |
+| Paired tests report false positives and recall by payload band | `benchmark_dct` sweep (FP/FPR per threshold) plus per-band recall sweeps · [schemas/dct-benchmark.schema.json](schemas/dct-benchmark.schema.json) |
+
 ## Quickstart
 
 ```bash
@@ -93,6 +101,8 @@ python -m covertlens gate-demo           # CL-12 interception + pending delivery
 python -m covertlens parse-demo          # CL-13 bounded parsing demo
 python -m covertlens lsb-demo            # CL-14 LSB scoring demo
 python -m covertlens benchmark-lsb       # CL-14 threshold-free LSB benchmark
+python -m covertlens dct-demo            # CL-15 DCT scoring demo
+python -m covertlens benchmark-dct       # CL-15 paired DCT benchmark (FP + recall by band)
 pytest
 ```
 

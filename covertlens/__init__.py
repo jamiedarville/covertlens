@@ -28,6 +28,17 @@ from .fixtures import (
     make_payload,
     manifest,
 )
+from .dct import (
+    CONFIG_VERSION as DCT_CONFIG_VERSION,
+    DCT_DETECTOR_NAME,
+    DCT_DETECTOR_VERSION,
+    DctConfig,
+    analyze_dct_bytes,
+    analyze_dct_version,
+    benchmark_dct,
+    detect_dct,
+    validate_dct_benchmark,
+)
 from .gate import (
     DeliveryRecord,
     InterceptionContext,
@@ -109,6 +120,15 @@ __all__ = [
     "benchmark_lsb",
     "detect_lsb",
     "validate_benchmark",
+    "DCT_CONFIG_VERSION",
+    "DCT_DETECTOR_NAME",
+    "DCT_DETECTOR_VERSION",
+    "DctConfig",
+    "analyze_dct_bytes",
+    "analyze_dct_version",
+    "benchmark_dct",
+    "detect_dct",
+    "validate_dct_benchmark",
     "DeliveryRecord",
     "InterceptionContext",
     "InterceptionGate",
