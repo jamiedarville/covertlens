@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/replay-experiment.schema.json",
+  "title": "CovertLens replay experiment (CL-21)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "experiment_version", "config",
+    "conditions_pinned", "trials", "by_condition", "by_payload_band",
+    "equated_with_collusion"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.replay-experiment"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "experiment_version": {"type": "string", "minLength": 1},
+    "config": {
+      "type": "object",
+      "required": ["version", "seed", "repetitions", "detector_versions", "verdict_config_version"],
+      "properties": {
+        "version": {"type": "string"},
+        "seed": {"type": "integer"},
+        "repetitions": {"type": "integer", "minimum": 1},
+        "detector_versions": {"type": "array", "items": {"type": "string"}},
+        "verdict_config_version": {"type": ["string", "null"]}
+      }
+    },
+    "conditions_pinned": {"type": "object"},
+    "trials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "trial_id", "fixture_id", "pair_id", "family", "payload_band",
+          "condition", "repetition", "trial_seed", "content_hash",
+          "parse_status", "recovery", "legitimate_task_success",
+          "demonstrated_transfer"
+        ],
+        "properties": {
+          "trial_id": {"type": "string"},
+          "fixture_id": {"type": "string"},
+          "pair_id": {"type": "string"},
+          "family": {"type": "string"},
+          "payload_band": {"enum": ["low", "medium", "high"]},
+          "condition": {"enum": ["delivered", "withheld"]},
+          "repetition": {"type": "integer", "minimum": 0},
+          "trial_seed": {"type": "integer"},
+          "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "parse_status": {"enum": ["parsed", "not_observed"]},
+          "recovery": {"enum": ["recovered", "not_recovered", "not_observed"]},
+          "legitimate_task_success": {"type": "boolean"},
+          "demonstrated_transfer": {"type": "boolean"}
+        }
+      }
+    },
+    "by_condition": {"type": "object"},
+    "by_payload_band": {"type": "object"},
+    "equated_with_collusion": {"const": false}
+  }
+}

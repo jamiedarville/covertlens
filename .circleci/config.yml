@@ -24,6 +24,7 @@ jobs:
             python -m covertlens benchmark-dct > /dev/null
             python -m covertlens trace-demo > /dev/null
             python -m covertlens verdict-demo > /dev/null
+            python -m covertlens replay-demo > /dev/null
 
 workflows:
   checks:
