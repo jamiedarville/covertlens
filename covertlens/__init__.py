@@ -87,6 +87,12 @@ from .outcomes import (
     validate_outcome,
 )
 from .replay import ReplayConfig, build_trials, run_replay, validate_replay
+from .report import (
+    DISPOSITIONS,
+    apply_review,
+    build_run_report,
+    validate_run_report,
+)
 from .parsing import (
     DEFAULT_LIMITS,
     AnalysisResult,
@@ -220,6 +226,10 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "DISPOSITIONS",
+    "apply_review",
+    "build_run_report",
+    "validate_run_report",
     "SequenceCase",
     "assess_sequence",
     "benchmark_sequences",

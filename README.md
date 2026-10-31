@@ -155,6 +155,14 @@ store** that every later task builds on.
 | Context never joins unrelated runs and uses only available evidence for gating | Multi-run input raises; features count only evidence at/before `through_seq` |
 | Sequence benchmarks compare image-only, context-only and combined outcomes | `benchmark_sequences` ROC-AUC for all three scorers |
 
+## CL-25 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Report includes originals, component findings, prior context and action timeline | `covertlens.report.build_run_report` (originals by hash reference, no embedded bytes) · [docs/contracts/researcher-report.md](docs/contracts/researcher-report.md) · [schemas/run-report.schema.json](schemas/run-report.schema.json) |
+| Review supports benign, unresolved, suspected, demonstrated-transfer and policy-supported findings | `apply_review` with the five dispositions; `demonstrated_transfer` requires a recorded independent basis |
+| Heatmaps/scores are labeled evidence aids rather than decoded messages | `evidence_aid_not_decoded_message` label enforced by validation |
+
 ## Quickstart
 
 ```bash
@@ -180,6 +188,7 @@ python -m covertlens verdict-demo        # CL-17 verdict ladder demo (unfrozen, 
 python -m covertlens replay-demo         # CL-21 delivered-vs-withheld replay
 python -m covertlens metadata-demo       # CL-23 metadata + integrated pipeline demo
 python -m covertlens sequence-demo       # CL-24 sequence benchmark demo
+python -m covertlens report-demo         # CL-25 researcher report demo
 pytest
 ```
 
