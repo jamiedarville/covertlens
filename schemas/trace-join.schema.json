@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/trace-join.schema.json",
+  "title": "CovertLens trace join report (CL-16)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "join_version", "run_id",
+    "causation_claimed", "deliveries", "actions",
+    "unjoined_results", "errors", "summary"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.trace-join"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "join_version": {"type": "string", "minLength": 1},
+    "run_id": {"type": ["string", "null"]},
+    "causation_claimed": {"const": false},
+    "deliveries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "delivery_id", "artifact_id", "artifact_version_id",
+          "content_hash", "episode_id", "sender_id", "recipient_id",
+          "attempted", "verdict", "verdict_reference_status", "access",
+          "delivered", "parse", "findings", "findings_status",
+          "next_action", "next_actions", "missing"
+        ],
+        "properties": {
+          "delivery_id": {"type": "string"},
+          "artifact_id": {"type": ["string", "null"]},
+          "artifact_version_id": {"type": ["string", "null"]},
+          "content_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+          "episode_id": {"type": ["string", "null"]},
+          "sender_id": {"type": ["string", "null"]},
+          "recipient_id": {"type": ["string", "null"]},
+          "attempted": {"$ref": "#/$defs/event_ref"},
+          "verdict": {
+            "type": ["object", "null"],
+            "properties": {
+              "verdict_id": {"type": ["string", "null"]},
+              "verdict": {"enum": ["log", "flag", "quarantine", "fail_run", null]},
+              "event_id": {"type": "string"},
+              "seq": {"type": "integer", "minimum": 0}
+            }
+          },
+          "verdict_reference_status": {"enum": ["linked", "missing"]},
+          "access": {"type": ["object", "null"]},
+          "delivered": {"type": "boolean"},
+          "parse": {
+            "type": "object",
+            "required": ["linkage", "parse_status", "event_id", "seq"],
+            "properties": {
+              "linkage": {"enum": ["linked", "missing"]},
+              "parse_status": {"enum": ["parsed", "parse_failed", "not_observed", "missing"]},
+              "event_id": {"type": ["string", "null"]},
+              "seq": {"type": ["integer", "null"], "minimum": 0}
+            }
+          },
+          "findings": {"type": "array", "items": {"type": "object"}},
+          "findings_status": {
+            "enum": ["linked", "no_findings_recorded", "hash_mismatch_rejected"]
+          },
+          "next_action": {"type": "object"},
+          "next_actions": {"type": "array", "items": {"type": "object"}},
+          "missing": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event_id", "seq", "recipient_id", "referenced_delivery_id",
+          "candidate_delivery_ids", "candidate_count",
+          "causation_claimed", "linkage_basis"
+        ],
+        "properties": {
+          "event_id": {"type": "string"},
+          "seq": {"type": "integer", "minimum": 0},
+          "recipient_id": {"type": ["string", "null"]},
+          "referenced_delivery_id": {"type": ["string", "null"]},
+          "candidate_delivery_ids": {"type": "array", "items": {"type": "string"}},
+          "candidate_count": {"type": "integer", "minimum": 0},
+          "causation_claimed": {"const": false},
+          "linkage_basis": {"type": "string"}
+        }
+      }
+    },
+    "unjoined_results": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "summary": {
+      "type": "object",
+      "required": [
+        "attempted_deliveries", "with_verdict_reference", "delivered",
+        "with_parse", "with_next_action", "with_findings", "actions",
+        "linkage_errors"
+      ],
+      "properties": {
+        "attempted_deliveries": {"type": "integer", "minimum": 0},
+        "with_verdict_reference": {"type": "integer", "minimum": 0},
+        "delivered": {"type": "integer", "minimum": 0},
+        "with_parse": {"type": "integer", "minimum": 0},
+        "with_next_action": {"type": "integer", "minimum": 0},
+        "with_findings": {"type": "integer", "minimum": 0},
+        "actions": {"type": "integer", "minimum": 0},
+        "linkage_errors": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "event_ref": {
+      "type": "object",
+      "required": ["event_id", "seq"],
+      "properties": {
+        "event_id": {"type": "string"},
+        "seq": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

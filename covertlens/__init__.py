@@ -93,6 +93,11 @@ from .splits import (
     write_split_dataset,
 )
 from .store import RETENTION_POLICY, ArtifactStore, ArtifactVersion
+from .trace_join import (
+    JOIN_VERSION as TRACE_JOIN_VERSION,
+    join_trace,
+    validate_trace_join,
+)
 
 __version__ = "0.1.0"
 
@@ -173,6 +178,9 @@ __all__ = [
     "load_manifest",
     "load_runtime_policy",
     "routes_by_kind",
+    "TRACE_JOIN_VERSION",
+    "join_trace",
+    "validate_trace_join",
     "validate_event",
     "validate_inventory",
     "validate_manifest",

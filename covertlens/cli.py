@@ -15,6 +15,7 @@ Usage:
     python -m covertlens benchmark-lsb
     python -m covertlens dct-demo
     python -m covertlens benchmark-dct
+    python -m covertlens trace-demo
 """
 
 from __future__ import annotations
@@ -23,14 +24,15 @@ import json
 import sys
 from pathlib import Path
 
-from .events import REQUIRED_FAMILIES, EventType
+from .events import REQUIRED_FAMILIES, Event, EventType, ParseStatus
 from .manifest import load_manifest, validate_manifest
 from .routes import ROUTES, validate_inventory
 from .events import Verdict
 from .fixtures import build_dataset, build_pair, manifest as fixture_manifest, write_dataset
 from .dct import analyze_dct_bytes, benchmark_dct
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
-from .lsb import analyze_lsb_bytes, benchmark_lsb
+from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
+from .trace_join import join_trace
 from .parsing import ParserLimits, analyze_bytes, analyze_version
 from .runtime import (
     AuditLog,
@@ -260,6 +262,50 @@ def main(argv: list[str] | None = None) -> int:
             "roc_auc": report["roc_auc"],
             "pr_auc": report["pr_auc"],
             "by_payload_band": report["by_payload_band"],
+        }, indent=2))
+        return 0
+
+    if command == "trace-demo":
+        from datetime import datetime, timezone
+
+        gate = InterceptionGate(ArtifactStore())
+        ctx = InterceptionContext(
+            run_id="run_demo", episode_id="ep_1", sender_id="agent-a")
+        clean, encoded = build_pair(
+            "spatial_lsb", width=64, height=48, payload_bytes=64)
+        results = []
+        deliveries = []
+        for fixture in (clean, encoded):
+            handle = gate.intercept_bytes("R-01", fixture.data, ctx)
+            results.append(analyze_lsb_version(
+                gate.store, handle.artifact_version_id, actor_id="detector"))
+            delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
+            gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
+            gate.recipient_access(delivery.delivery_id)
+            deliveries.append(delivery)
+        gate.record_parse(deliveries[0].delivery_id, ParseStatus.PARSED)
+        events = gate.events("run_demo")
+        events.append(Event(
+            EventType.RECIPIENT_ACTION, "run_demo", len(events),
+            datetime.now(timezone.utc).isoformat(),
+            recipient_id="agent-b", payload={"action": "answer"},
+        ))
+        report = join_trace(events, results)
+        print(json.dumps({
+            "run_id": report["run_id"],
+            "summary": report["summary"],
+            "deliveries": [
+                {
+                    "delivery_id": d["delivery_id"],
+                    "content_hash": d["content_hash"],
+                    "verdict": (d["verdict"] or {}).get("verdict"),
+                    "findings": len(d["findings"]),
+                    "parse": d["parse"],
+                    "missing": d["missing"],
+                }
+                for d in report["deliveries"]
+            ],
+            "actions": report["actions"],
         }, indent=2))
         return 0
 
