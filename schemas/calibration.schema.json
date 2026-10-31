@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/calibration.schema.json",
+  "title": "CovertLens calibration and frozen thresholds (CL-27)",
+  "type": "object",
+  "required": ["schema", "frozen_config_version", "targets", "held_out_labels_used",
+               "families", "threshold_config"],
+  "properties": {
+    "schema": {"const": "covertlens.calibration"},
+    "frozen_config_version": {"type": "string"},
+    "held_out_labels_used": {"const": false},
+    "targets": {
+      "type": "object",
+      "required": ["triage_recall_at_least", "enforcement_precision_at_least"],
+      "properties": {
+        "triage_recall_at_least": {"type": "number"},
+        "enforcement_precision_at_least": {"type": "number"}
+      }
+    },
+    "families": {
+      "type": "object",
+      "patternProperties": {
+        "^(spatial_lsb|jpeg_dct|metadata)$": {
+          "type": "object",
+          "required": ["triage_flag_at", "enforcement_quarantine_at",
+                       "enforcement_fail_run_at", "calibrated_payload_bands"],
+          "properties": {
+            "triage_flag_at": {"type": "number", "minimum": 0, "maximum": 1},
+            "enforcement_quarantine_at": {"type": "number", "minimum": 0, "maximum": 1},
+            "enforcement_fail_run_at": {"type": "number", "minimum": 0, "maximum": 1},
+            "calibrated_payload_bands": {
+              "type": "array", "items": {"enum": ["low", "medium", "high"]}
+            }
+          }
+        }
+      }
+    },
+    "threshold_config": {"type": "object"}
+  }
+}
