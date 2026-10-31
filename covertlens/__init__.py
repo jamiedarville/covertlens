@@ -36,6 +36,17 @@ from .gate import (
     WithheldError,
 )
 from .manifest import channel_families, load_manifest, validate_manifest
+from .parsing import (
+    DEFAULT_LIMITS,
+    AnalysisResult,
+    AnalysisStatus,
+    Finding,
+    ParserLimits,
+    analyze_bytes,
+    analyze_version,
+    validate_finding,
+    validate_result,
+)
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
 from .runtime import (
     AuditLog,
@@ -66,9 +77,18 @@ __version__ = "0.1.0"
 __all__ = [
     "ENCODER_VERSION",
     "GENERATOR_VERSION",
+    "AnalysisResult",
+    "AnalysisStatus",
     "ArtifactStore",
     "ArtifactVersion",
+    "DEFAULT_LIMITS",
+    "Finding",
     "Fixture",
+    "ParserLimits",
+    "analyze_bytes",
+    "analyze_version",
+    "validate_finding",
+    "validate_result",
     "DeliveryRecord",
     "InterceptionContext",
     "InterceptionGate",
