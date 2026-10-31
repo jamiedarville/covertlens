@@ -20,6 +20,8 @@ jobs:
             python -m covertlens parse-demo > /dev/null
             python -m covertlens lsb-demo > /dev/null
             python -m covertlens benchmark-lsb > /dev/null
+            python -m covertlens dct-demo > /dev/null
+            python -m covertlens benchmark-dct > /dev/null
 
 workflows:
   checks:

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/dct-benchmark.schema.json",
+  "title": "CovertLens DCT benchmark report (CL-15)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "benchmark_version", "detector",
+    "thresholds_status", "fixture_count", "scored_count",
+    "skipped_non_dct", "positive_count", "negative_count", "rows",
+    "by_payload_band", "roc_auc", "pr_auc", "sweep", "limitations"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.dct-benchmark"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "benchmark_version": {"type": "string", "minLength": 1},
+    "detector": {
+      "type": "object",
+      "required": ["family", "name", "version", "config"],
+      "properties": {
+        "family": {"const": "jpeg_dct"},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "config": {
+          "type": "object",
+          "required": ["version", "carrier_min_magnitude", "pair_min_count"],
+          "properties": {
+            "version": {"type": "string", "minLength": 1},
+            "carrier_min_magnitude": {"type": "integer", "minimum": 1},
+            "pair_min_count": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "thresholds_status": {"const": "unfrozen_placeholder"},
+    "fixture_count": {"type": "integer", "minimum": 0},
+    "scored_count": {"type": "integer", "minimum": 0},
+    "skipped_non_dct": {"type": "integer", "minimum": 0},
+    "positive_count": {"type": "integer", "minimum": 0},
+    "negative_count": {"type": "integer", "minimum": 0},
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fixture_id", "role", "label", "payload_band", "payload_bits",
+          "bits_per_pixel", "applicable", "score"
+        ],
+        "properties": {
+          "fixture_id": {"type": "string"},
+          "role": {"enum": ["clean", "encoded", "negative"]},
+          "label": {"enum": [0, 1]},
+          "payload_band": {"enum": ["none", "low", "medium", "high"]},
+          "payload_bits": {"type": "integer", "minimum": 0},
+          "bits_per_pixel": {"type": "number", "minimum": 0},
+          "applicable": {"type": "boolean"},
+          "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "by_payload_band": {
+      "type": "object",
+      "required": ["none", "low", "medium", "high"],
+      "properties": {
+        "none": {"$ref": "#/$defs/band"},
+        "low": {"$ref": "#/$defs/band"},
+        "medium": {"$ref": "#/$defs/band"},
+        "high": {"$ref": "#/$defs/band"}
+      }
+    },
+    "roc_auc": {"$ref": "#/$defs/metric"},
+    "pr_auc": {"$ref": "#/$defs/metric"},
+    "sweep": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "threshold", "tp", "fp", "tn", "fn",
+          "precision", "recall", "false_positive_rate"
+        ],
+        "properties": {
+          "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+          "tp": {"type": "integer", "minimum": 0},
+          "fp": {"type": "integer", "minimum": 0},
+          "tn": {"type": "integer", "minimum": 0},
+          "fn": {"type": "integer", "minimum": 0},
+          "precision": {"$ref": "#/$defs/proportion"},
+          "recall": {"$ref": "#/$defs/proportion"},
+          "false_positive_rate": {"$ref": "#/$defs/proportion"}
+        }
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "band": {
+      "type": "object",
+      "required": [
+        "fixture_count", "positive_count", "negative_count",
+        "scores", "roc_auc_vs_negatives", "sweep"
+      ],
+      "properties": {
+        "fixture_count": {"type": "integer", "minimum": 0},
+        "positive_count": {"type": "integer", "minimum": 0},
+        "negative_count": {"type": "integer", "minimum": 0},
+        "scores": {
+          "type": "object",
+          "required": ["count", "min", "max", "mean"],
+          "properties": {
+            "count": {"type": "integer", "minimum": 0},
+            "min": {"type": ["number", "null"]},
+            "max": {"type": ["number", "null"]},
+            "mean": {"type": ["number", "null"]}
+          }
+        },
+        "roc_auc_vs_negatives": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "sweep": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+              "tp": {"type": "integer", "minimum": 0},
+              "fn": {"type": "integer", "minimum": 0},
+              "fp": {"type": "integer", "minimum": 0},
+              "tn": {"type": "integer", "minimum": 0},
+              "recall": {"$ref": "#/$defs/proportion"},
+              "false_positive_rate": {"$ref": "#/$defs/proportion"}
+            }
+          }
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": [
+        "estimate", "ci_low", "ci_high",
+        "bootstrap_replicates", "bootstrap_seed"
+      ],
+      "properties": {
+        "estimate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "ci_low": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "ci_high": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "bootstrap_replicates": {"type": "integer", "minimum": 0},
+        "bootstrap_seed": {"type": "integer"}
+      }
+    },
+    "proportion": {
+      "type": "object",
+      "required": ["estimate", "ci_low", "ci_high", "n"],
+      "properties": {
+        "estimate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "ci_low": {"type": "number", "minimum": 0, "maximum": 1},
+        "ci_high": {"type": "number", "minimum": 0, "maximum": 1},
+        "n": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
