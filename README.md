@@ -236,6 +236,14 @@ store** that every later task builds on.
 | Unseen configurations and low-signal sequences are included | JPEG Q50/Q75, blocks/smooth covers, 128×96 images, plus a 6-artifact low-signal sequence (repetition visible only in the sequence view) |
 | Coverage limitations and unresolved results are documented | Evasions named per experiment (reduced-rate, allowed-keyword, blocks, payload density); smooth-cover result `confounded_unresolved` (clean control fails identically) |
 
+## CL-35 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| LSB, DCT and metadata results plus precision, recall and clean-run failure rates are published | `config/release-scorecard.json` built by `covertlens.scorecard.build_scorecard` from the CL-28..CL-34 reports (each section cites its source) · [docs/contracts/release-scorecard.md](docs/contracts/release-scorecard.md) · [schemas/release-scorecard.schema.json](schemas/release-scorecard.schema.json) |
+| Gate correctness, trace completeness, repeatability, latency and sequence value are included | Scorecard sections for CL-32 gate/trace, CL-33 exports, CL-29 latency, CL-31 sequence/prevention, CL-30 pilot |
+| Owner records release decision, limitations and any target revisions | Decision `release_with_limitations` with 7 limitations and 4 evidence-backed target revisions recorded in the artifact and Jira |
+
 ## Quickstart
 
 ```bash
@@ -271,6 +279,7 @@ python -m covertlens ablation-demo       # CL-31 ablations + prevention
 python -m covertlens route-audit-demo    # CL-32 route + trace coverage audit
 python -m covertlens export-demo         # CL-33 review export + access verification
 python -m covertlens robustness-demo     # CL-34 adaptive/unseen-config evaluation
+python -m covertlens scorecard-demo      # CL-35 MVP release scorecard + decision
 pytest
 ```
 

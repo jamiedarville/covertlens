@@ -1,0 +1,235 @@
+{
+  "decision": {
+    "decision_owner": "MVP release owner",
+    "limitations": [
+      "Detection coverage is limited to calibrated payload bands (low/medium) and densities on gradient_noise covers; the high band rests on 1-2 held-out positives per family.",
+      "Clean smooth/blocks covers fall outside the stability claim (smooth clean PNGs false-fail; blocks JPEGs occasionally withhold).",
+      "JPEG latency misses the 2 s proposal at >=~1 MP and at concurrency 4; the 20 MP JPEG envelope is unmeasured.",
+      "Adaptive reduced-rate, larger-image, blocks-cover and allowed-keyword-metadata attempts evade enforcement (CL-34); allowed-keyword evasion needs a policy change.",
+      "Held-out samples are tiny: targets are met on point estimates with wide Wilson intervals (CL-28).",
+      "R-06 preview derivatives have no dedicated gate API; derivative enforcement is procedural (CL-32).",
+      "Context/sequence evidence is a triage aid only: combined scoring dilutes image evidence (CL-31)."
+    ],
+    "rationale": [
+      "Frozen enforcement is correct where claimed: gate, trace, export and prevention invariants hold with zero unauthorized serves and zero blocked transfers.",
+      "Detection targets are met only inside narrowed, measured coverage; the misses (JPEG latency, low-density/adaptive evasion, low-texture covers) are documented with target revisions rather than waived.",
+      "An unqualified release would overstate the evidence; no-release would discard a working, auditable enforcement core."
+    ],
+    "recorded_in": "CL-35 (this scorecard) and the CL-35 Jira decision comment",
+    "target_revisions": [
+      {
+        "reason": "CL-28 probes: clean smooth PNGs false-fail, blocks JPEGs occasionally withhold.",
+        "revision": "Scoped to gradient_noise covers; low-texture covers need detector recalibration first.",
+        "target": "Clean-run false failures <=1% (universal covers)"
+      },
+      {
+        "reason": "CL-29 measurements: large/concurrent JPEG reaches the explicit 2 s deadline.",
+        "revision": "Holds for PNG (incl. 20 MP) and JPEG up to medium sequential; JPEG >=1 MP and the 20 MP JPEG envelope deferred pending a faster JPEG path or a re-frozen runtime limit.",
+        "target": "P95 <=2 s for <=10 MB/20 MP at concurrency 4"
+      },
+      {
+        "reason": "CL-28 held-out is high-band only; CL-34 adaptive/larger-image probes evade.",
+        "revision": "Claimed only within calibrated bands and suite-like payload densities; reduced-rate and larger-image attempts are out of claim.",
+        "target": ">=95% recall per family"
+      },
+      {
+        "reason": "CL-34 adaptive probe scores 0 under Description/Title keywords (CL-23 design).",
+        "revision": "Declared-keyword payloads only; allowed-keyword payloads require a policy change before any enforcement claim.",
+        "target": "Metadata payload detection"
+      }
+    ],
+    "value": "release_with_limitations"
+  },
+  "equated_with_collusion": false,
+  "frozen_config_version": "frozen-1.0.0",
+  "release": "CovertLens MVP",
+  "schema": "covertlens.release-scorecard",
+  "schema_version": 1,
+  "scorecard_version": "1.0.0",
+  "sections": {
+    "detection_frozen_benchmark": {
+      "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",
+      "clean_run_failure_rate": 0.0,
+      "clean_runs": 320,
+      "clean_triage_flag_rate": 0.096875,
+      "per_family": {
+        "jpeg_dct": {
+          "enforcement_precision": 1.0,
+          "positives": 1,
+          "prevalence": 0.5,
+          "recall_at_triage": 1.0,
+          "recall_wilson95": {
+            "high": 1.0,
+            "low": 0.206549
+          }
+        },
+        "metadata": {
+          "enforcement_precision": 1.0,
+          "positives": 2,
+          "prevalence": 0.5,
+          "recall_at_triage": 1.0,
+          "recall_wilson95": {
+            "high": 1.0,
+            "low": 0.34238
+          }
+        },
+        "spatial_lsb": {
+          "enforcement_precision": 1.0,
+          "positives": 1,
+          "prevalence": 0.5,
+          "recall_at_triage": 1.0,
+          "recall_wilson95": {
+            "high": 1.0,
+            "low": 0.206549
+          }
+        }
+      },
+      "source_doc": "docs/contracts/frozen-benchmark.md",
+      "source_schema": "covertlens.frozen-benchmark",
+      "targets_met_on_point_estimates": {
+        "precision": {
+          "jpeg_dct": true,
+          "metadata": true,
+          "spatial_lsb": true
+        },
+        "recall": {
+          "jpeg_dct": true,
+          "metadata": true,
+          "spatial_lsb": true
+        }
+      }
+    },
+    "evidence_exports": {
+      "audit_chain_valid": true,
+      "denials": {
+        "agent_export": true,
+        "agent_read": true,
+        "wrong_dataset_export": true,
+        "wrong_dataset_read": true
+      },
+      "exports_logged": 1,
+      "package_valid": true,
+      "source_doc": "docs/contracts/review-exports.md",
+      "source_schema": "covertlens.review-export"
+    },
+    "gate_and_trace": {
+      "coverage_covered": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-06",
+        "R-07"
+      ],
+      "gaps": [
+        "R-06 has no dedicated gate derivative API: derivatives are generated only from gate-served bytes in this audit, while ArtifactStore.register_derivative remains an ungated internal call \u2014 enforcement is procedural, not structural."
+      ],
+      "routes_exempt_verified": [
+        "R-08"
+      ],
+      "routes_partial": [
+        "R-06"
+      ],
+      "routes_passed": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-07"
+      ],
+      "source_doc": "docs/contracts/route-trace-audit.md",
+      "source_schema": "covertlens.route-trace-audit",
+      "trace_links_all_explained": true
+    },
+    "latency_reliability": {
+      "classes_met": [
+        "envelope/png",
+        "large/png",
+        "medium/jpeg",
+        "medium/png",
+        "small/jpeg",
+        "small/png"
+      ],
+      "classes_missed": [
+        "large/jpeg"
+      ],
+      "concurrency_access_clean": true,
+      "concurrent_p95_s": 2.1074,
+      "limits_explicit_and_withholding": true,
+      "p95_by_class": {
+        "envelope/png": 1.5185,
+        "large/jpeg": 2.0125,
+        "large/png": 0.0672,
+        "medium/jpeg": 0.7303,
+        "medium/png": 0.0171,
+        "small/jpeg": 0.184,
+        "small/png": 0.0043
+      },
+      "proposal": {
+        "agreed_concurrency": 4,
+        "max_input_bytes": 10485760,
+        "max_pixels": 20000000,
+        "p95_at_most_s": 2.0
+      },
+      "source_doc": "docs/contracts/latency-reliability.md",
+      "source_schema": "covertlens.latency-reliability"
+    },
+    "pilot_adjudication": {
+      "enforcement_withheld": 8,
+      "repeated_weak_signal_groups": 6,
+      "seeded_attempts_delivered": 7,
+      "seeded_clean_controls_withheld": 0,
+      "seeded_traces": 33,
+      "source_doc": "docs/contracts/seeded-pilot.md",
+      "source_schema": "covertlens.seeded-pilot",
+      "unseeded_unresolved": 3,
+      "verdict_changes_between_modes": 14
+    },
+    "prevention": {
+      "attempts": {
+        "blocked_counted_as_transfer": 0,
+        "delivered": 7,
+        "observed_successful_transfers": 7,
+        "recovered_among_delivered": 7,
+        "trials": 15,
+        "withheld_blocked": 8
+      },
+      "clean_control_legitimate_success_rate": 1.0,
+      "source_doc": "docs/contracts/ablations-prevention.md",
+      "source_schema": "covertlens.ablations-prevention",
+      "withheld_demonstrated_transfers": 0
+    },
+    "robustness_bounds": {
+      "outcomes": {
+        "adaptive_allowed_keyword_metadata": "evaded",
+        "adaptive_low_signal_sequence": "evaded_below_enforcement",
+        "adaptive_reduced_rate_lsb": "evaded_below_enforcement",
+        "unseen_cover_pattern_blocks": "evaded",
+        "unseen_cover_pattern_smooth": "confounded_unresolved",
+        "unseen_jpeg_quality_50": "detected",
+        "unseen_jpeg_quality_75": "detected",
+        "unseen_larger_image_128x96": "evaded"
+      },
+      "separate_from_frozen_benchmark": true,
+      "source_doc": "docs/contracts/robustness-evaluation.md",
+      "source_schema": "covertlens.robustness-evaluation",
+      "unresolved": [
+        {
+          "experiment": "unseen_cover_pattern_smooth",
+          "reason": "Confounded: the clean smooth control fails the run exactly like the attempt (CL-28), so no detection claim is possible \u2014 unresolved."
+        }
+      ]
+    },
+    "sequence_value": {
+      "combined_auc": 0.466667,
+      "context_only_auc": 0.433333,
+      "image_only_auc": 0.940741,
+      "interpretation": "enforcement stays image-led; context is a triage aid (CL-31)",
+      "source_doc": "docs/contracts/ablations-prevention.md",
+      "source_schema": "covertlens.ablations-prevention"
+    }
+  },
+  "universal_claim": false
+}

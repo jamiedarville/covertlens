@@ -30,6 +30,7 @@ Usage:
     python -m covertlens route-audit-demo
     python -m covertlens export-demo
     python -m covertlens robustness-demo
+    python -m covertlens scorecard-demo
 """
 
 from __future__ import annotations
@@ -54,6 +55,7 @@ from .latency import run_reliability_report
 from .ablations import run_ablations
 from .review_export import run_export_verification
 from .robustness import run_robustness
+from .scorecard import load_scorecard
 from .route_audit import run_route_audit
 from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
@@ -513,6 +515,27 @@ def main(argv: list[str] | None = None) -> int:
             "separate_from_frozen_benchmark": report["separate_from_frozen_benchmark"],
             "outcomes": report["outcomes"],
             "unresolved": report["unresolved"],
+        }, indent=2))
+        return 0
+
+    if command == "scorecard-demo":
+        card = load_scorecard()
+        print(json.dumps({
+            "release": card["release"],
+            "frozen_config_version": card["frozen_config_version"],
+            "decision": card["decision"]["value"],
+            "limitations": len(card["decision"]["limitations"]),
+            "target_revisions": len(card["decision"]["target_revisions"]),
+            "detection": {
+                family: {
+                    "recall": block["recall_at_triage"],
+                    "precision": block["enforcement_precision"],
+                }
+                for family, block in
+                card["sections"]["detection_frozen_benchmark"]["per_family"].items()
+            },
+            "clean_run_failure_rate":
+                card["sections"]["detection_frozen_benchmark"]["clean_run_failure_rate"],
         }, indent=2))
         return 0
 

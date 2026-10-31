@@ -37,6 +37,7 @@ jobs:
             python -m covertlens route-audit-demo > /dev/null
             python -m covertlens export-demo > /dev/null
             python -m covertlens robustness-demo > /dev/null
+            python -m covertlens scorecard-demo > /dev/null
 
 workflows:
   checks:

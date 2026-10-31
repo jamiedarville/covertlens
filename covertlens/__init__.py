@@ -125,6 +125,7 @@ from .review_export import (
 )
 from .robustness import run_robustness, validate_robustness
 from .route_audit import run_route_audit, validate_route_audit
+from .scorecard import build_scorecard, load_scorecard, validate_scorecard
 from .pilot import (
     PilotTrace,
     build_seeded_traces,
@@ -286,6 +287,9 @@ __all__ = [
     "run_ablations",
     "run_route_audit",
     "run_robustness",
+    "build_scorecard",
+    "load_scorecard",
+    "validate_scorecard",
     "validate_robustness",
     "build_review_package",
     "create_review_export",
