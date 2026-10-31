@@ -163,6 +163,14 @@ store** that every later task builds on.
 | Review supports benign, unresolved, suspected, demonstrated-transfer and policy-supported findings | `apply_review` with the five dispositions; `demonstrated_transfer` requires a recorded independent basis |
 | Heatmaps/scores are labeled evidence aids rather than decoded messages | `evidence_aid_not_decoded_message` label enforced by validation |
 
+## CL-26 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Dataset, detector, configuration, thresholds and seeds are pinned | `covertlens.pinning.build_pin` content-hashed pin with named drift detection · [docs/contracts/pinned-replay.md](docs/contracts/pinned-replay.md) · [schemas/pin.schema.json](schemas/pin.schema.json) |
+| Repeated inputs reproduce verdicts or meet documented stochastic bounds | `verify_reproducibility` (exact deterministic; seeded agreement bounds for stochastic scorers) |
+| Report exports carry hashes, trace references, versions and decisions | `export_bundle` hash-sealed CL-25 exports (no raw bytes) |
+
 ## Quickstart
 
 ```bash
@@ -189,6 +197,7 @@ python -m covertlens replay-demo         # CL-21 delivered-vs-withheld replay
 python -m covertlens metadata-demo       # CL-23 metadata + integrated pipeline demo
 python -m covertlens sequence-demo       # CL-24 sequence benchmark demo
 python -m covertlens report-demo         # CL-25 researcher report demo
+python -m covertlens pinning-demo        # CL-26 pin + reproducibility demo
 pytest
 ```
 

@@ -21,6 +21,7 @@ Usage:
     python -m covertlens metadata-demo
     python -m covertlens sequence-demo
     python -m covertlens report-demo
+    python -m covertlens pinning-demo
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
+from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
 from .metadata_fixtures import build_metadata_dataset
@@ -359,6 +361,16 @@ def main(argv: list[str] | None = None) -> int:
             "triage_queue": report["triage_queue"],
             "disposition_counts": report["disposition_counts"],
         }, indent=2))
+        return 0
+
+    if command == "pinning-demo":
+        fixtures = build_dataset()
+        pin = build_pin(fixtures, seeds={"replay": 20261028})
+        repro = verify_reproducibility(fixtures[:4], repetitions=2)
+        print(json.dumps({"pin_hash": pin["pin_hash"],
+                          "dataset_hash": pin["dataset"]["dataset_hash"],
+                          "detectors": pin["detectors"],
+                          "reproducibility": repro}, indent=2))
         return 0
 
     if command == "sequence-demo":

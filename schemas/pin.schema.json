@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/pin.schema.json",
+  "title": "CovertLens reproducibility pin and export (CL-26)",
+  "type": "object",
+  "required": ["schema", "schema_version", "pin_version", "dataset", "detectors", "threshold_config_version", "seeds", "pin_hash"],
+  "properties": {
+    "schema": {"const": "covertlens.pin"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "pin_version": {"type": "string", "minLength": 1},
+    "dataset": {
+      "type": "object",
+      "required": ["fixture_count", "dataset_hash", "fixtures"],
+      "properties": {
+        "fixture_count": {"type": "integer", "minimum": 0},
+        "dataset_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "fixtures": {"type": "object"}
+      }
+    },
+    "detectors": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "threshold_config_version": {"type": "string"},
+    "thresholds_status": {"type": "object"},
+    "seeds": {"type": "object"},
+    "pin_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}
