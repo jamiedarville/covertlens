@@ -31,6 +31,7 @@ Usage:
     python -m covertlens export-demo
     python -m covertlens robustness-demo
     python -m covertlens scorecard-demo
+    python -m covertlens handoff-demo
 """
 
 from __future__ import annotations
@@ -55,6 +56,7 @@ from .latency import run_reliability_report
 from .ablations import run_ablations
 from .review_export import run_export_verification
 from .robustness import run_robustness
+from .handoff import run_handoff_verification
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
 from .pilot import run_pilot
@@ -536,6 +538,18 @@ def main(argv: list[str] | None = None) -> int:
             },
             "clean_run_failure_rate":
                 card["sections"]["detection_frozen_benchmark"]["clean_run_failure_rate"],
+        }, indent=2))
+        return 0
+
+    if command == "handoff-demo":
+        report = run_handoff_verification()
+        print(json.dumps({
+            "runbook": report["runbook"],
+            "release_decision": report["release_decision"],
+            "threshold_operations": report["threshold_operations"],
+            "quarantine_handling": report["quarantine_handling"],
+            "reruns": report["reruns"],
+            "dataset_retirement": report["dataset_retirement"],
         }, indent=2))
         return 0
 
