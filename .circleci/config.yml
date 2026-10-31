@@ -28,6 +28,7 @@ jobs:
             python -m covertlens metadata-demo > /dev/null
             python -m covertlens sequence-demo > /dev/null
             python -m covertlens report-demo > /dev/null
+            python -m covertlens pinning-demo > /dev/null
 
 workflows:
   checks:

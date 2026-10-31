@@ -93,6 +93,14 @@ from .report import (
     build_run_report,
     validate_run_report,
 )
+from .pinning import (
+    build_pin,
+    export_bundle,
+    pin_differences,
+    validate_export,
+    validate_pin,
+    verify_reproducibility,
+)
 from .parsing import (
     DEFAULT_LIMITS,
     AnalysisResult,
@@ -226,6 +234,12 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "build_pin",
+    "export_bundle",
+    "pin_differences",
+    "validate_export",
+    "validate_pin",
+    "verify_reproducibility",
     "DISPOSITIONS",
     "apply_review",
     "build_run_report",
