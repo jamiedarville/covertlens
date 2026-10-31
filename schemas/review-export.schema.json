@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/review-export.schema.json",
+  "title": "CovertLens review export package (CL-33)",
+  "type": "object",
+  "required": ["schema", "dataset_id", "policy", "originals", "decisions",
+               "disposition_counts", "package_hash"],
+  "properties": {
+    "schema": {"const": "covertlens.review-export"},
+    "policy": {
+      "type": "object",
+      "required": ["runtime_policy_id", "runtime_policy_version",
+                   "threshold_config_version", "pin_hash", "dataset_hash"]
+    },
+    "originals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact_version_id", "content_hash", "findings"]
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["delivery_id", "verdict", "disposition"]
+      }
+    },
+    "contains_raw_bytes": {"const": false},
+    "equated_with_collusion": {"const": false}
+  }
+}

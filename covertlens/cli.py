@@ -28,6 +28,7 @@ Usage:
     python -m covertlens pilot-demo
     python -m covertlens ablation-demo
     python -m covertlens route-audit-demo
+    python -m covertlens export-demo
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ from .calibration import calibrate_thresholds
 from .frozen_benchmark import run_frozen_evaluation
 from .latency import run_reliability_report
 from .ablations import run_ablations
+from .review_export import run_export_verification
 from .route_audit import run_route_audit
 from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
@@ -484,6 +486,21 @@ def main(argv: list[str] | None = None) -> int:
             "coverage": report["coverage"],
             "trace_missing_reasons": report["trace"]["missing_link_reasons"],
             "gaps": report["gaps"],
+        }, indent=2))
+        return 0
+
+    if command == "export-demo":
+        result = run_export_verification()
+        package = result["package"]
+        print(json.dumps({
+            "package_hash": package["package_hash"],
+            "package_valid": result["package_valid"],
+            "originals": len(package["originals"]),
+            "decisions": len(package["decisions"]),
+            "disposition_counts": package["disposition_counts"],
+            "researcher_read_ok": result["researcher_read_ok"],
+            "denials": result["denials"],
+            "verification": result["verification"],
         }, indent=2))
         return 0
 

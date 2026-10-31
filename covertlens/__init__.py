@@ -116,6 +116,13 @@ from .latency import (
     validate_latency_report,
 )
 from .ablations import run_ablations, validate_ablations
+from .review_export import (
+    build_review_package,
+    create_review_export,
+    run_export_verification,
+    validate_review_package,
+    verify_evidence_access,
+)
 from .route_audit import run_route_audit, validate_route_audit
 from .pilot import (
     PilotTrace,
@@ -277,6 +284,11 @@ __all__ = [
     "PilotTrace",
     "run_ablations",
     "run_route_audit",
+    "build_review_package",
+    "create_review_export",
+    "run_export_verification",
+    "validate_review_package",
+    "verify_evidence_access",
     "validate_route_audit",
     "validate_ablations",
     "build_seeded_traces",
