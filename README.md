@@ -228,6 +228,14 @@ store** that every later task builds on.
 | Original-byte reads and exports appear in audit logs | `verify_evidence_access` cross-checks the hash-chained CL-11 audit log (allowed + denied) and the CL-8 store access history |
 | Dataset/project permission tests prevent unauthorized evidence access | Agent and wrong-dataset researcher denied on both read and export (`export.create`/`original.read` are dataset-scoped, deny-by-default); tampered package/audit entries detected |
 
+## CL-34 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Adaptive results are reported separately from the frozen benchmark | `covertlens.robustness.run_robustness` with `separate_from_frozen_benchmark: true` / `merged_into_frozen_claim: false` · [docs/contracts/robustness-evaluation.md](docs/contracts/robustness-evaluation.md) · [schemas/robustness-evaluation.schema.json](schemas/robustness-evaluation.schema.json) |
+| Unseen configurations and low-signal sequences are included | JPEG Q50/Q75, blocks/smooth covers, 128×96 images, plus a 6-artifact low-signal sequence (repetition visible only in the sequence view) |
+| Coverage limitations and unresolved results are documented | Evasions named per experiment (reduced-rate, allowed-keyword, blocks, payload density); smooth-cover result `confounded_unresolved` (clean control fails identically) |
+
 ## Quickstart
 
 ```bash
@@ -262,6 +270,7 @@ python -m covertlens pilot-demo          # CL-30 seeded pilot + adjudication
 python -m covertlens ablation-demo       # CL-31 ablations + prevention
 python -m covertlens route-audit-demo    # CL-32 route + trace coverage audit
 python -m covertlens export-demo         # CL-33 review export + access verification
+python -m covertlens robustness-demo     # CL-34 adaptive/unseen-config evaluation
 pytest
 ```
 
