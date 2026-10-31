@@ -147,6 +147,14 @@ store** that every later task builds on.
 | LSB, DCT and metadata outputs remain individually visible | `analyze_all_bytes` attaches each applicable family to one result, never blended |
 | All three families run through pinned threshold configurations | `analyze_and_decide` through the CL-17 ladder with caller-pinned config version recorded |
 
+## CL-24 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Agent identities, prior artifacts and actions persist across episodes in one run | `covertlens.sequence.build_episode_context` from the CL-16 join · [docs/contracts/episode-sequence.md](docs/contracts/episode-sequence.md) · [schemas/sequence-context.schema.json](schemas/sequence-context.schema.json) |
+| Context never joins unrelated runs and uses only available evidence for gating | Multi-run input raises; features count only evidence at/before `through_seq` |
+| Sequence benchmarks compare image-only, context-only and combined outcomes | `benchmark_sequences` ROC-AUC for all three scorers |
+
 ## Quickstart
 
 ```bash
@@ -171,6 +179,7 @@ python -m covertlens trace-demo          # CL-16 trace join demo
 python -m covertlens verdict-demo        # CL-17 verdict ladder demo (unfrozen, log-only)
 python -m covertlens replay-demo         # CL-21 delivered-vs-withheld replay
 python -m covertlens metadata-demo       # CL-23 metadata + integrated pipeline demo
+python -m covertlens sequence-demo       # CL-24 sequence benchmark demo
 pytest
 ```
 

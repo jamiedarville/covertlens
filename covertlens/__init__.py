@@ -99,6 +99,14 @@ from .parsing import (
     validate_result,
 )
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
+from .sequence import (
+    SequenceCase,
+    assess_sequence,
+    benchmark_sequences,
+    build_episode_context,
+    sequence_features,
+    validate_episode_context,
+)
 from .runtime import (
     AuditLog,
     DatasetRetirement,
@@ -212,6 +220,12 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "AnalysisCache",
+    "SequenceCase",
+    "assess_sequence",
+    "benchmark_sequences",
+    "build_episode_context",
+    "sequence_features",
+    "validate_episode_context",
     "METADATA_DETECTOR_NAME",
     "METADATA_DETECTOR_VERSION",
     "MetadataConfig",

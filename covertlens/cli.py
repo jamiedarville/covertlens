@@ -19,6 +19,7 @@ Usage:
     python -m covertlens verdict-demo
     python -m covertlens replay-demo
     python -m covertlens metadata-demo
+    python -m covertlens sequence-demo
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
+from .sequence import SequenceCase, benchmark_sequences
 from .metadata_fixtures import build_metadata_dataset
 from .replay import run_replay
 from .verdicts import decide_verdict
@@ -331,6 +333,20 @@ def main(argv: list[str] | None = None) -> int:
         report = benchmark_metadata(fixtures)
         print(json.dumps({"rows": rows[:4], "roc_auc": report["roc_auc"],
                           "by_payload_band": report["by_payload_band"]}, indent=2))
+        return 0
+
+    if command == "sequence-demo":
+        def feats(n, actions, peak):
+            return {"prior_deliveries": n, "prior_delivered": n,
+                    "prior_actions": actions, "prior_max_score": peak,
+                    "prior_mean_score": peak}
+        cases = [
+            SequenceCase("sig-1", 1, 0.25, feats(4, 3, 0.25)),
+            SequenceCase("sig-2", 1, 0.22, feats(3, 2, 0.24)),
+            SequenceCase("ben-1", 0, 0.26, feats(0, 0, 0.0)),
+            SequenceCase("ben-2", 0, 0.21, feats(1, 0, 0.2)),
+        ]
+        print(json.dumps(benchmark_sequences(cases), indent=2))
         return 0
 
     if command == "replay-demo":
