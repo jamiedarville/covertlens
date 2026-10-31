@@ -244,6 +244,14 @@ store** that every later task builds on.
 | Gate correctness, trace completeness, repeatability, latency and sequence value are included | Scorecard sections for CL-32 gate/trace, CL-33 exports, CL-29 latency, CL-31 sequence/prevention, CL-30 pilot |
 | Owner records release decision, limitations and any target revisions | Decision `release_with_limitations` with 7 limitations and 4 evidence-backed target revisions recorded in the artifact and Jira |
 
+## CL-36 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Runbook covers thresholds, quarantine, infrastructure errors, reruns and rollback | [docs/operations-runbook.md](docs/operations-runbook.md) §1–§4, with load-bearing claims exercised by `covertlens.handoff.run_handoff_verification` · [docs/contracts/ops-handoff.md](docs/contracts/ops-handoff.md) · [schemas/ops-handoff.schema.json](schemas/ops-handoff.schema.json) |
+| Dataset retention/access and pinned campaign change rules are documented | Runbook §5 (dataset-lifetime retention, dataset-scoped deny-by-default access, governed retirement) and §4 (pin-before-rerun, drift = new campaign) |
+| Harness engineers and researchers receive integration and review instructions | Runbook §6: gate integration path for engineers; report/export review path, disposition and evidence-aid rules for researchers |
+
 ## Quickstart
 
 ```bash
@@ -280,6 +288,7 @@ python -m covertlens route-audit-demo    # CL-32 route + trace coverage audit
 python -m covertlens export-demo         # CL-33 review export + access verification
 python -m covertlens robustness-demo     # CL-34 adaptive/unseen-config evaluation
 python -m covertlens scorecard-demo      # CL-35 MVP release scorecard + decision
+python -m covertlens handoff-demo        # CL-36 ops/rollback/handoff verification
 pytest
 ```
 

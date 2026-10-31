@@ -125,6 +125,7 @@ from .review_export import (
 )
 from .robustness import run_robustness, validate_robustness
 from .route_audit import run_route_audit, validate_route_audit
+from .handoff import run_handoff_verification, validate_handoff
 from .scorecard import build_scorecard, load_scorecard, validate_scorecard
 from .pilot import (
     PilotTrace,
@@ -288,6 +289,8 @@ __all__ = [
     "run_route_audit",
     "run_robustness",
     "build_scorecard",
+    "run_handoff_verification",
+    "validate_handoff",
     "load_scorecard",
     "validate_scorecard",
     "validate_robustness",

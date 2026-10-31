@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/ops-handoff.schema.json",
+  "title": "CovertLens operations, rollback and researcher handoff (CL-36)",
+  "type": "object",
+  "required": ["schema", "runbook", "release_decision", "threshold_operations",
+               "quarantine_handling", "infrastructure_errors", "reruns",
+               "dataset_retirement"],
+  "properties": {
+    "schema": {"const": "covertlens.ops-handoff"},
+    "threshold_operations": {
+      "type": "object",
+      "required": ["frozen_enforceable", "rollback_enforceable",
+                   "drift_fields_when_config_changes"],
+      "properties": {
+        "frozen_enforceable": {"const": true},
+        "rollback_enforceable": {"const": false}
+      }
+    },
+    "infrastructure_errors": {
+      "type": "object",
+      "properties": {
+        "delivery_withheld": {"const": true},
+        "enforcement_clean_verdict": {"const": false}
+      }
+    },
+    "dataset_retirement": {
+      "type": "object",
+      "properties": {
+        "self_approval_denied": {"const": true},
+        "final_state": {"const": "deleted"}
+      }
+    },
+    "equated_with_collusion": {"const": false}
+  }
+}
