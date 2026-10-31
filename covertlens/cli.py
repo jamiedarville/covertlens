@@ -22,6 +22,7 @@ Usage:
     python -m covertlens sequence-demo
     python -m covertlens report-demo
     python -m covertlens pinning-demo
+    python -m covertlens calibrate-demo
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
 from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
 from .trace_join import join_trace
 from .metadata import analyze_all_bytes, benchmark_metadata
+from .calibration import calibrate_thresholds
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
@@ -371,6 +373,30 @@ def main(argv: list[str] | None = None) -> int:
                           "dataset_hash": pin["dataset"]["dataset_hash"],
                           "detectors": pin["detectors"],
                           "reproducibility": repro}, indent=2))
+        return 0
+
+    if command == "calibrate-demo":
+        fixtures, assignments = [], {}
+        for dataset in (build_dataset(), build_metadata_dataset()):
+            split = assign_splits(dataset)
+            assignments.update(split)
+            fixtures.extend(
+                f for f in dataset if split[f.fixture_id] != "held_out"
+            )
+        report = calibrate_thresholds(fixtures, assignments)
+        print(json.dumps({
+            "frozen_config_version": report["frozen_config_version"],
+            "held_out_labels_used": report["held_out_labels_used"],
+            "points": {
+                family: {
+                    "flag": block["triage_flag_at"],
+                    "quarantine": block["enforcement_quarantine_at"],
+                    "fail_run": block["enforcement_fail_run_at"],
+                    "calibrated_bands": block["calibrated_payload_bands"],
+                }
+                for family, block in report["families"].items()
+            },
+        }, indent=2))
         return 0
 
     if command == "sequence-demo":

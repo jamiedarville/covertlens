@@ -29,6 +29,7 @@ jobs:
             python -m covertlens sequence-demo > /dev/null
             python -m covertlens report-demo > /dev/null
             python -m covertlens pinning-demo > /dev/null
+            python -m covertlens calibrate-demo > /dev/null
 
 workflows:
   checks:

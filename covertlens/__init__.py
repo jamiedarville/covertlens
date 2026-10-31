@@ -93,6 +93,12 @@ from .report import (
     build_run_report,
     validate_run_report,
 )
+from .calibration import (
+    calibrate_family,
+    calibrate_thresholds,
+    load_frozen_thresholds,
+    validate_calibration,
+)
 from .pinning import (
     build_pin,
     export_bundle,
@@ -235,6 +241,10 @@ __all__ = [
     "channel_families",
     "AnalysisCache",
     "build_pin",
+    "calibrate_family",
+    "calibrate_thresholds",
+    "load_frozen_thresholds",
+    "validate_calibration",
     "export_bundle",
     "pin_differences",
     "validate_export",

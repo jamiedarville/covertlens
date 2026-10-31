@@ -1,0 +1,227 @@
+{
+  "calibration_version": "1.0.0",
+  "coverage": {
+    "families": [
+      "jpeg_dct",
+      "metadata",
+      "spatial_lsb"
+    ],
+    "note": "high payload band absent from development splits; not part of frozen coverage claim",
+    "payload_bands_calibrated": "per-family (see families)"
+  },
+  "development_dataset_hash": "sha256:e39cebd7d3a56ed21da1e2afdc68216427f25201657dbc77a2af1f282e127174",
+  "development_fixture_ids": [
+    "jpeg_dct-clean-560421424f50",
+    "jpeg_dct-clean-c85f6acb3231",
+    "jpeg_dct-encoded-08ef2ba53987",
+    "jpeg_dct-encoded-4619811d91a4",
+    "jpeg_dct-negative-a84006ca65be",
+    "jpeg_dct-negative-ec723fe35ce9",
+    "metadata-clean-560421424f50",
+    "metadata-clean-86c72bc344b8",
+    "metadata-clean-ae7f80986109",
+    "metadata-clean-c85f6acb3231",
+    "metadata-encoded-514bd79f26d0",
+    "metadata-encoded-b27c38270a89",
+    "metadata-encoded-e6680f4ba939",
+    "metadata-encoded-e94cfba367a1",
+    "metadata-negative-167eafad3159",
+    "metadata-negative-9ed9957aae43",
+    "spatial_lsb-clean-86c72bc344b8",
+    "spatial_lsb-clean-ae7f80986109",
+    "spatial_lsb-encoded-5a6ad3e4548b",
+    "spatial_lsb-encoded-66d8843a5194",
+    "spatial_lsb-negative-006fc1e64fed",
+    "spatial_lsb-negative-4aa1ecefabe8"
+  ],
+  "development_only": true,
+  "families": {
+    "jpeg_dct": {
+      "at_fail_run": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.150822,
+        "tp": 1
+      },
+      "at_quarantine": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.122108,
+        "tp": 1
+      },
+      "at_triage": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "threshold": 0.093395,
+        "tp": 2
+      },
+      "calibrated_payload_bands": [
+        "low",
+        "medium"
+      ],
+      "development": {
+        "negative_max": 0.084398,
+        "negatives": 4,
+        "positive_scores": [
+          0.093395,
+          0.150822
+        ],
+        "positives": 2
+      },
+      "enforcement_fail_run_at": 0.150822,
+      "enforcement_quarantine_at": 0.122108,
+      "triage_flag_at": 0.093395,
+      "uncalibrated_payload_bands": [
+        "high"
+      ]
+    },
+    "metadata": {
+      "at_fail_run": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.9125,
+        "tp": 2
+      },
+      "at_quarantine": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.907422,
+        "tp": 2
+      },
+      "at_triage": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "threshold": 0.902344,
+        "tp": 4
+      },
+      "calibrated_payload_bands": [
+        "low",
+        "medium"
+      ],
+      "development": {
+        "negative_max": 0.0,
+        "negatives": 6,
+        "positive_scores": [
+          0.902344,
+          0.902344,
+          0.9125,
+          0.9125
+        ],
+        "positives": 4
+      },
+      "enforcement_fail_run_at": 0.9125,
+      "enforcement_quarantine_at": 0.907422,
+      "triage_flag_at": 0.902344,
+      "uncalibrated_payload_bands": [
+        "high"
+      ]
+    },
+    "spatial_lsb": {
+      "at_fail_run": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.320112,
+        "tp": 1
+      },
+      "at_quarantine": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "threshold": 0.272414,
+        "tp": 1
+      },
+      "at_triage": {
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "threshold": 0.224715,
+        "tp": 2
+      },
+      "calibrated_payload_bands": [
+        "low",
+        "medium"
+      ],
+      "development": {
+        "negative_max": 0.215987,
+        "negatives": 4,
+        "positive_scores": [
+          0.224715,
+          0.320112
+        ],
+        "positives": 2
+      },
+      "enforcement_fail_run_at": 0.320112,
+      "enforcement_quarantine_at": 0.272414,
+      "triage_flag_at": 0.224715,
+      "uncalibrated_payload_bands": [
+        "high"
+      ]
+    }
+  },
+  "frozen_config_version": "frozen-1.0.0",
+  "held_out_labels_used": false,
+  "owners": {
+    "acceptance_targets_owner": "evaluation",
+    "frozen_in": "CL-27",
+    "status": "frozen",
+    "threshold_owner": "detection-research"
+  },
+  "schema": "covertlens.calibration",
+  "schema_version": 1,
+  "targets": {
+    "enforcement_precision_at_least": 0.99,
+    "triage_recall_at_least": 0.95
+  },
+  "threshold_config": {
+    "families": {
+      "jpeg_dct": {
+        "enforcement": {
+          "fail_run_at": 0.150822,
+          "operating_point": "high_precision",
+          "quarantine_at": 0.122108
+        },
+        "family": "jpeg_dct",
+        "status": "frozen",
+        "triage": {
+          "flag_at": 0.093395,
+          "operating_point": "high_recall"
+        }
+      },
+      "metadata": {
+        "enforcement": {
+          "fail_run_at": 0.9125,
+          "operating_point": "high_precision",
+          "quarantine_at": 0.907422
+        },
+        "family": "metadata",
+        "status": "frozen",
+        "triage": {
+          "flag_at": 0.902344,
+          "operating_point": "high_recall"
+        }
+      },
+      "spatial_lsb": {
+        "enforcement": {
+          "fail_run_at": 0.320112,
+          "operating_point": "high_precision",
+          "quarantine_at": 0.272414
+        },
+        "family": "spatial_lsb",
+        "status": "frozen",
+        "triage": {
+          "flag_at": 0.224715,
+          "operating_point": "high_recall"
+        }
+      }
+    },
+    "ladder_version": "1.0.0",
+    "version": "frozen-1.0.0"
+  }
+}

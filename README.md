@@ -171,6 +171,14 @@ store** that every later task builds on.
 | Repeated inputs reproduce verdicts or meet documented stochastic bounds | `verify_reproducibility` (exact deterministic; seeded agreement bounds for stochastic scorers) |
 | Report exports carry hashes, trace references, versions and decisions | `export_bundle` hash-sealed CL-25 exports (no raw bytes) |
 
+## CL-27 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Separate high-recall triage and high-precision enforcement settings | `covertlens.calibration.calibrate_thresholds` deterministic per-family candidate selection · [docs/contracts/calibration-freeze.md](docs/contracts/calibration-freeze.md) · [schemas/calibration.schema.json](schemas/calibration.schema.json) |
+| Owners freeze coverage/payload ranges, thresholds and acceptance targets | `config/frozen-thresholds.json` (`frozen-1.0.0`, triage recall ≥0.95 / enforcement precision ≥0.99 targets, calibrated bands low+medium, high uncalibrated) |
+| Calibration uses no held-out test labels | Held-out fixtures in calibration input raise (C-07); frozen artifact records `held_out_labels_used: false` and the development dataset hash |
+
 ## Quickstart
 
 ```bash
@@ -198,6 +206,7 @@ python -m covertlens metadata-demo       # CL-23 metadata + integrated pipeline 
 python -m covertlens sequence-demo       # CL-24 sequence benchmark demo
 python -m covertlens report-demo         # CL-25 researcher report demo
 python -m covertlens pinning-demo        # CL-26 pin + reproducibility demo
+python -m covertlens calibrate-demo      # CL-27 frozen threshold points
 pytest
 ```
 
