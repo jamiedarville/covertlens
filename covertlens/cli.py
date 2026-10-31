@@ -25,6 +25,7 @@ Usage:
     python -m covertlens calibrate-demo
     python -m covertlens frozen-demo
     python -m covertlens latency-demo
+    python -m covertlens pilot-demo
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from .metadata import analyze_all_bytes, benchmark_metadata
 from .calibration import calibrate_thresholds
 from .frozen_benchmark import run_frozen_evaluation
 from .latency import run_reliability_report
+from .pilot import run_pilot
 from .pinning import build_pin, verify_reproducibility
 from .report import build_run_report
 from .sequence import SequenceCase, benchmark_sequences
@@ -436,6 +438,25 @@ def main(argv: list[str] | None = None) -> int:
             "concurrent_p95_s": report["concurrent"]["p95_s"],
             "limits": report["limit_behavior"],
             "assessment": report["assessment"],
+        }, indent=2))
+        return 0
+
+    if command == "pilot-demo":
+        report = run_pilot(adjudications={
+            "uns-1": {"disposition": "suspected",
+                      "note": "strong DCT evidence; no independent basis yet"},
+            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
+        })
+        print(json.dumps({
+            "pin_hash": report["pin_hash"],
+            "seeded": {
+                "traces": report["seeded"]["traces"],
+                "log_flag": report["seeded"]["log_flag"],
+                "enforcement": report["seeded"]["enforcement"],
+            },
+            "disagreements": report["disagreements"],
+            "review_volume": report["review_volume"],
+            "repeated_weak_signals": report["repeated_weak_signals"],
         }, indent=2))
         return 0
 

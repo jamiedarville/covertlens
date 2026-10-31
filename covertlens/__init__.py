@@ -115,6 +115,13 @@ from .latency import (
     run_reliability_report,
     validate_latency_report,
 )
+from .pilot import (
+    PilotTrace,
+    build_seeded_traces,
+    build_unseeded_traces,
+    run_pilot,
+    validate_pilot,
+)
 from .pinning import (
     build_pin,
     export_bundle,
@@ -265,6 +272,11 @@ __all__ = [
     "measure_class",
     "measure_concurrent",
     "percentile",
+    "PilotTrace",
+    "build_seeded_traces",
+    "build_unseeded_traces",
+    "run_pilot",
+    "validate_pilot",
     "run_reliability_report",
     "validate_latency_report",
     "run_frozen_evaluation",

@@ -196,6 +196,14 @@ store** that every later task builds on.
 | Concurrency and access-leak tests remain clean under the measured workload | `gate_reliability_check`: threaded route/cached-link attempts serve exactly the permitted set, `unauthorized_served: 0` |
 | Misses are explicit | JPEG large (≥~1 MP) times out at the 2 s deadline; medium JPEG misses under 4-worker concurrency; 20 MP JPEG not measurable with the pure-Python encoder — claims narrowed per class |
 
+## CL-30 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Log/flag and enforcement runs include seeded attempts and clean controls | `covertlens.pilot.run_pilot` (CL-26 pinned): 33 seeded traces (15 attempts, 18 controls) run under both the unfrozen log-only config and `frozen-1.0.0` · [docs/contracts/seeded-pilot.md](docs/contracts/seeded-pilot.md) · [schemas/seeded-pilot.schema.json](schemas/seeded-pilot.schema.json) |
+| Unseeded traces are independently reviewed and uncertain cases remain unresolved | CL-25 report adjudication over 5 unseeded traces; unreviewed stay `unresolved`, `demonstrated_transfer` requires an independent basis |
+| Disagreements, review volume and repeated weak-signal findings are reported | Named per-trace disagreements (7 seeded attempts delivered in enforcement, 0 clean controls withheld, 14 mode verdict changes), review-volume counts, and per-sender repeated weak-signal list (incl. `sender-repeat` ×3) |
+
 ## Quickstart
 
 ```bash
@@ -226,6 +234,7 @@ python -m covertlens pinning-demo        # CL-26 pin + reproducibility demo
 python -m covertlens calibrate-demo      # CL-27 frozen threshold points
 python -m covertlens frozen-demo         # CL-28 frozen benchmark + clean stability
 python -m covertlens latency-demo        # CL-29 latency + reliability report
+python -m covertlens pilot-demo          # CL-30 seeded pilot + adjudication
 pytest
 ```
 
