@@ -35,6 +35,17 @@ from .gate import (
     PendingDeliveryError,
     WithheldError,
 )
+from .lsb import (
+    CONFIG_VERSION as LSB_CONFIG_VERSION,
+    LSB_DETECTOR_NAME,
+    LSB_DETECTOR_VERSION,
+    LsbConfig,
+    analyze_lsb_bytes,
+    analyze_lsb_version,
+    benchmark_lsb,
+    detect_lsb,
+    validate_benchmark,
+)
 from .manifest import channel_families, load_manifest, validate_manifest
 from .parsing import (
     DEFAULT_LIMITS,
@@ -89,6 +100,15 @@ __all__ = [
     "analyze_version",
     "validate_finding",
     "validate_result",
+    "LSB_CONFIG_VERSION",
+    "LSB_DETECTOR_NAME",
+    "LSB_DETECTOR_VERSION",
+    "LsbConfig",
+    "analyze_lsb_bytes",
+    "analyze_lsb_version",
+    "benchmark_lsb",
+    "detect_lsb",
+    "validate_benchmark",
     "DeliveryRecord",
     "InterceptionContext",
     "InterceptionGate",

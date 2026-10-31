@@ -67,6 +67,14 @@ store** that every later task builds on.
 | Corrupt, unsupported, oversized and timeout cases have explicit results | One versioned result per input with status `parsed` / `corrupt` / `unsupported_format` / `unsupported_encoding` / `oversized` / `timeout`; failures carry errors and never findings |
 | Worker memory/runtime limits and channel finding/version schema are tested | Versioned `ParserLimits` (10 MiB, 20 MP, decompressed and 2 s deadline bounds, checked before unbounded work) plus validated `Finding` schema for CL-14/CL-15/CL-23; PNG rows/pixels and JPEG blocks/coefficients coverage |
 
+## CL-14 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| LSB scores and applicable coverage are versioned | `covertlens.lsb` (`lsb-pov-chisquare` v1.0.0, `LsbConfig` v1.0.0) emits one `spatial_lsb` finding per parsed PNG with samples/pixels/pairs coverage · [docs/contracts/lsb-detector.md](docs/contracts/lsb-detector.md) |
+| Clean/encoded test performance is broken down by payload band | `benchmark_lsb` rows and `by_payload_band` (none/low/medium/high) over the CL-9 fixtures · [schemas/lsb-benchmark.schema.json](schemas/lsb-benchmark.schema.json) |
+| Threshold-free results include precision/recall and uncertainty | Threshold sweep with Wilson precision/recall intervals plus ROC-AUC and average-precision bootstrap intervals; thresholds stay unfrozen until CL-27 |
+
 ## Quickstart
 
 ```bash
@@ -83,6 +91,8 @@ python -m covertlens validate-runtime    # CL-11 runtime policy checks
 python -m covertlens runtime-demo        # CL-11 permissioned evidence read demo
 python -m covertlens gate-demo           # CL-12 interception + pending delivery demo
 python -m covertlens parse-demo          # CL-13 bounded parsing demo
+python -m covertlens lsb-demo            # CL-14 LSB scoring demo
+python -m covertlens benchmark-lsb       # CL-14 threshold-free LSB benchmark
 pytest
 ```
 
