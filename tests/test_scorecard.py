@@ -31,7 +31,9 @@ def test_gate_latency_sequence_and_prevention_included(scorecard):
     latency = sections["latency_reliability"]
     assert latency["limits_explicit_and_withholding"] is True
     assert latency["concurrency_access_clean"] is True
-    assert latency["classes_missed"], "latency misses must be published"
+    # Which classes meet/miss is machine-measured; the published
+    # artifact (checked below) is where misses are asserted.
+    assert set(latency["classes_met"]) | set(latency["classes_missed"])
     sequence = sections["sequence_value"]
     assert sequence["image_only_auc"] > sequence["context_only_auc"]
     assert sections["prevention"]["attempts"]["blocked_counted_as_transfer"] == 0
@@ -50,10 +52,16 @@ def test_owner_decision_limitations_and_revisions_recorded(scorecard):
 
 def test_published_artifact_matches_built_scorecard(scorecard):
     published = load_scorecard()
-    # Latency timings are machine-volatile; every other figure must
-    # match the published artifact exactly.
+    assert validate_scorecard(published) == []
+    # The published artifact records the latency misses measured on
+    # the publishing machine.
+    assert published["sections"]["latency_reliability"]["classes_missed"]
+    # Latency timings (and the met/missed classes derived from them)
+    # are machine-volatile; every other figure must match the
+    # published artifact exactly.
     for card in (published, scorecard):
         latency = card["sections"]["latency_reliability"]
-        latency.pop("p95_by_class")
-        latency.pop("concurrent_p95_s")
+        for key in ("p95_by_class", "concurrent_p95_s",
+                    "classes_met", "classes_missed"):
+            latency.pop(key)
     assert published == scorecard
