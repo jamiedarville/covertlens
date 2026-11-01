@@ -269,6 +269,14 @@ store** that every later task builds on.
 | A numeric attribute sequence is extracted per element | Per-element height/top/width/gap/angle/colour-index/brightness records plus `sequences()` view |
 | Segmentation method, tolerances and failure modes are recorded | Versioned `SegmenterConfig` (geometric-segmenter 1.0.0), tolerance block and failure-mode table in every result; failures are explicit statuses |
 
+## CL-40 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Quantization test reports grid step, residual and supporting element count vs continuous variation | `covertlens.geometric.analyze_geometric_bytes`: per-channel grid fits with symbols, residuals, support fractions; constant channels marked inapplicable · [docs/contracts/geometric-detector.md](docs/contracts/geometric-detector.md) · [schemas/geometric-finding.schema.json](schemas/geometric-finding.schema.json) |
+| Structure claimed only under a simple declared code mapped to words/codes/grammar | Registered codes (alphabet position + declared lexicon, timing-ratio motifs, bit packing) with validators; unregistered mappings never inferred |
+| Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); thresholds unfrozen placeholders, detector cannot withhold |
+
 ## Quickstart
 
 ```bash
@@ -308,6 +316,7 @@ python -m covertlens scorecard-demo      # CL-35 MVP release scorecard + decisio
 python -m covertlens handoff-demo        # CL-36 ops/rollback/handoff verification
 python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
 python -m covertlens segmentation-demo   # CL-39 segmentation + attribute sequences
+python -m covertlens geometric-demo      # CL-40 quantization + structure tests
 pytest
 ```
 

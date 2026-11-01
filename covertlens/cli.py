@@ -34,6 +34,7 @@ Usage:
     python -m covertlens handoff-demo
     python -m covertlens geo-fixtures-demo
     python -m covertlens segmentation-demo
+    python -m covertlens geometric-demo
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ from .geometric_fixtures import (
     verify_geo_fixture,
 )
 from .handoff import run_handoff_verification
+from .geometric import analyze_geometric_bytes
 from .segmentation import segment_image
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
@@ -592,6 +594,25 @@ def main(argv: list[str] | None = None) -> int:
                 "status": result.status,
                 "elements": len(result.elements),
                 "heights": result.sequence("height"),
+            }
+        print(json.dumps(out, indent=2))
+        return 0
+
+    if command == "geometric-demo":
+        fixtures = build_geo_dataset()
+        out = {}
+        for fixture in fixtures:
+            if fixture.role not in ("encoded", "clean"):
+                if fixture.negative_kind != "legitimate_chart":
+                    continue
+            key = f"{fixture.subfamily}/{fixture.role}"
+            if key in out:
+                continue
+            report = analyze_geometric_bytes(fixture.data)
+            out[key] = {
+                "classification": report["classification"],
+                "primary_channel": report.get("primary_channel"),
+                "score": report["finding"].score if report["finding"] else None,
             }
         print(json.dumps(out, indent=2))
         return 0

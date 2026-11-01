@@ -138,6 +138,12 @@ from .geometric_fixtures import (
     verify_geo_fixture,
 )
 from .handoff import run_handoff_verification, validate_handoff
+from .geometric import (
+    GeometricConfig,
+    analyze_geometric,
+    analyze_geometric_bytes,
+    validate_geometric_report,
+)
 from .segmentation import (
     SegmentationResult,
     SegmenterConfig,
@@ -319,6 +325,10 @@ __all__ = [
     "validate_geo_splits",
     "verify_geo_fixture",
     "SegmentationResult",
+    "GeometricConfig",
+    "analyze_geometric",
+    "analyze_geometric_bytes",
+    "validate_geometric_report",
     "SegmenterConfig",
     "segment_image",
     "validate_segmentation",
