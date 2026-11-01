@@ -1,4 +1,4 @@
-"""CovertLens web service (CL-47).
+"""CovertLens web service (CL-47, CL-48).
 
 Thin FastAPI layer over the library:
 
@@ -9,8 +9,12 @@ Thin FastAPI layer over the library:
   limit; reviewer-only fields are stripped by the worker.
 - `GET /api/fixtures`, `GET /api/fixtures/{digest}.png`
 - `GET /api/benchmarks/{name}` — cached precompute output.
+- `GET /api/comparison` — cached landing-page skyline pair (CL-48).
 - `GET /api/scorecard`, `GET /api/version`, `GET /api/health`.
-- OpenAPI at `/docs`; the built frontend is served statically.
+- OpenAPI at `/docs`; the built React frontend is served
+  statically at `/` (landing) and `/analyze` (CL-48), with its
+  hashed assets under `/assets/`. API and docs paths are never
+  shadowed by the single-page app.
 
 Precompute runs in a background thread at first start (health
 answers immediately); cache lives under
@@ -41,7 +45,12 @@ from .analysis_worker import analyze_bytes
 
 DATA_DIR = Path(os.environ.get("COVERTLENS_DATA_DIR", "/data"))
 CACHE_DIR = DATA_DIR / "cache"
+# The Docker image copies the Vite build to app/static (CL-47);
+# a local `npm run build` leaves it in app/frontend/dist. Serve
+# whichever exists so both paths run the same app (CL-48).
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
+STATIC_CANDIDATES = [STATIC_DIR, FRONTEND_DIST_DIR]
 GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 ANALYZE_TIMEOUT_S = float(os.environ.get("COVERTLENS_ANALYZE_TIMEOUT_S", "30"))
 MAX_UPLOAD_BYTES = int(os.environ.get("COVERTLENS_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))
@@ -117,6 +126,11 @@ def _precompute() -> None:
     module.precompute(CACHE_DIR)
 
 
+def _cache_ready() -> bool:
+    return ((CACHE_DIR / "geometric.json").exists()
+            and (CACHE_DIR / "comparison.json").exists())
+
+
 def _start_precompute() -> None:
     global _precompute_started
     if os.environ.get("COVERTLENS_PRECOMPUTE", "on") == "off":
@@ -130,10 +144,18 @@ def _start_precompute() -> None:
         current = json.loads(key_file.read_text()) if key_file.exists() else None
     except (OSError, json.JSONDecodeError):
         current = None
-    if current == _cache_key() and (CACHE_DIR / "geometric.json").exists():
+    if current == _cache_key() and _cache_ready():
         return
     threading.Thread(target=_precompute, daemon=True,
                      name="covertlens-precompute").start()
+
+
+def _static_root() -> Path | None:
+    """First built-frontend directory that exists, if any (CL-48)."""
+    for candidate in STATIC_CANDIDATES:
+        if (candidate / "index.html").exists():
+            return candidate
+    return None
 
 
 @app.on_event("startup")
@@ -173,7 +195,7 @@ def health() -> dict[str, Any]:
         "version": covertlens.__version__,
         "git_sha": GIT_SHA,
         "precompute_started": _precompute_started,
-        "cache_ready": (CACHE_DIR / "geometric.json").exists(),
+        "cache_ready": _cache_ready(),
     }
 
 
@@ -252,13 +274,54 @@ def scorecard() -> dict[str, Any]:
     return load_scorecard()
 
 
+@app.get("/api/comparison")
+def comparison() -> JSONResponse:
+    """Precomputed two-skyline comparison for the landing page (CL-48)."""
+    cache_file = CACHE_DIR / "comparison.json"
+    if cache_file.exists():
+        return JSONResponse(json.loads(cache_file.read_text()))
+    _start_precompute()
+    return JSONResponse(
+        {"status": "computing", "comparison": "height_position"},
+        status_code=202)
+
+
+def _index_response() -> Response | None:
+    root = _static_root()
+    if root is None:
+        return None
+    return FileResponse(root / "index.html")
+
+
 @app.get("/")
 def index() -> Response:
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
+    response = _index_response()
+    if response is not None:
+        return response
     return JSONResponse({
         "service": "covertlens",
         "docs": "/docs",
         "health": "/api/health",
     })
+
+
+@app.get("/analyze")
+def analyze_page() -> Response:
+    """SPA route for the Analyze page; same shell as `/` (CL-48)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/assets/{asset_path:path}")
+def frontend_asset(asset_path: str) -> Response:
+    """Hashed Vite assets; never a path outside the build (CL-48)."""
+    root = _static_root()
+    if root is None:
+        return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+    assets_dir = (root / "assets").resolve()
+    target = (assets_dir / asset_path).resolve()
+    if not target.is_relative_to(assets_dir) or not target.is_file():
+        return JSONResponse({"detail": "asset_not_found"}, status_code=404)
+    return FileResponse(target)

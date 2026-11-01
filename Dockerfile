@@ -5,6 +5,9 @@
 
 FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS frontend
 WORKDIR /build
+# React + Vite + TypeScript app (CL-48); lockfile-pinned install.
+COPY app/frontend/package.json app/frontend/package-lock.json ./
+RUN npm ci
 COPY app/frontend/ ./
 RUN npm run build
 

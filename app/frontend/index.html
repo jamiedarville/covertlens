@@ -3,25 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="CovertLens checks images that AI agents send each other for hidden messages, scoring the original bytes across four channel families.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2317202a'/%3E%3Crect x='2' y='7' width='3' height='7' fill='white'/%3E%3Crect x='6.5' y='4' width='3' height='10' fill='white'/%3E%3Crect x='11' y='9' width='3' height='5' fill='white'/%3E%3C/svg%3E">
 <title>CovertLens</title>
-<style>
-  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 44rem; padding: 0 1rem; }
-  code { background: #eef; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
-</style>
 </head>
 <body>
-<h1>CovertLens</h1>
-<p>CovertLens scores eval-generated images across four channel
-families — spatial LSB, JPEG DCT, metadata, and geometric — and
-records verdicts that are evidence, never accusations.</p>
-<p>The interactive Analyze page arrives with the React build
-(CL-48). The API is live now:</p>
-<ul>
-  <li><a href="/docs">/docs</a> — OpenAPI</li>
-  <li><code>GET /api/health</code>, <code>GET /api/version</code></li>
-  <li><code>POST /api/analyze</code> — multipart image upload</li>
-  <li><code>GET /api/fixtures</code>, <code>GET /api/benchmarks/geometric</code>,
-      <code>GET /api/scorecard</code></li>
-</ul>
+<div id="root"></div>
+<script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

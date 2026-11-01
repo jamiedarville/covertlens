@@ -134,3 +134,108 @@ def test_openapi_docs_served(client):
     spec = client.get("/openapi.json")
     assert spec.status_code == 200
     assert "/api/analyze" in spec.json()["paths"]
+
+
+def test_analyze_includes_overlay_series(client, geo_encoded):
+    """CL-48: the overlay renders from this JSON alone."""
+    response = client.post(
+        "/api/analyze",
+        files={"file": ("scene.png", geo_encoded.data, "image/png")},
+    )
+    assert response.status_code == 200
+    geometric = response.json()["geometric"]
+    # No decoded-text slot crosses the API (CL-48).
+    assert "decoded_message" not in geometric["segmentation"]
+    overlay = geometric["overlay"]
+    assert overlay["version"] == "1.0.0"
+    sequences = geometric["segmentation"]["sequences"]
+    height = overlay["channels"]["height"]
+    assert height["values"] == [float(v) for v in sequences["height"]]
+    assert height["sequence_attribute"] == "height"
+    channel = geometric["channels"]["height"]
+    periodogram = height["periodogram"]
+    assert periodogram["available"] is True
+    assert periodogram["discovered_step"] == channel["step"]
+    # The discovered step/R headline appears verbatim in the sweep.
+    assert any(
+        p["step"] == channel["step"]
+        and p["rayleigh_R"] == channel["rayleigh_R"]
+        for p in periodogram["points"])
+    steps = [p["step"] for p in periodogram["points"]]
+    assert steps == sorted(steps)
+    histogram = height["residual_histogram"]
+    assert sum(histogram["counts"]) == len(channel["residuals"])
+    assert len(histogram["bin_edges"]) == len(histogram["counts"]) + 1
+    gap = overlay["channels"]["gap"]
+    assert len(gap["values"]) == len(geometric["segmentation"]["elements"]) - 1
+    # Colour has no Rayleigh grid by construction.
+    assert overlay["channels"]["colour"]["periodogram"]["available"] is False
+
+
+def test_comparison_endpoint(client):
+    """CL-48: precomputed skyline pair, computing until cached."""
+    import json
+
+    import app.main as main_module
+
+    # Precompute is off in this module, so an empty cache is explicit.
+    computing = client.get("/api/comparison")
+    assert computing.status_code in (200, 202)
+    if computing.status_code == 202:
+        from scripts.precompute import build_comparison
+
+        cache_file = main_module.CACHE_DIR / "comparison.json"
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(build_comparison()))
+        try:
+            ready = client.get("/api/comparison")
+            assert ready.status_code == 200
+            body = ready.json()
+        finally:
+            cache_file.unlink(missing_ok=True)
+    else:
+        body = computing.json()
+    assert body["schema"] == "covertlens.skyline-comparison"
+    assert body["clean"]["payload"]["geometric"]["classification"] == "no_signal"
+    assert body["encoded"]["payload"]["geometric"]["classification"] in (
+        "quantized_without_structure", "structure_claimed")
+    assert "overlay" in body["encoded"]["payload"]["geometric"]
+    assert "candidate_decode" not in str(body)
+    hashes = {e["content_hash"] for e in client.get("/api/fixtures").json()}
+    assert body["clean"]["content_hash"] in hashes
+    assert body["encoded"]["content_hash"] in hashes
+
+
+def test_spa_routes_and_assets(client, tmp_path, monkeypatch):
+    """CL-48: / and /analyze serve the shell; /api stays unshadowed."""
+    import app.main as main_module
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>spa</title>")
+    (tmp_path / "assets" / "app.js").write_text("console.log('ok')")
+    monkeypatch.setattr(main_module, "STATIC_CANDIDATES", [tmp_path])
+    for path in ("/", "/analyze"):
+        page = client.get(path)
+        assert page.status_code == 200
+        assert "<title>spa</title>" in page.text
+    asset = client.get("/assets/app.js")
+    assert asset.status_code == 200
+    assert "console.log" in asset.text
+    assert client.get("/assets/missing.js").status_code == 404
+    assert client.get("/assets/..%2Findex.html").status_code == 404
+    # API and docs are never swallowed by the single-page app.
+    assert client.get("/api/health").json()["status"] == "ok"
+    assert client.get("/docs").status_code == 200
+
+
+def test_spa_routes_without_build(client, tmp_path, monkeypatch):
+    """CL-48: an API-only deployment says so instead of 500ing."""
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "STATIC_CANDIDATES", [tmp_path / "nope"])
+    missing = client.get("/analyze")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "frontend_not_built"
+    root = client.get("/")
+    assert root.status_code == 200
+    assert root.json()["service"] == "covertlens"
