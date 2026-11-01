@@ -2,8 +2,23 @@
   "name": "covertlens-frontend",
   "private": true,
   "version": "0.1.0",
-  "description": "CovertLens web UI (CL-48 replaces this placeholder with the React + Vite app)",
+  "description": "CovertLens web UI: landing page and Analyze page with the geometric overlay (CL-48)",
+  "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
   }
 }

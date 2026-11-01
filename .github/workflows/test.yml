@@ -13,6 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend:
+    name: frontend
+    # TypeScript + Vite build for the CL-48 web UI. Always on a
+    # GitHub-hosted runner: fork PR code must never reach the
+    # self-hosted machine (same rule as the test job below).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app/frontend
+        run: npm ci
+
+      - name: Typecheck and build frontend
+        working-directory: app/frontend
+        run: npm run build
+
   test:
     name: test
     # The repository is public, so a pull request from a fork must never

@@ -354,6 +354,16 @@ docker run -p 8000:8000 -v covertlens-data:/data covertlens
 # then open http://127.0.0.1:8000/ (or /docs) in a browser
 ```
 
+## CL-48 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Landing page with a five-line description, the precomputed two-skyline comparison and a "Try your own" button | `app/frontend/` React + Vite + TypeScript app served by the CL-47 container at `/`; the comparison is precomputed to `comparison.json` (`scripts/precompute.py`, `GET /api/comparison`) from the first clean/encoded `height_position` fixtures, images via `/api/fixtures/{digest}.png` |
+| Analyze page: drag-and-drop PNG/JPEG, four family score cards with coverage, limitations and detector/config versions; ladder decision with threshold config version; evidence tables | `/analyze` (drop zone + file picker + built-in examples); all four families always shown (absent families say so), decision panel with `config_version`/`ladder_version`, per-finding evidence tables |
+| Geometric overlay: bounding boxes in reading order, attribute sequence plot per channel, Rayleigh periodogram with the discovered step marked, residual histogram, chart-likeness gauge, structure score against the null, classification badge; no decoded text anywhere | Canvas overlay + SVG panels rendering only the `POST /api/analyze` JSON; periodogram sweep and histogram bins are computed server-side in `app/analysis_worker.py` (`geometric.overlay`, via `covertlens.grid.rayleigh`) so every number on screen is in the response; grid symbols stay numeric and `decoded_message`/`candidate_decode` never reach the page |
+| Overlay in two clicks; renders from the analyze response with no second request; works at 390 px; accessible with WCAG AA overlay colours | Landing "Open overlay" hands the precomputed payload straight to `/analyze`; upload path is choose → results; single-column layout and scrolling tables at phone widths; semantic landmarks, labelled controls, canvas data-table fallback, dual-stroke (halo + numeral) overlay marks that never rely on colour alone |
+| Frontend is built and typechecked in CI | `frontend` job in `.github/workflows/test.yml` (`npm ci`, `tsc --noEmit && vite build` on a GitHub-hosted runner); the Docker image builds the same app in its node stage |
+
 ## Quickstart
 
 ```bash
