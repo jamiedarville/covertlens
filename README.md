@@ -296,6 +296,16 @@ store** that every later task builds on.
 | Coverage includes at minimum height/position, gap/timing, lit/dark, colour-code and angle/tilt, reported separately per subfamily | Per-subfamily encoded recall (any-signal + structure) and benign false-claim rates, each with Wilson 95% intervals and full classification tallies |
 | Benchmark reports encoded recall and benign-control false-claim rates separately, with prevalence/intervals; no general geometric coverage claimed from a single subfamily | Prevalence block + intervals throughout; pooled row labelled context-only; `general_geometric_coverage_claimed: false` |
 
+## CL-43 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Grid is discovered, not handed down: Rayleigh step sweep, phase offset, folded residuals, seeded permutation null | `covertlens/grid.py` (`discover_grid`): step/offset/rms/max residual/supporting/levels/Rayleigh R/`null_exceedance` (uniform + fractional-parts nulls, 200 replicates each); declared grid kept as an optional prior with `declared_vs_discovered_step_ratio` |
+| Encoded fixtures on the original grid, on attacker grids, and on the declared-prior path all classify as quantized; clean fixtures and continuous controls classify `no_signal` | Discovery-backed channels in `covertlens/geometric.py`; significance-adjusted fit scores; pixel channels also need half-tolerance support |
+| `channels[*].grid.source` reads `discovered`; discovered step matches the encoder step within one tolerance for every encoded fixture (n ≥ 40) | `tests/test_grid.py` attacker sweep (42 encoded fixtures across height/gap/angle) + dataset checks |
+| `geometric.py` has no import of `geometric_fixtures.GRIDS` | Source-level test; fixture grids are test inputs only |
+| Geometric benchmark gains an `attacker_grid` row per subfamily | `attacker_grid` section in `run_geo_benchmark` (evaluated for height/gap/angle; `not_applicable` with reason for lit/colour) |
+
 ## Quickstart
 
 ```bash

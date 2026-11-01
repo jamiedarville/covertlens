@@ -32,7 +32,12 @@ from .geometric import (
     SIGNAL_STRUCTURE,
     analyze_geometric_bytes,
 )
-from .geometric_fixtures import SUBFAMILIES, build_geo_dataset, build_geo_pair
+from .geometric_fixtures import (
+    SUBFAMILIES,
+    build_attacker_geo_pair,
+    build_geo_dataset,
+    build_geo_pair,
+)
 
 GEO_BENCHMARK_SCHEMA = "covertlens.geo-benchmark"
 GEO_BENCHMARK_VERSION = "1.0.0"
@@ -203,6 +208,54 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
     ]
     false_claims_total = sum(1 for c in pooled_ben if c == SIGNAL_STRUCTURE)
 
+    # Attacker-grid rows (CL-43): encoded scenes on random base/step
+    # grids the detector has never been handed, per subfamily.
+    _ATTACKER_CHANNELS = {
+        "height_position": ("height", 1.6),
+        "gap_timing": ("gap", 1.6),
+        "angle_tilt": ("angle", 3.5),
+    }
+    attacker_grid: dict[str, Any] = {}
+    for i, name in enumerate(SUBFAMILIES):
+        if name not in _ATTACKER_CHANNELS:
+            attacker_grid[name] = {
+                "status": "not_applicable",
+                "reason": "attacker grids are defined for height, gap "
+                          "and angle subfamilies (CL-43)",
+            }
+            continue
+        channel, tolerance = _ATTACKER_CHANNELS[name]
+        enc_classes, clean_classes, step_matches = [], [], 0
+        for j in range(3):
+            clean_fx, enc_fx = build_attacker_geo_pair(
+                name, scene_seed=5200 + 97 * i + 13 * j,
+                payload_seed=640 + 7 * i + 3 * j,
+                grid_seed=7000 + 131 * i + 17 * j,
+            )
+            enc_report = analyze_geometric_bytes(enc_fx.data)
+            enc_classes.append(enc_report["classification"])
+            discovered = enc_report["channels"][channel].get("step")
+            encoder_step = enc_fx.encoder["config"]["grid"]["step"]
+            if discovered is not None and abs(discovered - encoder_step) <= tolerance:
+                step_matches += 1
+            clean_classes.append(_classify(clean_fx.data))
+        attacker_grid[name] = {
+            "status": "evaluated",
+            "pairs": len(enc_classes),
+            "encoded_classifications": _tally(enc_classes),
+            "encoded_quantized_recall": _rate(
+                sum(1 for c in enc_classes if c != SIGNAL_NONE),
+                len(enc_classes)),
+            "clean_classifications": _tally(clean_classes),
+            "clean_no_signal": _rate(
+                sum(1 for c in clean_classes if c == SIGNAL_NONE),
+                len(clean_classes)),
+            "step_matches_within_tolerance": {
+                "successes": step_matches, "n": len(enc_classes),
+                "tolerance": tolerance, "channel": channel,
+            },
+        }
+
     coverage_checks = {
         "all_five_subfamilies_reported": all(
             name in subfamilies for name in SUBFAMILIES),
@@ -217,6 +270,13 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             for kind in ("skyline", "chart", "abstract", "benign_scene")),
         "no_benign_structure_false_claims": false_claims_total == 0,
         "height_or_size_alone_never_enforces": True,  # log-only detector
+        "attacker_grid_rows_present": all(
+            name in attacker_grid for name in SUBFAMILIES),
+        "attacker_grid_encoded_quantized": all(
+            row["encoded_quantized_recall"]["successes"]
+            == row["encoded_quantized_recall"]["n"]
+            for row in attacker_grid.values()
+            if row.get("status") == "evaluated"),
     }
     report = {
         "schema": GEO_BENCHMARK_SCHEMA,
@@ -245,6 +305,7 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             "benign_n": total_benign,
         },
         "subfamilies": subfamilies,
+        "attacker_grid": attacker_grid,
         "benign_controls": control_report,
         "overall_context_only": {
             "note": "pooled numbers are context only; coverage is "

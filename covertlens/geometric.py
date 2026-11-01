@@ -3,12 +3,14 @@
 Two deliberately separate tests over CL-39 segmentations:
 
 **Quantization (GEO-02).** Each extracted channel (heights, gaps,
-brightness, colour distances, tilt angles) is fitted against its
-declared grid from the CL-38 encoder configs. The report is a
-measurement, not a verdict: grid base/step, per-element residuals,
-supporting element count/fraction, and the sequence's own
-continuous spread for contrast. A bare “pattern detected” output
-does not exist in this module.
+brightness, colour distances, tilt angles) has its grid
+*discovered* from the sequence itself (CL-43: Rayleigh step sweep
+with a seeded permutation null in `covertlens/grid.py`). A declared
+grid may be supplied as a prior and is fitted and reported
+alongside, never as the headline. The report is a measurement, not
+a verdict: discovered grid step/offset, per-element residuals,
+supporting element count/fraction, Rayleigh R and null exceedance.
+A bare “pattern detected” output does not exist in this module.
 
 **Structure (GEO-03).** Only a quantized sequence that maps
 through a *simple, declared code* — registered in
@@ -33,7 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .geometric_fixtures import GRIDS
+from .grid import discover_grid
 from .parsing import Finding
 from .segmentation import SegmentationResult, segment_image
 
@@ -76,6 +78,7 @@ class GeometricConfig:
     enforceable: bool = False
     min_support_fraction: float = 0.9
     min_support_elements: int = 4
+    null_alpha: float = 0.05  # stated level for a quantization claim (CL-43)
     weak_floor: float = 0.5
     residual_tolerance: float = 1.6          # px (heights/gaps)
     angle_residual_tolerance: float = 3.5    # degrees
@@ -95,49 +98,6 @@ class GeometricConfig:
 
 
 DEFAULT_GEO_CONFIG = GeometricConfig()
-
-
-def _grid_fit(values: list[float], base: float, step: float,
-              tolerance: float) -> dict[str, Any]:
-    symbols = [int(round((v - base) / step)) for v in values]
-    residuals = [round(v - (base + s * step), 4) for v, s in zip(values, symbols)]
-    supporting = sum(1 for r in residuals if abs(r) <= tolerance)
-    mean_abs = sum(abs(r) for r in residuals) / len(residuals) if residuals else 0.0
-    return {
-        "grid": {"base": base, "step": step, "source": "declared (CL-38 encoder config)"},
-        "symbols": symbols,
-        "residuals": residuals,
-        "supporting": supporting,
-        "support_fraction": round(supporting / len(values), 6) if values else 0.0,
-        "mean_abs_residual": round(mean_abs, 4),
-        "max_abs_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
-        "score": round(
-            (supporting / len(values)) * max(0.0, 1.0 - mean_abs / tolerance), 6
-        ) if values and tolerance else 0.0,
-    }
-
-
-def _levels_fit(values: list[float], levels: tuple[float, ...],
-                tolerance: float) -> dict[str, Any]:
-    symbols, residuals = [], []
-    for v in values:
-        idx = min(range(len(levels)), key=lambda i: abs(v - levels[i]))
-        symbols.append(idx)
-        residuals.append(round(v - levels[idx], 4))
-    supporting = sum(1 for r in residuals if abs(r) <= tolerance)
-    mean_abs = sum(abs(r) for r in residuals) / len(residuals) if residuals else 0.0
-    return {
-        "grid": {"levels": list(levels), "source": "declared (CL-38 encoder config)"},
-        "symbols": symbols,
-        "residuals": residuals,
-        "supporting": supporting,
-        "support_fraction": round(supporting / len(values), 6) if values else 0.0,
-        "mean_abs_residual": round(mean_abs, 4),
-        "max_abs_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
-        "score": round(
-            (supporting / len(values)) * max(0.0, 1.0 - mean_abs / tolerance), 6
-        ) if values and tolerance else 0.0,
-    }
 
 
 def _map_alphabet(symbols: list[int]) -> str:
@@ -205,33 +165,128 @@ DECLARED_CODES: dict[str, dict[str, Any]] = {
 }
 
 
-def _channels(seg: SegmentationResult, config: GeometricConfig) -> dict[str, Any]:
-    heights = [float(v) for v in seg.sequence("height")]
-    gaps = [float(v) for v in seg.sequence("gap_to_next") if v is not None]
-    brightness = [float(v) for v in seg.sequence("brightness")]
-    colour_distances = [float(v) for v in seg.sequence("colour_distance")]
-    angles = [float(v) for v in seg.sequence("angle_deg")]
-    channels = {
-        "height": _grid_fit(heights, GRIDS["height_position"]["base"],
-                            GRIDS["height_position"]["step"], config.residual_tolerance),
-        "gap": _grid_fit(gaps, GRIDS["gap_timing"]["base"],
-                         GRIDS["gap_timing"]["step"], config.residual_tolerance),
-        "lit": _levels_fit(brightness, tuple(GRIDS["lit_dark"]["levels"]),
-                           config.brightness_tolerance),
-        "angle": _grid_fit(angles, GRIDS["angle_tilt"]["base"],
-                           GRIDS["angle_tilt"]["step"], config.angle_residual_tolerance),
+_CHANNEL_TOLERANCES = ("height", "gap", "lit", "angle")
+
+
+def _colour_channel(seg: SegmentationResult,
+                    config: GeometricConfig) -> dict[str, Any]:
+    """Colour via discovered exact-colour clusters (no declared palette).
+
+    Repeated exact colours are the discovered palette; support is the
+    fraction of elements sitting exactly (within tolerance) on one.
+    """
+    colours = [tuple(c) for c in seg.sequence("colour")]
+    counts: dict[tuple[int, int, int], int] = {}
+    for colour in colours:
+        counts[colour] = counts.get(colour, 0) + 1
+    palette = sorted(
+        (c for c, n in counts.items() if n >= 2),
+        key=lambda c: (-counts[c], c),
+    )[:8]
+    distances: list[float] = []
+    symbols: list[int] = []
+    for colour in colours:
+        if palette:
+            idx = min(range(len(palette)),
+                      key=lambda i: _colour_dist(colour, palette[i]))
+            symbols.append(idx)
+            distances.append(round(_colour_dist(colour, palette[idx]), 4))
+        else:
+            symbols.append(-1)
+            distances.append(999.0)
+    n = len(colours) or 1
+    supporting = sum(1 for d in distances if d <= config.colour_distance_tolerance)
+    return {
+        "grid": {"source": "discovered", "step": None, "offset": None,
+                 "levels": [list(c) for c in palette],
+                 "palette_source": "exact_colour_clusters"},
+        "step": None, "offset": None,
+        "symbols": symbols,
+        "residuals": distances,
+        "supporting": supporting,
+        "support_fraction": round(supporting / n, 6),
+        "mean_abs_residual": round(sum(distances) / n, 4),
+        "rms_residual": round((sum(d * d for d in distances) / n) ** 0.5, 4),
+        "max_residual": round(max(distances, default=0.0), 4),
+        "max_abs_residual": round(max(distances, default=0.0), 4),
+        "levels_used": len(set(s for s in symbols if s >= 0)),
+        "rayleigh_R": 0.0, "null_exceedance": None,
+        "quantization_method": "exact_palette_repetition",
+        "score": round(supporting / n, 6),
+        "elements": len(colours),
     }
-    colour = _levels_fit(colour_distances, (0.0,), config.colour_distance_tolerance)
-    colour["grid"] = {"target_distance": 0.0, "source": "declared palette (CL-38)"}
-    channels["colour"] = colour
+
+
+def _colour_dist(a: tuple[int, ...], b: tuple[int, ...]) -> float:
+    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+
+def _channels(seg: SegmentationResult, config: GeometricConfig,
+              declared_grid: dict[str, dict[str, Any]] | None = None
+              ) -> dict[str, Any]:
     raw_values = {
-        "height": heights, "gap": gaps, "lit": brightness,
-        "angle": angles,
+        "height": [float(v) for v in seg.sequence("height")],
+        "gap": [float(v) for v in seg.sequence("gap_to_next") if v is not None],
+        "lit": [float(v) for v in seg.sequence("brightness")],
+        "angle": [float(v) for v in seg.sequence("angle_deg")],
         # Colour varies by palette index, not by distance-to-palette
         # (an all-palette-exact scene has constant distance 0 but a
         # varying, information-carrying index sequence).
         "colour": [float(v) for v in seg.sequence("colour_index")],
     }
+    tolerances = {
+        "height": config.residual_tolerance,
+        "gap": config.residual_tolerance,
+        "lit": config.brightness_tolerance,
+        "angle": config.angle_residual_tolerance,
+    }
+    channels: dict[str, Any] = {}
+    for name in _CHANNEL_TOLERANCES:
+        declared = (declared_grid or {}).get(name)
+        block = discover_grid(
+            raw_values[name], tolerance=tolerances[name],
+            seed=1723 + 101 * _CHANNEL_TOLERANCES.index(name),
+            declared_grid=declared,
+        )
+        # Pixel channels: encoded residuals are only rendering
+        # rounding (<= 0.5px), so a claim also needs support at
+        # half tolerance — this stops small discovered steps from
+        # "fitting" arbitrary integer sequences. Angle measurement
+        # carries a regression bias, so it keeps the rms gate only.
+        strict_support = (
+            sum(1 for r in block["residuals"]
+                if abs(r) <= tolerances[name] / 2.0)
+            / len(block["residuals"]) if block["residuals"] else 0.0
+        )
+        block["strict_support_fraction"] = round(strict_support, 6)
+        strict_ok = (
+            name == "angle"
+            or strict_support >= config.min_support_fraction
+        )
+        block["quantized"] = bool(
+            block["support_fraction"] >= config.min_support_fraction
+            and block["levels_used"] >= 2
+            and block["rayleigh_R"] >= 0.75
+            and block["null_exceedance"] <= config.null_alpha
+            and block["rms_residual"] <= tolerances[name]
+            and strict_ok
+        )
+        if name != "angle":
+            # Pixel/level channels score by strict fit too: a loose
+            # grid that only fits at full tolerance is weak evidence.
+            block["score"] = round(block["score"] * strict_support, 6)
+        # Phase concentration is part of the evidence: a fit with
+        # mediocre R is weaker than the residuals alone suggest.
+        block["score"] = round(block["score"] * block["rayleigh_R"], 6)
+        channels[name] = block
+    colour = _colour_channel(seg, config)
+    colour["quantized"] = bool(
+        colour["support_fraction"] >= config.min_support_fraction
+        and colour["levels_used"] >= 2
+    )
+    if declared_grid and declared_grid.get("colour"):
+        colour["declared"] = declared_grid["colour"]
+    channels["colour"] = colour
     for name, block in channels.items():
         block["elements"] = len(block["symbols"])
         # A constant channel carries no sequence information: one
@@ -245,6 +300,7 @@ def _channels(seg: SegmentationResult, config: GeometricConfig) -> dict[str, Any
         block["applicable"] = len(distinct) >= 2
         if not block["applicable"]:
             block["score"] = 0.0
+            block["quantized"] = False
     return channels
 
 
@@ -265,7 +321,13 @@ def _structure(channel: str, block: dict[str, Any],
     if declared is None:
         base["reason"] = "no declared code registered for this channel"
         return base
-    mapped = declared["map"](block["symbols"])
+    symbols = block["symbols"]
+    if channel == "lit":
+        # Discovered lit symbols are grid indices (e.g. 0 and 2 for a
+        # 95-unit discovered step); the bit code consumes level ranks.
+        rank = {s: i for i, s in enumerate(sorted(set(symbols)))}
+        symbols = [rank[s] for s in symbols]
+    mapped = declared["map"](symbols)
     preview = mapped if isinstance(mapped, str) else str(mapped)
     if declared["validate"](mapped):
         return {
@@ -281,7 +343,8 @@ def _structure(channel: str, block: dict[str, Any],
 
 
 def analyze_geometric(
-    seg: SegmentationResult, config: GeometricConfig | None = None
+    seg: SegmentationResult, config: GeometricConfig | None = None,
+    declared_grid: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Quantization + structure report over one segmentation (no finding
     when segmentation itself failed)."""
@@ -293,13 +356,19 @@ def analyze_geometric(
             "classification": SIGNAL_NONE,
             "detail": "segmentation failed; no geometric finding (not a clean score)",
         }
-    channels = _channels(seg, active)
+    channels = _channels(seg, active, declared_grid)
     primary_name = max(channels, key=lambda name: channels[name]["score"])
     primary = channels[primary_name]
-    quantized = (
+    declared_fit = primary.get("declared") or {}
+    declared_quantized = bool(
+        declared_grid
+        and primary_name in declared_grid
+        and declared_fit.get("support_fraction", 0.0) >= active.min_support_fraction
+    )
+    quantized = bool(
         primary["applicable"]
-        and primary["support_fraction"] >= active.min_support_fraction
         and primary["elements"] >= active.min_support_elements
+        and (primary.get("quantized") or declared_quantized)
     )
     if quantized:
         structure = _structure(primary_name, primary, active)
@@ -351,11 +420,12 @@ def analyze_geometric(
 
 
 def analyze_geometric_bytes(
-    data: bytes, config: GeometricConfig | None = None
+    data: bytes, config: GeometricConfig | None = None,
+    declared_grid: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Segment original bytes and run both geometric tests."""
     seg = segment_image(data)
-    report = analyze_geometric(seg, config)
+    report = analyze_geometric(seg, config, declared_grid)
     report["segmentation"] = seg.to_dict()
     return report
 

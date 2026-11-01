@@ -121,10 +121,10 @@ def _off_grid(rng: random.Random, low: float, high: float, grid_values: list[flo
 
 def _scene_elements(
     subfamily: str, *, encoded: bool, scene_seed: int, payload_seed: int,
-    n_elements: int,
+    n_elements: int, grid: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
     """Element attribute plan for one scene (renderer-side only)."""
-    grid = GRIDS[subfamily]
+    grid = {**GRIDS[subfamily], **(grid or {})}
     rng = random.Random(scene_seed)
     symbols: tuple[int, ...] = ()
     if subfamily == "gap_timing":
@@ -133,6 +133,17 @@ def _scene_elements(
         count = n_elements
     if encoded:
         symbols = _symbols(payload_seed, count, int(grid["alphabet"]))
+        if grid.get("attacker") and len(symbols) >= 3:
+            # Attacker fixtures exist to prove step *recovery*: if a
+            # payload used only every-other level, the fundamental
+            # step would be ambiguous (2x would fit equally well).
+            # Guarantee at least one pair of adjacent levels.
+            distinct = sorted(set(symbols))
+            if all(b - a != 1 for a, b in zip(distinct, distinct[1:])):
+                shaped = list(symbols)
+                shaped[1] = (shaped[0] + 1 if shaped[0] + 1 < int(grid["alphabet"])
+                             else shaped[0] - 1)
+                symbols = tuple(shaped)
     elements: list[dict[str, Any]] = []
     attributes: list[float] = []
     x = MARGIN_X
@@ -145,16 +156,23 @@ def _scene_elements(
             if encoded:
                 value = grid["base"] + symbols[i] * grid["step"]
             else:
-                value = _off_grid(rng, 16, 86,
-                                  [grid["base"] + s * grid["step"] for s in range(8)], 2.5)
+                # Clearance just beyond rendering rounding (0.5px):
+                # a wider exclusion arc would make clean residues
+                # periodically anti-aligned, itself a false pattern.
+                value = _off_grid(
+                    rng, grid["base"], grid["base"] + grid["step"] * 7,
+                    [grid["base"] + s * grid["step"] for s in range(8)],
+                    min(1.2, grid["step"] * 0.12))
             element["height"] = value
             attributes.append(value)
         elif subfamily == "gap_timing" and i < n_elements - 1:
             if encoded:
                 value = grid["base"] + symbols[i] * grid["step"]
             else:
-                value = _off_grid(rng, 6, 24,
-                                  [grid["base"] + s * grid["step"] for s in range(4)], 1.8)
+                value = _off_grid(
+                    rng, grid["base"], grid["base"] + grid["step"] * 3,
+                    [grid["base"] + s * grid["step"] for s in range(4)],
+                    min(1.8, grid["step"] * 0.22))
             element["gap_after"] = value
             attributes.append(value)
         elif subfamily == "lit_dark":
@@ -184,8 +202,10 @@ def _scene_elements(
             if encoded:
                 value = grid["base"] + symbols[i] * grid["step"]
             else:
-                value = _off_grid(rng, -30, 30,
-                                  [grid["base"] + s * grid["step"] for s in range(5)], 3.0)
+                value = _off_grid(
+                    rng, grid["base"], grid["base"] + grid["step"] * 4,
+                    [grid["base"] + s * grid["step"] for s in range(5)],
+                    min(2.0, grid["step"] * 0.13))
             element["angle"] = value
             element["height"] = 44.0
             element["width"] = 10
@@ -303,10 +323,11 @@ def _nearest_colour(colour: tuple[int, int, int], palette) -> int:
 
 
 def measure_attributes(pixels: bytes, width: int, height: int,
-                       subfamily: str) -> tuple[list[float], list[int]]:
+                       subfamily: str,
+                       grid: dict[str, Any] | None = None) -> tuple[list[float], list[int]]:
     """Re-measure (attributes, recovered symbols) from raster pixels only."""
     elements = segment_elements(pixels, width, height)
-    grid = GRIDS[subfamily]
+    grid = {**GRIDS[subfamily], **(grid or {})}
     attributes: list[float] = []
     symbols: list[int] = []
     if subfamily == "height_position":
@@ -338,12 +359,18 @@ def measure_attributes(pixels: bytes, width: int, height: int,
 def verify_geo_fixture(fixture: GeoFixture) -> bool:
     """Independent re-measurement must reproduce the ground truth."""
     pixels, width, height = _load_png(fixture.data)
-    attributes, symbols = measure_attributes(pixels, width, height, fixture.subfamily)
+    recorded = (fixture.encoder.get("config") or {}).get("grid") or {}
+    attributes, symbols = measure_attributes(
+        pixels, width, height, fixture.subfamily, grid=recorded)
     if fixture.role == "encoded":
         return tuple(symbols) == fixture.symbols
     if len(attributes) != len(fixture.attributes):
         return False
-    tolerance = {"lit_dark": 6.0, "colour_code": 0.0, "angle_tilt": 3.5}.get(
+    # Angle re-measurement carries a pixel-regression bias toward
+    # upright at steep tilts (up to ~5 degrees at 35 degrees), so
+    # clean attribute verification uses a wider angle tolerance;
+    # encoded fixtures are checked by exact symbol recovery instead.
+    tolerance = {"lit_dark": 6.0, "colour_code": 0.0, "angle_tilt": 6.5}.get(
         fixture.subfamily, 1.6
     )
     return all(abs(a - b) <= tolerance for a, b in zip(attributes, fixture.attributes))
@@ -354,7 +381,9 @@ def verify_geo_fixture(fixture: GeoFixture) -> bool:
 def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
              symbols: tuple[int, ...], attributes: tuple[float, ...],
              *, scene_seed: int, payload_seed: int, width: int, height: int,
-             context: str = "scene", negative_kind: str | None = None) -> GeoFixture:
+             context: str = "scene", negative_kind: str | None = None,
+             grid: dict[str, Any] | None = None) -> GeoFixture:
+    effective_grid = {**GRIDS[subfamily], **(grid or {})}
     digest = ids.content_hash(data)
     generator = {
         "name": GEO_GENERATOR_NAME, "version": GEO_GENERATOR_VERSION,
@@ -367,10 +396,10 @@ def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
         "seed": payload_seed,
         "config": {
             "subfamily": subfamily,
-            "unit": GRIDS[subfamily]["unit"],
-            "alphabet": GRIDS[subfamily]["alphabet"],
-            "grid": {k: v for k, v in GRIDS[subfamily].items()
-                     if k in ("base", "step", "levels")},
+            "unit": effective_grid["unit"],
+            "alphabet": effective_grid["alphabet"],
+            "grid": {k: v for k, v in effective_grid.items()
+                     if k in ("base", "step", "levels", "attacker")},
         },
     }
     return GeoFixture(
@@ -391,6 +420,7 @@ def scene_plan(
     scene_seed: int,
     payload_seed: int,
     n_elements: int = 12,
+    grid: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
     """Public renderer plan (elements, symbols, attributes) for one scene.
 
@@ -404,7 +434,50 @@ def scene_plan(
         n_elements = min(n_elements, 7)
     return _scene_elements(
         subfamily, encoded=encoded, scene_seed=scene_seed,
-        payload_seed=payload_seed, n_elements=n_elements,
+        payload_seed=payload_seed, n_elements=n_elements, grid=grid,
+    )
+
+
+def attacker_grid(subfamily: str, seed: int) -> dict[str, Any]:
+    """Random base/step for one attacker-grid pair (CL-43).
+
+    Recorded in the fixture's encoder config; the detector never
+    sees it. Ranges keep rendered scenes inside the canvas.
+    """
+    rng = random.Random(seed)
+    if subfamily == "height_position":
+        while True:
+            base, step = rng.uniform(10, 24), rng.uniform(4.5, 10.5)
+            if base + 7 * step <= 100:
+                break
+    elif subfamily == "gap_timing":
+        # Step stays above the detector's minimum resolvable step
+        # (2x the 1.6px tolerance) so the grid is discoverable.
+        base, step = rng.uniform(2, 8), rng.uniform(3.4, 5.5)
+    elif subfamily == "angle_tilt":
+        while True:
+            base, step = rng.uniform(-34, -22), rng.uniform(11, 15)
+            if -34 <= base and base + 4 * step <= 34:
+                break
+    else:
+        raise ValueError(
+            f"attacker grids are defined for height/gap/angle, not {subfamily}")
+    return {"base": round(base, 3), "step": round(step, 3), "attacker": True}
+
+
+def build_attacker_geo_pair(
+    subfamily: str,
+    *,
+    scene_seed: int = 101,
+    payload_seed: int = 202,
+    grid_seed: int = 777,
+    n_elements: int = 12,
+) -> tuple[GeoFixture, GeoFixture]:
+    """Clean/encoded pair on a random attacker grid (CL-43)."""
+    grid = attacker_grid(subfamily, grid_seed)
+    return build_geo_pair(
+        subfamily, scene_seed=scene_seed, payload_seed=payload_seed,
+        n_elements=n_elements, grid=grid,
     )
 
 
@@ -416,6 +489,7 @@ def build_geo_pair(
     scene_seed: int = 101,
     payload_seed: int = 202,
     n_elements: int = 12,
+    grid: dict[str, Any] | None = None,
 ) -> tuple[GeoFixture, GeoFixture]:
     """One clean/encoded pair: same scene plan, grid vs off-grid attributes."""
     if subfamily not in SUBFAMILIES:
@@ -425,11 +499,13 @@ def build_geo_pair(
     if subfamily == "angle_tilt":
         n_elements = min(n_elements, 7)
     pair_id = f"pair-geometric-{subfamily}-{scene_seed}"
+    if grid and grid.get("attacker"):
+        pair_id += f"-attacker-{grid['step']}"
     built = []
     for role, encoded in (("clean", False), ("encoded", True)):
         elements, symbols, attributes = _scene_elements(
             subfamily, encoded=encoded, scene_seed=scene_seed + (0 if not encoded else 500_000),
-            payload_seed=payload_seed, n_elements=n_elements,
+            payload_seed=payload_seed, n_elements=n_elements, grid=grid,
         )
         # Clean and encoded share the scene seed family but must not
         # share jitter: encoded uses grid values; clean was sampled
@@ -439,7 +515,7 @@ def build_geo_pair(
             subfamily, role, pair_id, data,
             symbols if encoded else (), attributes,
             scene_seed=scene_seed, payload_seed=payload_seed,
-            width=width, height=height,
+            width=width, height=height, grid=grid,
         ))
     clean, encoded_fx = built
     if not verify_geo_fixture(encoded_fx):

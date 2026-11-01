@@ -125,9 +125,12 @@ from .review_export import (
 )
 from .robustness import run_robustness, validate_robustness
 from .route_audit import run_route_audit, validate_route_audit
+from .grid import discover_grid, fit_declared_grid, rayleigh
 from .geometric_fixtures import (
     GeoFixture,
     assign_geo_splits,
+    attacker_grid,
+    build_attacker_geo_pair,
     build_geo_dataset,
     build_geo_pair,
     geo_ground_truth,
@@ -331,6 +334,11 @@ __all__ = [
     "assign_geo_splits",
     "build_geo_dataset",
     "build_geo_pair",
+    "attacker_grid",
+    "build_attacker_geo_pair",
+    "discover_grid",
+    "fit_declared_grid",
+    "rayleigh",
     "geo_ground_truth",
     "geo_manifest",
     "measure_attributes",

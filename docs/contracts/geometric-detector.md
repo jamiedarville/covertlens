@@ -7,15 +7,32 @@ segmentations of CL-38 scenes.
 
 ## Quantization test (GEO-02) — a measurement, not a verdict
 
-Each channel (height, gap, lit levels, colour palette distance,
-tilt angle) is fitted to its declared CL-38 grid. Reports carry
-grid base/step, the recovered symbol sequence, per-element
-residuals, supporting count/fraction, and residual statistics —
-there is no bare “pattern detected” output. A channel is only
-*applicable* if it actually varies: a constant channel (upright
-bars at angle 0, fixed scene heights) is trivially on-grid and
-carries no sequence evidence, so it is marked inapplicable and
-scored 0.
+Each channel (height, gap, lit levels, colour, tilt angle) has
+its grid **discovered from the sequence** (CL-43,
+`covertlens/grid.py`): a Rayleigh step sweep from twice the
+channel tolerance to half the observed range, offset from the
+resultant phase, residuals folded to [-s/2, s/2). Reports carry
+the discovered step/offset, symbol sequence, per-element
+residuals, supporting count/fraction, rms/max residual,
+levels used, Rayleigh R, and `null_exceedance` from two seeded
+nulls (uniform draws over the observed range; resampled
+fractional parts) — the fraction of null draws whose best R
+reaches the observed R. A quantization claim additionally needs
+support ≥ 0.9, R ≥ 0.75, rms within tolerance, support at half
+tolerance for pixel channels, and `null_exceedance` ≤ 0.05.
+A declared grid may be passed as a prior (`declared_grid`): it
+is fitted and reported next to the discovered grid with the
+declared-vs-discovered step ratio, but never headlines.
+Fixture grids (`geometric_fixtures.GRIDS`) are generator/test
+inputs only; the detector no longer imports them. There is no
+bare “pattern detected” output. A channel is only *applicable*
+if it actually varies: a constant channel (upright bars at
+angle 0, fixed scene heights) is trivially on-grid and carries
+no sequence evidence, so it is marked inapplicable and scored 0.
+Attacker-grid fixtures (random base/step per pair, recorded in
+the encoder config, adjacent levels guaranteed so the step is
+identifiable) cover height, gap and angle; the CL-42 benchmark
+reports an `attacker_grid` row per subfamily.
 
 ## Structure test (GEO-03) — declared codes only
 
