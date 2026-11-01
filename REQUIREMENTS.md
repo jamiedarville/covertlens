@@ -1,35 +1,38 @@
-# CovertLens (CL) — Working Requirements
+# CovertLens — Requirements
 
-Derived from a review of the Jira project **Covert Lens (CL)** on 2026-10-28: 6 epics (CL-1…CL-6), 30 tasks
-(CL-7…CL-36), 6 planned sprints, board “CL board”. Jira is the source of
-truth; this document is my working interpretation, with every requirement
-traced to its Jira issue(s).
+Requirements for CovertLens, an inline steganalysis gate designed
+for multi-agent evaluation harnesses. Every requirement carries
+the key of the delivery task that implements it (CL-7, CL-8, …);
+planning history and traceability notes live in
+[docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md).
 
-Source PRD referenced by all issues: **CovertLens PRD v0.2 — October 27,
-2026** (FR-01…FR-13, §§10–13). Owner: Agent Evaluation / AI Safety team.
+Source product requirements: **CovertLens PRD v0.2 — October 27,
+2026** (FR-01…FR-13, §§10–13). Owner: Agent Evaluation / AI
+Safety team.
 
-Addendum §8 (2026-10-28, proposed — not yet traced to a Jira issue)
-adds a fourth channel family, geometric/semantic encoding. It does not
-change the Jira-traced requirements in §2 unless explicitly noted.
+The geometric/semantic family (§8, GEO-01…GEO-07) is implemented
+as the fourth channel family; §8 records its threat model and
+detection approach.
 
 ## 1. Product summary
 
-CovertLens is an inline steganalysis / covert-channel gate for the Meta AI
-internal eval harness. Agents may not encode task-relevant information in
-image pixels or metadata outside an allowed channel. Every inter-agent
-image is intercepted at the artifact store, scored on its original bytes
-across three pixel/metadata channel families (spatial LSB, JPEG DCT,
-metadata), plus the proposed geometric/semantic family in §8, and
-subject to a verdict ladder — log → flag → quarantine → run failure —
-before any recipient access. Findings join ordered run-trace events so
-researchers can triage repeated weak signals; frozen synthetic benchmarks
-plus a seeded live-trace pilot decide the MVP release.
+CovertLens is an inline steganalysis / covert-channel gate
+designed for multi-agent evaluation harnesses. Agents may not
+encode task-relevant information in image pixels or metadata
+outside an allowed channel. Every inter-agent image is
+intercepted at the artifact store, scored on its original bytes
+across four channel families (spatial LSB, JPEG DCT, metadata,
+and geometric/semantic encoding, §8), and subject to a verdict
+ladder — log → flag → quarantine → run failure — before any
+recipient access. Findings join ordered run-trace events so
+researchers can triage repeated weak signals; frozen synthetic
+benchmarks plus a seeded live-trace pilot decide the MVP release.
 
-Scope: eval-generated PNG/JPEG artifacts only. Consumer uploads and
-transports are explicitly excluded. Proposed §8 extension: where a
-vector source for a generated image is available in the harness, it is
-an additional interception route; the rendered image remains the
-artifact delivered and scored.
+Scope: eval-generated PNG/JPEG artifacts only. Consumer uploads
+and transports are explicitly excluded. Where a vector source
+for a generated image is available in the harness, it is an
+additional interception route (§8, GEO-04); the rendered image
+remains the artifact delivered and scored.
 
 ## 2. Requirements catalog
 
@@ -75,11 +78,11 @@ artifact delivered and scored.
 - **DT-06** Metadata corpus: known metadata payloads, clean matched
   controls, allowed task-metadata exceptions; lineage, units, and split
   rules matching the initial dataset. (`CL-22`)
-- **DT-07** Geometric corpus (proposed, §8): clean/encoded paired
-  fixtures for geometric/semantic encoding, with benign negatives
-  (legitimate charts, unencoded scenes, benign edits) and generator
-  variation; lineage, units, and split rules matching the initial
-  dataset. (Proposed — not yet in Jira)
+- **DT-07** Geometric corpus (§8): clean/encoded paired fixtures
+  for geometric/semantic encoding, with benign negatives
+  (legitimate charts, unencoded scenes, benign edits) and
+  generator variation; lineage, units, and split rules matching
+  the initial dataset. (`CL-38`)
 
 ### DET — Channel detection (Epic CL-3)
 
@@ -236,7 +239,7 @@ dedicated freeze.
 | Metric | Target | Source |
 |---|---|---|
 | Per-family recall (LSB, DCT, metadata) | ≥ 95%, prevalence/intervals reported | CL-28 |
-| Per-family recall (geometric/semantic, proposed) | ≥ 95%, prevalence/intervals reported, to be frozen per OP-03 — not yet a Jira target | §8 |
+| Per-family recall (geometric/semantic) | ≥ 95%, prevalence/intervals reported, to be frozen per OP-03 | §8 |
 | Geometric false claims on benign controls | Report separately; no invented target before calibration | §8 |
 | Enforcement precision | ≥ 99% | CL-28 |
 | Clean-run false failures | ≤ 1% on ≥ 300 independent clean runs | CL-28 |
@@ -273,61 +276,24 @@ dedicated freeze.
 
 ## 5. Delivery plan
 
-Six planned two-week sprints, five tasks each. No active sprint; no dates,
-estimates, or assignees set yet. All 36 issues are To Do, all Medium
-priority.
-
-| Sprint | Goal | Tasks |
-|---|---|---|
-| CL Sprint 1 (id 47) | Harness contracts and synthetic foundations | CL-7, CL-8, CL-9, CL-10, CL-11 |
-| CL Sprint 2 (id 48) | Artifact interception and LSB/DCT baselines | CL-12, CL-13, CL-14, CL-15, CL-16 |
-| CL Sprint 3 (id 49) | Inline quarantine and run-failure enforcement | CL-17, CL-18, CL-19, CL-20, CL-21 |
-| CL Sprint 4 (id 50) | Metadata, sequence context, researcher reports | CL-22, CL-23, CL-24, CL-25, CL-26 |
-| CL Sprint 5 (id 51) | Frozen benchmarks and live eval pilot | CL-27, CL-28, CL-29, CL-30, CL-31 |
-| CL Sprint 6 (id 52) | MVP hardening, scorecard, handoff | CL-32, CL-33, CL-34, CL-35, CL-36 |
-
-Dependency analysis (parsed from issue descriptions):
-
-- Single root: **CL-7** (manifest) — everything descends from it.
-- No dependency points to a same- or later-numbered task; no sprint hosts
-  a task depending on a later sprint. The plan is topologically sound.
-- Critical path (14 tasks): CL-7 → CL-9 → CL-10 → CL-14 → CL-17 → CL-18 →
-  CL-20 → CL-26 → CL-27 → CL-28 → CL-31 → CL-34 → CL-35 → CL-36. (CL-15
-  mirrors CL-14 and is equally constraining in practice.)
-- Sprint 1 entry order: CL-7 first, then CL-8 and CL-9 in parallel, then
-  CL-10, then CL-11.
+Moved to
+[docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md)
+(CL-49): sprint plan as recorded at planning time, dependency
+analysis, and the as-built order in `CHANGELOG.md`.
 
 ## 6. Readiness gaps and open questions
 
-1. Sprint 1 has no start date and no active sprint exists — confirm when
-   to start, and whether you want me to start it in Jira.
-2. No estimates anywhere (the project has no story-point field in use) —
-   confirm whether to estimate during refinement or track by task count.
-3. All issues are Medium priority with no assignees — confirm owners, at
-   least for the Sprint 1 chain.
-4. Tasks cite PRD requirements FR-01…FR-13 and §§10–13, which are not in
-   Jira — link the PRD doc if you want requirements traced to it.
-5. CL-29’s latency target is marked “proposed” — needs owner agreement
-   before Sprint 5.
-6. Geometric/semantic encoding (§8) is not in CL-7…CL-36 / PRD v0.2 —
-   confirm whether to add new Jira issues, extend an existing
-   detection task, or keep it as a proposed addendum; confirm
-   whether vector-source interception is in harness scope.
+Moved to
+[docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md)
+(CL-49) as the 2026-10-28 planning record.
 
-## 7. Jira working protocol
+## 7. Working protocol
 
-As we work through the sprints I will:
+Moved to
+[docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md)
+(CL-49).
 
-- Move issues through the workflow (To Do → In Progress → Done) as work
-  starts and acceptance criteria are met.
-- Post progress comments on the active issue(s), including what was
-  verified and what remains.
-- Keep sprint assignments as planned; flag any task that needs to move
-  sprints before moving it.
-- Ask before starting/completing sprints or editing issue scope —
-  routine status and comment updates I will make directly.
-
-## 8. Addendum — Geometric / semantic encoding (proposed, 2026-10-28)
+## 8. Addendum — Geometric / semantic encoding (2026-10-28; implemented as GEO-01…GEO-07)
 
 ### 8.1 Threat model
 

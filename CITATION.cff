@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: CovertLens
+abstract: >-
+  Inline steganalysis gate designed for multi-agent evaluation
+  harnesses. Inter-agent images are intercepted at the artifact
+  store, scored on their original bytes across four channel
+  families (spatial LSB, JPEG DCT, metadata, and geometric), and
+  decided by a verdict ladder before any recipient access. Scores
+  are versioned evidence with coverage and limitations, never
+  accusations.
+authors:
+  - family-names: Darville
+    given-names: Jamie
+version: 0.1.0
+date-released: 2026-11-01
+license: MIT
+repository-code: https://github.com/jamiedarville/covertlens
+url: https://github.com/jamiedarville/covertlens
+keywords:
+  - steganalysis
+  - covert channels
+  - agent evaluation
+  - evidence gating
