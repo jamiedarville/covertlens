@@ -1,5 +1,15 @@
 # Quantization and structure tests contract (CL-40)
 
+Family integration (CL-44): geometric is the fourth channel
+family in `manifest.FAMILIES` and the allowed-channel manifest
+(1.1.0). `analyze_all_bytes` attaches the finding for parsed
+PNGs via `detect_geometric`; the CL-17 ladder scores it
+log-only while its thresholds are `unfrozen_placeholder`
+(`enforceable: false`), and trace join, run report, review
+export, pin and the release scorecard carry it like every
+other family. The scorecard's geometric section cites the
+CL-42 benchmark per subfamily, never pooled.
+
 Implements: CL-40 (GEO-02, GEO-03). Schema:
 [schemas/geometric-finding.schema.json](../../schemas/geometric-finding.schema.json).
 Detector `geometric-quantization-structure` 1.0.0 over CL-39

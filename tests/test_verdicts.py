@@ -120,7 +120,7 @@ def test_most_severe_family_wins_and_unfrozen_is_log_only():
     empty = decide_verdict([], FROZEN)
     assert empty.verdict is Verdict.LOG
     assert set(empty.families_without_findings) == {
-        "spatial_lsb", "jpeg_dct", "metadata"}
+        "spatial_lsb", "jpeg_dct", "metadata", "geometric"}
 
 
 def test_invalid_findings_and_hashes_are_rejected():

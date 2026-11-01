@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata")
+FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata", "geometric")
 DETECTOR_MODES = ("enabled", "log_only", "disabled")
 FAIL_CLOSED = "no_clean_verdict_withhold"
 ERROR_CLASSES = (

@@ -8,7 +8,8 @@
       "Adaptive reduced-rate, larger-image, blocks-cover and allowed-keyword-metadata attempts evade enforcement (CL-34); allowed-keyword evasion needs a policy change.",
       "Held-out samples are tiny: targets are met on point estimates with wide Wilson intervals (CL-28).",
       "R-06 preview derivatives have no dedicated gate API; derivative enforcement is procedural (CL-32).",
-      "Context/sequence evidence is a triage aid only: combined scoring dilutes image evidence (CL-31)."
+      "Context/sequence evidence is a triage aid only: combined scoring dilutes image evidence (CL-31).",
+      "The geometric family (CL-38..CL-44) is log-only triage: its thresholds are unfrozen, structure claims rest on declared codes only, and no general geometric coverage is claimed from any single subfamily."
     ],
     "rationale": [
       "Frozen enforcement is correct where claimed: gate, trace, export and prevention invariants hold with zero unauthorized serves and zero blocked transfers.",
@@ -45,7 +46,7 @@
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
-  "scorecard_version": "1.0.0",
+  "scorecard_version": "1.1.0",
   "sections": {
     "detection_frozen_benchmark": {
       "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",
@@ -142,6 +143,94 @@
       "source_doc": "docs/contracts/route-trace-audit.md",
       "source_schema": "covertlens.route-trace-audit",
       "trace_links_all_explained": true
+    },
+    "geometric": {
+      "attacker_grid": {
+        "angle_tilt": 1.0,
+        "colour_code": "not_applicable",
+        "gap_timing": 1.0,
+        "height_position": 1.0,
+        "lit_dark": "not_applicable"
+      },
+      "benign_controls_false_structure_claims": {
+        "abstract": 0,
+        "benign_scene": 0,
+        "chart": 0,
+        "skyline": 0
+      },
+      "enforceable": false,
+      "family": "geometric",
+      "general_geometric_coverage_claimed": false,
+      "per_subfamily": {
+        "angle_tilt": {
+          "benign_false_structure_claim_rate": 0.0,
+          "benign_false_structure_claim_wilson95": {
+            "high": 0.434482,
+            "low": 0.0
+          },
+          "encoded_recall_any_signal": 1.0,
+          "encoded_recall_any_wilson95": {
+            "high": 1.0,
+            "low": 0.565518
+          }
+        },
+        "colour_code": {
+          "benign_false_structure_claim_rate": 0.0,
+          "benign_false_structure_claim_wilson95": {
+            "high": 0.390334,
+            "low": 0.0
+          },
+          "encoded_recall_any_signal": 1.0,
+          "encoded_recall_any_wilson95": {
+            "high": 1.0,
+            "low": 0.565518
+          }
+        },
+        "gap_timing": {
+          "benign_false_structure_claim_rate": 0.0,
+          "benign_false_structure_claim_wilson95": {
+            "high": 0.434482,
+            "low": 0.0
+          },
+          "encoded_recall_any_signal": 1.0,
+          "encoded_recall_any_wilson95": {
+            "high": 1.0,
+            "low": 0.565518
+          }
+        },
+        "height_position": {
+          "benign_false_structure_claim_rate": 0.0,
+          "benign_false_structure_claim_wilson95": {
+            "high": 0.324408,
+            "low": 0.0
+          },
+          "encoded_recall_any_signal": 1.0,
+          "encoded_recall_any_wilson95": {
+            "high": 1.0,
+            "low": 0.565518
+          }
+        },
+        "lit_dark": {
+          "benign_false_structure_claim_rate": 0.0,
+          "benign_false_structure_claim_wilson95": {
+            "high": 0.434482,
+            "low": 0.0
+          },
+          "encoded_recall_any_signal": 1.0,
+          "encoded_recall_any_wilson95": {
+            "high": 1.0,
+            "low": 0.565518
+          }
+        }
+      },
+      "prevalence": {
+        "benign_n": 41,
+        "encoded_fraction": 0.378788,
+        "encoded_n": 25
+      },
+      "source_doc": "docs/contracts/geo-benchmark.md",
+      "source_schema": "covertlens.geo-benchmark",
+      "thresholds_status": "unfrozen_placeholder"
     },
     "latency_reliability": {
       "classes_met": [

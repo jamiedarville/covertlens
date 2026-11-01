@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .grid import discover_grid
-from .parsing import Finding
+from .parsing import AnalysisResult, AnalysisStatus, Finding
 from .segmentation import SegmentationResult, segment_image
 
 GEO_DETECTOR_NAME = "geometric-quantization-structure"
@@ -417,6 +417,21 @@ def analyze_geometric(
         "channels": channels,
         "structure": structure,
     }
+
+
+def detect_geometric(data: bytes, result: AnalysisResult) -> Finding | None:
+    """DET-02 finding for one parsed PNG; None when not applicable.
+
+    Attached by `analyze_all_bytes` as the fourth channel family
+    (CL-44). JPEG and failed parses get no geometric finding: the
+    segmenter supports PNG rasters only and failures are never
+    converted into clean scores (C-02).
+    """
+    if result.status is not AnalysisStatus.PARSED:
+        return None
+    if result.media_kind != "png":
+        return None
+    return analyze_geometric_bytes(data).get("finding")
 
 
 def analyze_geometric_bytes(

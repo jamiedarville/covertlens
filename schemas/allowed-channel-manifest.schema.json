@@ -38,7 +38,7 @@
         "type": "object",
         "required": ["family", "policy", "detector", "thresholds", "error_behavior"],
         "properties": {
-          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata", "geometric"]},
           "detector": {
             "type": "object",
             "required": ["mode", "input"],

@@ -37,7 +37,7 @@
           "verdict"
         ],
         "properties": {
-          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+          "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata", "geometric"]},
           "max_score": {"type": "number", "minimum": 0, "maximum": 1},
           "findings": {"type": "integer", "minimum": 1},
           "detectors": {"type": "array", "items": {"type": "string"}},
@@ -52,7 +52,7 @@
     "findings_count": {"type": "integer", "minimum": 0},
     "families_without_findings": {
       "type": "array",
-      "items": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]}
+      "items": {"enum": ["spatial_lsb", "jpeg_dct", "metadata", "geometric"]}
     }
   }
 }
