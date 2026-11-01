@@ -73,3 +73,4 @@ jobs:
           python -m covertlens robustness-demo > /dev/null
           python -m covertlens scorecard-demo > /dev/null
           python -m covertlens handoff-demo > /dev/null
+          python -m covertlens geo-fixtures-demo > /dev/null

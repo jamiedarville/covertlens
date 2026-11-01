@@ -32,6 +32,7 @@ Usage:
     python -m covertlens robustness-demo
     python -m covertlens scorecard-demo
     python -m covertlens handoff-demo
+    python -m covertlens geo-fixtures-demo
 """
 
 from __future__ import annotations
@@ -56,6 +57,13 @@ from .latency import run_reliability_report
 from .ablations import run_ablations
 from .review_export import run_export_verification
 from .robustness import run_robustness
+from .geometric_fixtures import (
+    assign_geo_splits,
+    build_geo_dataset,
+    geo_manifest,
+    validate_geo_splits,
+    verify_geo_fixture,
+)
 from .handoff import run_handoff_verification
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
@@ -550,6 +558,21 @@ def main(argv: list[str] | None = None) -> int:
             "quarantine_handling": report["quarantine_handling"],
             "reruns": report["reruns"],
             "dataset_retirement": report["dataset_retirement"],
+        }, indent=2))
+        return 0
+
+    if command == "geo-fixtures-demo":
+        fixtures = build_geo_dataset()
+        manifest = geo_manifest(fixtures)
+        assignments = assign_geo_splits(fixtures)
+        print(json.dumps({
+            "fixtures": len(fixtures),
+            "subfamilies": manifest["subfamilies"],
+            "roles": sorted({f.role for f in fixtures}),
+            "verified": sum(1 for f in fixtures if verify_geo_fixture(f)),
+            "splits": {s: sum(1 for v in assignments.values() if v == s)
+                       for s in sorted(set(assignments.values()))},
+            "split_errors": validate_geo_splits(fixtures, assignments),
         }, indent=2))
         return 0
 

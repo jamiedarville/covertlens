@@ -125,6 +125,18 @@ from .review_export import (
 )
 from .robustness import run_robustness, validate_robustness
 from .route_audit import run_route_audit, validate_route_audit
+from .geometric_fixtures import (
+    GeoFixture,
+    assign_geo_splits,
+    build_geo_dataset,
+    build_geo_pair,
+    geo_ground_truth,
+    geo_manifest,
+    measure_attributes,
+    segment_elements,
+    validate_geo_splits,
+    verify_geo_fixture,
+)
 from .handoff import run_handoff_verification, validate_handoff
 from .scorecard import build_scorecard, load_scorecard, validate_scorecard
 from .pilot import (
@@ -290,6 +302,16 @@ __all__ = [
     "run_robustness",
     "build_scorecard",
     "run_handoff_verification",
+    "GeoFixture",
+    "assign_geo_splits",
+    "build_geo_dataset",
+    "build_geo_pair",
+    "geo_ground_truth",
+    "geo_manifest",
+    "measure_attributes",
+    "segment_elements",
+    "validate_geo_splits",
+    "verify_geo_fixture",
     "validate_handoff",
     "load_scorecard",
     "validate_scorecard",
