@@ -21,6 +21,7 @@ Guards (GEO-05/GEO-06, C-09):
 from __future__ import annotations
 
 import random
+from functools import lru_cache
 from typing import Any
 
 from . import ids
@@ -28,6 +29,7 @@ from .fixtures import _save_png
 from .frozen_benchmark import wilson_interval
 from .geometric import (
     DEFAULT_GEO_CONFIG,
+    SIGNAL_DECLARED,
     SIGNAL_NONE,
     SIGNAL_STRUCTURE,
     analyze_geometric_bytes,
@@ -142,6 +144,21 @@ def _classify(item_bytes: bytes) -> str:
     return analyze_geometric_bytes(item_bytes)["classification"]
 
 
+@lru_cache(maxsize=8)
+def structured_payload_fixture(max_seed: int = 2000):
+    """First height pair whose encoded payload passes a declared code.
+
+    Deterministic scan over payload seeds (generator-side search;
+    the detector only ever sees the rendered raster).
+    """
+    for seed in range(1, max_seed):
+        _clean, encoded = build_geo_pair(
+            "height_position", scene_seed=8080, payload_seed=seed)
+        if analyze_geometric_bytes(encoded.data)["classification"] == SIGNAL_STRUCTURE:
+            return encoded
+    return None
+
+
 def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str, Any]:
     """Per-subfamily benchmark. Deterministic; ground truth (roles and
     control expectations) stays scorer-side (C-07)."""
@@ -198,6 +215,48 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             "false_structure_claims": _rate(
                 sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)),
         }
+
+    # Scene-context rows (CL-45): the same chart bytes under a
+    # declared task channel vs no declaration, and a structured
+    # encoded scene with no declaration.
+    chart_controls = [c for c in controls if c["kind"] == "chart"]
+    declared_ctx = {"declared_channels": ["height"],
+                    "context": "data_visualization"}
+    chart_declared = [
+        analyze_geometric_bytes(c["data"], declared_context=declared_ctx)["classification"]
+        for c in chart_controls
+    ]
+    chart_undeclared = [_classify(c["data"]) for c in chart_controls]
+    structured_fx = structured_payload_fixture()
+    structured_class = (
+        _classify(structured_fx.data) if structured_fx is not None else None)
+    likeness_by_kind: dict[str, Any] = {}
+    for kind in ("skyline", "chart", "abstract", "benign_scene"):
+        scores = [
+            analyze_geometric_bytes(c["data"])["chart_likeness"]["score"]
+            for c in controls if c["kind"] == kind
+        ]
+        if scores:
+            likeness_by_kind[kind] = {
+                "min": min(scores), "max": max(scores), "n": len(scores)}
+    scene_context = {
+        "chart_with_declared_height": {
+            "n": len(chart_declared),
+            "classifications": _tally(chart_declared),
+            "expected": SIGNAL_DECLARED,
+        },
+        "chart_with_undeclared_height": {
+            "n": len(chart_undeclared),
+            "classifications": _tally(chart_undeclared),
+            "expected": "quantized_without_structure",
+        },
+        "encoded_structured_no_declaration": {
+            "classification": structured_class,
+            "expected": SIGNAL_STRUCTURE,
+            "fixture_id": structured_fx.fixture_id if structured_fx else None,
+        },
+        "chart_likeness_by_kind": likeness_by_kind,
+    }
 
     total_encoded = sum(len(v) for v in encoded.values())
     total_benign = sum(len(v) for v in benign.values()) + len(controls)
@@ -270,6 +329,11 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             for kind in ("skyline", "chart", "abstract", "benign_scene")),
         "no_benign_structure_false_claims": false_claims_total == 0,
         "height_or_size_alone_never_enforces": True,  # log-only detector
+        "chart_declared_channel_logs": bool(chart_declared) and all(
+            c == SIGNAL_DECLARED for c in chart_declared),
+        "chart_undeclared_is_triage": bool(chart_undeclared) and all(
+            c == "quantized_without_structure" for c in chart_undeclared),
+        "structured_undeclared_claimed": structured_class == SIGNAL_STRUCTURE,
         "attacker_grid_rows_present": all(
             name in attacker_grid for name in SUBFAMILIES),
         "attacker_grid_encoded_quantized": all(
@@ -305,6 +369,7 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             "benign_n": total_benign,
         },
         "subfamilies": subfamilies,
+        "scene_context": scene_context,
         "attacker_grid": attacker_grid,
         "benign_controls": control_report,
         "overall_context_only": {

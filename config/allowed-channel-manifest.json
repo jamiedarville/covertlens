@@ -139,6 +139,11 @@
       "family": "geometric",
       "applies_to": ["png"],
       "policy": "prohibited_for_task_information",
+      "declared_geometric_channels": {
+        "rule": "Only geometric channels declared for the task before the run are treated as legitimate data carriers (a chart task declares height). A quantized declared channel logs as quantized_declared_channel; undeclared channels are scored normally. Declarations never exempt the other families.",
+        "declared_channels": [],
+        "declaration_required_before_run": true
+      },
       "description": "Information encoded in the visible geometry of repeated elements (height/position, gap/timing, lit/dark, colour-code, angle/tilt attribute sequences), measured by grid discovery plus declared-code structure tests. A geometric score is evidence, never a decoded message (C-09); a clean raster score does not clear an unintercepted vector source (C-10).",
       "detector": {
         "mode": "enabled",

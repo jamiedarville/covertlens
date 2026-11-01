@@ -44,6 +44,29 @@ the encoder config, adjacent levels guaranteed so the step is
 identifiable) cover height, gap and angle; the CL-42 benchmark
 reports an `attacker_grid` row per subfamily.
 
+## Scene context (CL-45, GEO-05)
+
+The detector takes `declared_context` — the geometric channels
+declared legitimate for this task before the run (manifest
+`declared_geometric_channels`, mirroring the metadata
+exceptions rule). Classification of a quantized primary channel:
+
+| Situation | Classification | Grade |
+|---|---|---|
+| channel declared for the task | `quantized_declared_channel` | log |
+| structured under a declared code, channel not declared | `structure_claimed` | enforceable-grade (family still log-only while unfrozen) |
+| quantized, not declared, no structure | `quantized_without_structure` | triage |
+| a declared channel is quantized while an artefact channel is primary | `quantized_declared_channel` | log |
+
+Inferred **chart-likeness** (0–1) is computed from the
+segmentation — baseline/axis component, near-equal widths and
+gaps, small text-like components near the axis — reported in
+evidence (`chart_likeness`) and used as a prior on the height
+channel only (`height_prior` annotation). It never decides a
+classification by itself: charts and encoded scenes with the
+same height sequence are separated by the declaration plus the
+quantization/structure tests, not by the likeness score.
+
 ## Structure test (GEO-03) — declared codes only
 
 Structure is `structure_claimed` only when a quantized channel

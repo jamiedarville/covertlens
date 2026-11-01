@@ -45,8 +45,10 @@ GEO_FAMILY = "geometric"
 GEO_CONFIG_VERSION = "1.0.0"
 SIGNAL_STRUCTURE = "structure_claimed"
 SIGNAL_QUANTIZED = "quantized_without_structure"
+SIGNAL_DECLARED = "quantized_declared_channel"
 SIGNAL_WEAK = "weak_signal"
 SIGNAL_NONE = "no_signal"
+GEOMETRIC_CHANNELS = ("height", "gap", "lit", "colour", "angle")
 
 _LIMITATIONS = (
     "quantization alone is not encoding: legitimate charts and "
@@ -342,9 +344,71 @@ def _structure(channel: str, block: dict[str, Any],
     return base
 
 
+def _cv(values: list[float]) -> float:
+    if not values:
+        return 1.0
+    mean = sum(values) / len(values)
+    if mean == 0:
+        return 0.0 if all(v == 0 for v in values) else 1.0
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    return (var ** 0.5) / abs(mean)
+
+
+def chart_likeness(seg: SegmentationResult) -> dict[str, Any]:
+    """Inferred chart-likeness in [0, 1] from segmentation alone (CL-45).
+
+    Features: a long thin horizontal component spanning most
+    elements (axis/baseline), near-equal element widths, near-equal
+    gaps, and small text-like components near the axis. Reported as
+    evidence and used as a prior on the height channel only — never
+    as the sole discriminator (GEO-05).
+    """
+    elements = list(seg.elements)
+    features = {
+        "baseline_axis": 0.0, "equal_widths": 0.0,
+        "equal_gaps": 0.0, "axis_text_marks": 0.0,
+    }
+    if len(elements) < 3:
+        return {"score": 0.0, "features": features, "baseline_present": False}
+    left = min(e["left"] for e in elements)
+    right = max(e["left"] + e["width"] for e in elements)
+    span = max(1, right - left)
+    baseline = None
+    for e in elements:
+        if e["width"] >= 0.6 * span and e["height"] <= 4:
+            baseline = e
+            break
+    if baseline is not None:
+        features["baseline_axis"] = 0.5
+    others = [e for e in elements if e is not baseline]
+    if others:
+        features["equal_widths"] = round(
+            0.20 * max(0.0, 1.0 - _cv([float(e["width"]) for e in others]) / 0.30), 6)
+        gaps = [float(e["gap_to_next"]) for e in others
+                if e.get("gap_to_next") is not None]
+        if len(gaps) >= 2:
+            features["equal_gaps"] = round(
+                0.15 * max(0.0, 1.0 - _cv(gaps) / 0.50), 6)
+    if baseline is not None and others:
+        areas = sorted(e["area"] for e in others)
+        median_area = areas[len(areas) // 2] or 1
+        text_like = sum(
+            1 for e in others
+            if e["area"] <= 0.2 * median_area
+            and abs((e["top"] + e["height"]) - baseline["top"]) <= 8
+        )
+        features["axis_text_marks"] = round(0.15 * min(1.0, text_like / 2.0), 6)
+    return {
+        "score": round(min(1.0, sum(features.values())), 6),
+        "features": features,
+        "baseline_present": baseline is not None,
+    }
+
+
 def analyze_geometric(
     seg: SegmentationResult, config: GeometricConfig | None = None,
     declared_grid: dict[str, dict[str, Any]] | None = None,
+    declared_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Quantization + structure report over one segmentation (no finding
     when segmentation itself failed)."""
@@ -379,14 +443,53 @@ def analyze_geometric(
             "reason": "primary channel is not an applicable, "
                       "sufficiently supported quantized channel",
         }
-    if structure["claimed"]:
+    # Scene context (CL-45, GEO-05): a channel declared for this
+    # task before the run is a legitimate data carrier. Declared +
+    # quantized logs as quantized_declared_channel; structured +
+    # undeclared is the enforceable-grade signal (the family stays
+    # log-only until its thresholds freeze); quantized + undeclared
+    # + unstructured stays triage.
+    declared_channels = set(
+        (declared_context or {}).get("declared_channels") or ())
+    channel_declared = primary_name in declared_channels
+    # A declared channel that is itself quantized marks the scene's
+    # quantization as legitimate even when an artefact channel
+    # (e.g. baseline brightness) out-scores it.
+    declared_quantized = sorted(
+        name for name in declared_channels
+        if name in channels and channels[name].get("quantized")
+        and channels[name].get("applicable")
+    )
+    likeness = chart_likeness(seg)
+    if quantized and channel_declared:
+        # Declared channel: legitimate data carrier, logs only —
+        # even when its sequence is structured.
+        classification = SIGNAL_DECLARED
+        signal_grade = "log_declared_channel"
+    elif structure["claimed"]:
         classification = SIGNAL_STRUCTURE
+        signal_grade = "enforceable_grade"
+    elif quantized and declared_quantized:
+        classification = SIGNAL_DECLARED
+        signal_grade = "log_declared_channel"
     elif quantized:
         classification = SIGNAL_QUANTIZED
+        signal_grade = "triage"
     elif primary["score"] >= active.weak_floor:
         classification = SIGNAL_WEAK
+        signal_grade = "triage"
     else:
         classification = SIGNAL_NONE
+        signal_grade = "none"
+    height_prior = None
+    if primary_name == "height" and likeness["score"] >= 0.7:
+        # Chart-likeness is a prior on the height channel only:
+        # it annotates triage, it never decides a classification.
+        height_prior = (
+            "chart-like scene: height quantization is expected for "
+            "data visualizations; treat as triage unless structure "
+            "is claimed under a declared code"
+        )
     finding = Finding(
         family=GEO_FAMILY,
         detector_name=GEO_DETECTOR_NAME,
@@ -406,6 +509,15 @@ def analyze_geometric(
             "channels": channels,
             "structure": structure,
             "classification": classification,
+            "signal_grade": signal_grade,
+            "chart_likeness": likeness,
+            "declared_context": {
+                "declared_channels": sorted(declared_channels),
+                "context": (declared_context or {}).get("context"),
+                "primary_channel_declared": channel_declared,
+                "declared_quantized_channels": declared_quantized,
+            } if declared_context else None,
+            "height_prior": height_prior,
         },
         limitations=_LIMITATIONS,
     )
@@ -413,13 +525,17 @@ def analyze_geometric(
         "status": "ok",
         "finding": finding,
         "classification": classification,
+        "signal_grade": signal_grade,
         "primary_channel": primary_name,
         "channels": channels,
         "structure": structure,
+        "chart_likeness": likeness,
+        "declared_context": declared_context,
     }
 
 
-def detect_geometric(data: bytes, result: AnalysisResult) -> Finding | None:
+def detect_geometric(data: bytes, result: AnalysisResult,
+                     declared_context: dict[str, Any] | None = None) -> Finding | None:
     """DET-02 finding for one parsed PNG; None when not applicable.
 
     Attached by `analyze_all_bytes` as the fourth channel family
@@ -431,16 +547,18 @@ def detect_geometric(data: bytes, result: AnalysisResult) -> Finding | None:
         return None
     if result.media_kind != "png":
         return None
-    return analyze_geometric_bytes(data).get("finding")
+    return analyze_geometric_bytes(
+        data, declared_context=declared_context).get("finding")
 
 
 def analyze_geometric_bytes(
     data: bytes, config: GeometricConfig | None = None,
     declared_grid: dict[str, dict[str, Any]] | None = None,
+    declared_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Segment original bytes and run both geometric tests."""
     seg = segment_image(data)
-    report = analyze_geometric(seg, config, declared_grid)
+    report = analyze_geometric(seg, config, declared_grid, declared_context)
     report["segmentation"] = seg.to_dict()
     return report
 
@@ -478,4 +596,10 @@ def validate_geometric_report(report: dict[str, Any]) -> list[str]:
     if report.get("classification") == SIGNAL_QUANTIZED:
         need(structure.get("claimed") is False,
              "quantized_without_structure must not claim structure")
+    if report.get("classification") == SIGNAL_DECLARED:
+        declared = evidence.get("declared_context") or {}
+        need(declared.get("primary_channel_declared") is True
+             or bool(declared.get("declared_quantized_channels")),
+             "quantized_declared_channel requires a declared, "
+             "quantized channel for the task (CL-45)")
     return errors

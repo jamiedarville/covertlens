@@ -97,6 +97,15 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             if isinstance(flag_at, (int, float)) and isinstance(quar_at, (int, float)):
                 need(quar_at >= flag_at,
                      f"{prefix} enforcement quarantine_at must be >= triage flag_at")
+        if family == "geometric" and "declared_geometric_channels" in channel:
+            declared = channel.get("declared_geometric_channels") or {}
+            names = declared.get("declared_channels") or []
+            need(all(n in GEOMETRIC_CHANNEL_NAMES for n in names),
+                 f"{prefix}.declared_geometric_channels must name "
+                 f"geometric channels {GEOMETRIC_CHANNEL_NAMES}")
+            need(declared.get("declaration_required_before_run") is True,
+                 f"{prefix}.declared_geometric_channels must require "
+                 "declaration before the run (CL-45)")
         behaviour = channel.get("error_behavior") or {}
         for key in ("on_parse_error", "on_detector_error", "on_timeout"):
             need(behaviour.get(key) == FAIL_CLOSED,
@@ -123,3 +132,19 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
 
 def channel_families(manifest: dict[str, Any]) -> list[str]:
     return [c["family"] for c in manifest.get("channels", [])]
+
+
+GEOMETRIC_CHANNEL_NAMES = ("height", "gap", "lit", "colour", "angle")
+
+
+def declared_geometric_channels(manifest: dict[str, Any]) -> list[str]:
+    """Geometric channels declared legitimate for the task (CL-45).
+
+    Mirrors the metadata exceptions rule: declarations are made
+    before the run, in the manifest's geometric channel block.
+    """
+    for channel in manifest.get("channels") or []:
+        if isinstance(channel, dict) and channel.get("family") == "geometric":
+            block = channel.get("declared_geometric_channels") or {}
+            return list(block.get("declared_channels") or [])
+    return []

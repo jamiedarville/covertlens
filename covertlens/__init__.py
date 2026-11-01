@@ -59,7 +59,12 @@ from .lsb import (
     validate_benchmark,
 )
 from .integrity import AnalysisCache, context_fingerprint
-from .manifest import channel_families, load_manifest, validate_manifest
+from .manifest import (
+    channel_families,
+    declared_geometric_channels,
+    load_manifest,
+    validate_manifest,
+)
 from .metadata import (
     METADATA_DETECTOR_NAME,
     METADATA_DETECTOR_VERSION,
@@ -146,6 +151,7 @@ from .geometric import (
     GeometricConfig,
     analyze_geometric,
     analyze_geometric_bytes,
+    chart_likeness,
     detect_geometric,
     validate_geometric_report,
 )
@@ -315,6 +321,7 @@ __all__ = [
     "Principal",
     "RuntimeConfig",
     "channel_families",
+    "declared_geometric_channels",
     "AnalysisCache",
     "build_pin",
     "calibrate_family",
@@ -358,6 +365,7 @@ __all__ = [
     "register_source_lineage",
     "validate_vector_binding",
     "analyze_geometric",
+    "chart_likeness",
     "detect_geometric",
     "analyze_geometric_bytes",
     "validate_geometric_report",
