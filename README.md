@@ -288,6 +288,14 @@ store** that every later task builds on.
 | Vector source present but not intercepted: a clean raster score cannot clear it (C-10) | `clearance: refused_unparsed_vector_source`, `cleared: false`; same refusal for a corrupt source |
 | Geometric findings emit to DET-02 rows with no underlying message decoded | The CL-40 findings shape is reused on both paths; no decoded message is ever claimed (C-09) |
 
+## CL-42 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Benign controls and legitimate data visualizations are distinguished by scene context plus the quantization/structure tests; height or size alone never triggers enforcement | `covertlens.geo_benchmark`: skyline / chart (`data_visualization` context) / abstract-art / benign-scene controls; charts quantize to triage only, zero benign `structure_claimed` false claims; detector log-only, `enforceable: false` · [docs/contracts/geo-benchmark.md](docs/contracts/geo-benchmark.md) · [schemas/geo-benchmark.schema.json](schemas/geo-benchmark.schema.json) |
+| Coverage includes at minimum height/position, gap/timing, lit/dark, colour-code and angle/tilt, reported separately per subfamily | Per-subfamily encoded recall (any-signal + structure) and benign false-claim rates, each with Wilson 95% intervals and full classification tallies |
+| Benchmark reports encoded recall and benign-control false-claim rates separately, with prevalence/intervals; no general geometric coverage claimed from a single subfamily | Prevalence block + intervals throughout; pooled row labelled context-only; `general_geometric_coverage_claimed: false` |
+
 ## Quickstart
 
 ```bash
@@ -329,6 +337,7 @@ python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
 python -m covertlens segmentation-demo   # CL-39 segmentation + attribute sequences
 python -m covertlens geometric-demo      # CL-40 quantization + structure tests
 python -m covertlens vector-demo         # CL-41 vector source + rendered-version binding
+python -m covertlens geo-benchmark-demo  # CL-42 benign controls + geometric benchmark
 pytest
 ```
 

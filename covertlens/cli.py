@@ -36,6 +36,7 @@ Usage:
     python -m covertlens segmentation-demo
     python -m covertlens geometric-demo
     python -m covertlens vector-demo
+    python -m covertlens geo-benchmark-demo
 """
 
 from __future__ import annotations
@@ -71,6 +72,7 @@ from .geometric_fixtures import (
 from .handoff import run_handoff_verification
 from .geometric import analyze_geometric_bytes
 from .vector_source import analyze_with_source, build_vector_source
+from .geo_benchmark import run_geo_benchmark, validate_geo_benchmark
 from .segmentation import segment_image
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
@@ -634,6 +636,28 @@ def main(argv: list[str] | None = None) -> int:
             "raster_fallback": analyze_with_source(encoded, None)["vector_status"],
         }, indent=2, default=str))
         return 0
+
+    if command == "geo-benchmark-demo":
+        report = run_geo_benchmark()
+        errors = validate_geo_benchmark(report)
+        print(json.dumps({
+            "benchmark_passed": report["benchmark_passed"],
+            "validation_errors": errors,
+            "prevalence": report["prevalence"],
+            "recall_any_signal_by_subfamily": {
+                name: block["encoded"]["recall_any_signal"]["rate"]
+                for name, block in report["subfamilies"].items()
+            },
+            "benign_false_structure_claims": report[
+                "overall_context_only"]["benign_false_structure_claims"],
+            "controls_false_claims": {
+                kind: block["false_structure_claims"]["successes"]
+                for kind, block in report["benign_controls"].items()
+            },
+            "general_geometric_coverage_claimed": report[
+                "coverage"]["general_geometric_coverage_claimed"],
+        }, indent=2, default=str))
+        return 0 if (report["benchmark_passed"] and not errors) else 1
 
     if command == "sequence-demo":
         def feats(n, actions, peak):

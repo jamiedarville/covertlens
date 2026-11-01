@@ -145,6 +145,11 @@ from .geometric import (
     analyze_geometric_bytes,
     validate_geometric_report,
 )
+from .geo_benchmark import (
+    benign_controls,
+    run_geo_benchmark,
+    validate_geo_benchmark,
+)
 from .vector_source import (
     analyze_with_source,
     build_vector_source,
@@ -336,6 +341,9 @@ __all__ = [
     "SegmentationResult",
     "GeometricConfig",
     "analyze_with_source",
+    "benign_controls",
+    "run_geo_benchmark",
+    "validate_geo_benchmark",
     "build_vector_source",
     "parse_vector_source",
     "register_source_lineage",
