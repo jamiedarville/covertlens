@@ -65,6 +65,12 @@ _LIMITATIONS = (
     "exists); this detector cannot withhold delivery",
 )
 
+_JPEG_LIMITATION = (
+    "jpeg input: elements were segmented from a lossy pixel "
+    "reconstruction, so measured attributes are approximate "
+    "(CL-52 fidelity limitation)"
+)
+
 # Committed word list (CL-46): trains the character trigram model
 # used by every text-producing declared code. The file's hash is
 # recorded in the detector config so a model change is a config
@@ -799,6 +805,7 @@ def analyze_geometric(
             "elements": len(seg.elements),
             "channels_tested": sorted(channels),
             "segmenter": f"{seg.config.name} {seg.config.version}",
+            "media_kind": seg.media_kind,
             "config_version": active.version,
             "config_status": active.status,
         },
@@ -820,7 +827,8 @@ def analyze_geometric(
             else None,
             "height_prior": height_prior,
         },
-        limitations=_LIMITATIONS,
+        limitations=_LIMITATIONS
+        + ((_JPEG_LIMITATION,) if seg.media_kind == "jpeg" else ()),
     )
     return {
         "status": "ok",
@@ -839,16 +847,17 @@ def analyze_geometric(
 def detect_geometric(
     data: bytes, result: AnalysisResult, declared_context: dict[str, Any] | None = None
 ) -> Finding | None:
-    """DET-02 finding for one parsed PNG; None when not applicable.
+    """DET-02 finding for one parsed raster; None when not applicable.
 
     Attached by `analyze_all_bytes` as the fourth channel family
-    (CL-44). JPEG and failed parses get no geometric finding: the
-    segmenter supports PNG rasters only and failures are never
-    converted into clean scores (C-02).
+    (CL-44). PNG is segmented losslessly; baseline JPEG is
+    segmented from a lossy reconstruction with a recorded fidelity
+    limitation (CL-52). Failed parses get no geometric finding:
+    failures are never converted into clean scores (C-02).
     """
     if result.status is not AnalysisStatus.PARSED:
         return None
-    if result.media_kind != "png":
+    if result.media_kind not in ("png", "jpeg"):
         return None
     return analyze_geometric_bytes(data, declared_context=declared_context).get(
         "finding"
