@@ -261,6 +261,14 @@ store** that every later task builds on.
 | Benign negatives and generator variation included | Legitimate chart (grid-snapped by design, GEO-05), unencoded scene, benign edit, generator variation |
 | Scorer ground truth separate; lineage/units/split rules match the initial dataset | `geo_ground_truth` is scorer-role-gated (DT-04); `assign_geo_splits` follows the CL-10 lineage-group policy |
 
+## CL-39 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Repeated elements are segmented in reading order on original raster bytes | `covertlens.segmentation.segment_image` (connected components, row-grouped reading order; PNG at native resolution, JPEG explicitly `unsupported_media`) · [docs/contracts/segmentation.md](docs/contracts/segmentation.md) · [schemas/segmentation.schema.json](schemas/segmentation.schema.json) |
+| A numeric attribute sequence is extracted per element | Per-element height/top/width/gap/angle/colour-index/brightness records plus `sequences()` view |
+| Segmentation method, tolerances and failure modes are recorded | Versioned `SegmenterConfig` (geometric-segmenter 1.0.0), tolerance block and failure-mode table in every result; failures are explicit statuses |
+
 ## Quickstart
 
 ```bash
@@ -299,6 +307,7 @@ python -m covertlens robustness-demo     # CL-34 adaptive/unseen-config evaluati
 python -m covertlens scorecard-demo      # CL-35 MVP release scorecard + decision
 python -m covertlens handoff-demo        # CL-36 ops/rollback/handoff verification
 python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
+python -m covertlens segmentation-demo   # CL-39 segmentation + attribute sequences
 pytest
 ```
 

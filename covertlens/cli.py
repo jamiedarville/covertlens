@@ -33,6 +33,7 @@ Usage:
     python -m covertlens scorecard-demo
     python -m covertlens handoff-demo
     python -m covertlens geo-fixtures-demo
+    python -m covertlens segmentation-demo
 """
 
 from __future__ import annotations
@@ -65,6 +66,7 @@ from .geometric_fixtures import (
     verify_geo_fixture,
 )
 from .handoff import run_handoff_verification
+from .segmentation import segment_image
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
 from .pilot import run_pilot
@@ -574,6 +576,24 @@ def main(argv: list[str] | None = None) -> int:
                        for s in sorted(set(assignments.values()))},
             "split_errors": validate_geo_splits(fixtures, assignments),
         }, indent=2))
+        return 0
+
+    if command == "segmentation-demo":
+        fixtures = build_geo_dataset()
+        out = {}
+        for subfamily in ("height_position", "gap_timing", "lit_dark",
+                          "colour_code", "angle_tilt"):
+            fixture = next(
+                f for f in fixtures
+                if f.subfamily == subfamily and f.role == "encoded"
+            )
+            result = segment_image(fixture.data)
+            out[subfamily] = {
+                "status": result.status,
+                "elements": len(result.elements),
+                "heights": result.sequence("height"),
+            }
+        print(json.dumps(out, indent=2))
         return 0
 
     if command == "sequence-demo":

@@ -138,6 +138,12 @@ from .geometric_fixtures import (
     verify_geo_fixture,
 )
 from .handoff import run_handoff_verification, validate_handoff
+from .segmentation import (
+    SegmentationResult,
+    SegmenterConfig,
+    segment_image,
+    validate_segmentation,
+)
 from .scorecard import build_scorecard, load_scorecard, validate_scorecard
 from .pilot import (
     PilotTrace,
@@ -312,6 +318,10 @@ __all__ = [
     "segment_elements",
     "validate_geo_splits",
     "verify_geo_fixture",
+    "SegmentationResult",
+    "SegmenterConfig",
+    "segment_image",
+    "validate_segmentation",
     "validate_handoff",
     "load_scorecard",
     "validate_scorecard",

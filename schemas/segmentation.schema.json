@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/segmentation.schema.json",
+  "title": "CovertLens geometric segmentation result (CL-39)",
+  "type": "object",
+  "required": ["schema", "segmenter", "status", "elements", "tolerances"],
+  "properties": {
+    "schema": {"const": "covertlens.segmentation"},
+    "segmenter": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {"name": {"const": "geometric-segmenter"}}
+    },
+    "status": {
+      "enum": ["ok", "no_foreground", "too_few_elements",
+               "unsupported_media", "limit_exceeded", "corrupt_input"]
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "left", "top", "width", "height",
+                     "gap_to_next", "angle_deg", "colour_index", "brightness"]
+      }
+    },
+    "decoded_message": {"type": "null"}
+  }
+}
