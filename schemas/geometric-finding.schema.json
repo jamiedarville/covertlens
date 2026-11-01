@@ -16,7 +16,7 @@
         "label": {"const": "evidence_aid_not_decoded_message"},
         "classification": {
           "enum": ["structure_claimed", "quantized_without_structure",
-                   "weak_signal", "no_signal"]
+                   "quantized_declared_channel", "weak_signal", "no_signal"]
         },
         "channels": {
           "type": "object",

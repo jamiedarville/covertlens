@@ -317,6 +317,15 @@ store** that every later task builds on.
 | Scorecard gains a geometric section citing the CL-42 benchmark, per subfamily, never pooled | `sections.geometric` in `build_scorecard` and the republished `config/release-scorecard.json` (scorecard 1.1.0) |
 | REQUIREMENTS.md traces the family; `corrupt_source` is a recorded segmentation status | GEO-01..07 traced to CL-38..CL-44 with C-09/C-10 marked active; `corrupt_source` added to `segmentation.FAILURE_MODES` |
 
+## CL-45 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Scene context is a detector input: task-declared geometric channels are legitimate carriers | Manifest `declared_geometric_channels` on the geometric channel (mirrors `allowed_metadata_exceptions`; declaration required before the run; validated channel names); `analyze_geometric(..., declared_context=...)` |
+| Classification rule distinguishes declared charts from encoded scenes | Declared + quantized → `quantized_declared_channel` (log); structured + undeclared → `structure_claimed` (`enforceable_grade`, family still log-only while unfrozen); quantized + undeclared + unstructured → `quantized_without_structure` (triage) |
+| Chart-likeness is inferred from segmentation and used as a height-only prior, never the sole discriminator | `chart_likeness` (baseline/axis, equal widths/gaps, axis text marks) in every finding's evidence; ≥ 0.7 on chart controls, ≤ 0.3 on skyline/abstract/benign-scene controls; `height_prior` annotation only |
+| Benchmark rows prove the three cases | `scene_context` section in `run_geo_benchmark`: chart with declared height, chart undeclared, encoded structured scene without declaration |
+
 ## Quickstart
 
 ```bash
