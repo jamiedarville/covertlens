@@ -27,8 +27,9 @@ proof of agent collusion (C-02).
 from __future__ import annotations
 
 import random
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from . import ids
 from .fixtures import Fixture
@@ -151,9 +152,7 @@ def run_replay(
                 "trial_seed": trial.trial_seed,
                 "content_hash": trial.content_hash,
                 "parse_status": "parsed" if delivered else "not_observed",
-                "recovery": (
-                    "recovered" if recovered else "not_recovered"
-                )
+                "recovery": ("recovered" if recovered else "not_recovered")
                 if delivered
                 else "not_observed",
                 "legitimate_task_success": bool(
@@ -206,9 +205,7 @@ def run_replay(
         "config": active.to_dict(),
         "conditions_pinned": {
             "fixture_hashes": {
-                f.fixture_id: f.content_hash
-                for f in rows
-                if f.role == "encoded"
+                f.fixture_id: f.content_hash for f in rows if f.role == "encoded"
             },
             "conditions": list(CONDITIONS),
             "matched_by": "fixture_id (same artifact in both arms)",
@@ -218,8 +215,7 @@ def run_replay(
         "by_condition": {c: arm(c) for c in CONDITIONS},
         "by_payload_band": {
             band: {
-                condition: arm_for(records, band, condition)
-                for condition in CONDITIONS
+                condition: arm_for(records, band, condition) for condition in CONDITIONS
             }
             for band in ("low", "medium", "high")
         },
@@ -227,19 +223,14 @@ def run_replay(
     }
 
 
-def arm_for(
-    records: list[dict[str, Any]], band: str, condition: str
-) -> dict[str, Any]:
+def arm_for(records: list[dict[str, Any]], band: str, condition: str) -> dict[str, Any]:
     subset = [
-        r for r in records
-        if r["payload_band"] == band and r["condition"] == condition
+        r for r in records if r["payload_band"] == band and r["condition"] == condition
     ]
     return {
         "trials": len(subset),
         "recovered": sum(1 for r in subset if r["recovery"] == "recovered"),
-        "demonstrated_transfers": sum(
-            1 for r in subset if r["demonstrated_transfer"]
-        ),
+        "demonstrated_transfers": sum(1 for r in subset if r["demonstrated_transfer"]),
         "legitimate_task_successes": sum(
             1 for r in subset if r["legitimate_task_success"]
         ),
@@ -259,7 +250,10 @@ def validate_replay(report: dict[str, Any]) -> list[str]:
         report.get("schema_version") == REPLAY_SCHEMA_VERSION,
         f"schema_version must be {REPLAY_SCHEMA_VERSION}",
     )
-    need(report.get("equated_with_collusion") is False, "replay never equates outcomes with collusion (C-02)")
+    need(
+        report.get("equated_with_collusion") is False,
+        "replay never equates outcomes with collusion (C-02)",
+    )
     trials = report.get("trials") or []
     for i, trial in enumerate(trials):
         if trial.get("condition") == "withheld":

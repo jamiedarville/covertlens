@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Iterable
+from typing import Any
 
 from .fixtures import Fixture
 from .parsing import (
@@ -51,8 +52,7 @@ PAYLOAD_BANDS = ("none", "low", "medium", "high")
 _LIMITATIONS = (
     "global pairs-of-values chi-square over sample LSBs; LSB-matching "
     "(+/-1) and content-adaptive embedding may evade it",
-    "calibrated only on procedural synthetic covers; natural-image "
-    "covers are untested",
+    "calibrated only on procedural synthetic covers; natural-image covers are untested",
     "score is evidence, not demonstrated collusion (C-02); thresholds "
     "unfrozen until CL-27",
 )
@@ -98,8 +98,7 @@ def _pov_statistics(
             pairs_used += 1
             expected = pair_total / 2.0
             chi_square += (
-                (counts[2 * k] - expected) ** 2
-                + (counts[2 * k + 1] - expected) ** 2
+                (counts[2 * k] - expected) ** 2 + (counts[2 * k + 1] - expected) ** 2
             ) / expected
     degrees = pairs_used - 1 if pairs_used else 0
     if pairs_used < 2 or chi_square <= 0:
@@ -110,13 +109,9 @@ def _pov_statistics(
         "statistic": "pairs_of_values_chi_square",
         "chi_square": round(chi_square, 6),
         "degrees_of_freedom": degrees,
-        "chi_square_per_df": (
-            round(chi_square / degrees, 6) if degrees else 0.0
-        ),
+        "chi_square_per_df": (round(chi_square / degrees, 6) if degrees else 0.0),
         "pairs_used": pairs_used,
-        "lsb_one_fraction": (
-            round(sum(counts[1::2]) / total, 6) if total else 0.0
-        ),
+        "lsb_one_fraction": (round(sum(counts[1::2]) / total, 6) if total else 0.0),
         "pov_imbalance": round(imbalance / total, 6) if total else 0.0,
         "detector_config_version": config.version,
     }
@@ -143,7 +138,9 @@ def detect_lsb(
     channels = int(image.get("channels") or 1)
     width = int(image.get("width") or 0)
     height = int(image.get("height") or 0)
-    pixels_examined = width * height if width and height else len(samples) // max(channels, 1)
+    pixels_examined = (
+        width * height if width and height else len(samples) // max(channels, 1)
+    )
     coverage = {
         "applicable": True,
         "media_kind": "png",
@@ -259,9 +256,7 @@ def _bootstrap_interval(
     estimate = (
         _roc_auc(positive, negative)
         if metric == "roc_auc"
-        else _average_precision(
-            [(s, 1) for s in positive] + [(s, 0) for s in negative]
-        )
+        else _average_precision([(s, 1) for s in positive] + [(s, 0) for s in negative])
     )
     if estimate is None or replicates <= 0:
         return {
@@ -357,8 +352,12 @@ def benchmark_lsb(
 
     sweep: list[dict[str, Any]] = []
     for threshold in sweep_thresholds:
-        tp = sum(1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold)
-        fp = sum(1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold)
+        tp = sum(
+            1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold
+        )
+        fp = sum(
+            1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold
+        )
         tn = sum(1 for r in scored if r["label"] == 0 and float(r["score"]) < threshold)
         fn = sum(1 for r in scored if r["label"] == 1 and float(r["score"]) < threshold)
         sweep.append(
@@ -451,7 +450,9 @@ def validate_benchmark(report: dict[str, Any]) -> list[str]:
     detector = report.get("detector") or {}
     need(detector.get("family") == FAMILY, f"detector.family must be {FAMILY}")
     need(detector.get("name") == LSB_DETECTOR_NAME, "detector.name is required")
-    need(detector.get("version") == LSB_DETECTOR_VERSION, "detector.version is required")
+    need(
+        detector.get("version") == LSB_DETECTOR_VERSION, "detector.version is required"
+    )
     need(
         (detector.get("config") or {}).get("version") == CONFIG_VERSION,
         "detector.config.version is required",
@@ -461,14 +462,19 @@ def validate_benchmark(report: dict[str, Any]) -> list[str]:
         "thresholds_status must stay unfrozen_placeholder until CL-27",
     )
     for band in PAYLOAD_BANDS:
-        need(band in (report.get("by_payload_band") or {}), f"by_payload_band.{band} is required")
+        need(
+            band in (report.get("by_payload_band") or {}),
+            f"by_payload_band.{band} is required",
+        )
     for key in ("roc_auc", "pr_auc"):
         block = report.get(key) or {}
         estimate = block.get("estimate")
         if estimate is not None:
             need(0.0 <= float(estimate) <= 1.0, f"{key}.estimate must lie in [0, 1]")
             need(
-                float(block.get("ci_low", -1)) <= float(estimate) <= float(block.get("ci_high", 2)),
+                float(block.get("ci_low", -1))
+                <= float(estimate)
+                <= float(block.get("ci_high", 2)),
                 f"{key} interval must bracket its estimate",
             )
     for i, point in enumerate(report.get("sweep") or []):
@@ -476,9 +482,14 @@ def validate_benchmark(report: dict[str, Any]) -> list[str]:
             block = point.get(name) or {}
             estimate = block.get("estimate")
             if estimate is not None:
-                need(0.0 <= float(estimate) <= 1.0, f"sweep[{i}].{name} must lie in [0, 1]")
                 need(
-                    float(block.get("ci_low", -1)) <= float(estimate) <= float(block.get("ci_high", 2)),
+                    0.0 <= float(estimate) <= 1.0,
+                    f"sweep[{i}].{name} must lie in [0, 1]",
+                )
+                need(
+                    float(block.get("ci_low", -1))
+                    <= float(estimate)
+                    <= float(block.get("ci_high", 2)),
                     f"sweep[{i}].{name} interval must bracket its estimate",
                 )
         need(

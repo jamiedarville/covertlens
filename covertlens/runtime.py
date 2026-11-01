@@ -22,10 +22,11 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .splits import scorer_ground_truth
 from .store import ArtifactStore
@@ -68,26 +69,46 @@ def validate_runtime_policy(policy: dict[str, Any]) -> list[str]:
             errors.append(msg)
 
     need(bool(policy.get("policy_id")), "policy_id is required")
-    need(policy.get("internal_only") is True, "policy must be internal_only (internal runtime)")
-    need(policy.get("default") == "deny", "default permission must be deny (fail closed)")
+    need(
+        policy.get("internal_only") is True,
+        "policy must be internal_only (internal runtime)",
+    )
+    need(
+        policy.get("default") == "deny", "default permission must be deny (fail closed)"
+    )
     roles = policy.get("roles") or {}
     known = set(policy.get("permissions") or PERMISSIONS)
     for role, grant in roles.items():
         for permission in (grant or {}).get("allow") or []:
-            need(permission in known, f"roles.{role} grants unknown permission {permission}")
-    need(not (roles.get("agent") or {}).get("allow"),
-         "agent role must hold no evidence permissions (run participants)")
+            need(
+                permission in known,
+                f"roles.{role} grants unknown permission {permission}",
+            )
+    need(
+        not (roles.get("agent") or {}).get("allow"),
+        "agent role must hold no evidence permissions (run participants)",
+    )
     payload_holders = [
-        role for role, grant in roles.items()
+        role
+        for role, grant in roles.items()
         if "payload.read" in ((grant or {}).get("allow") or [])
     ]
     need(payload_holders == ["scorer"], "payload.read must be scorer-only (DT-04)")
     audit = policy.get("audit") or {}
-    need(audit.get("hash_chain") is True, "audit.hash_chain must be true (tamper evidence)")
-    need(audit.get("retention") == "dataset_lifetime",
-         "audit.retention must be dataset_lifetime (C-01)")
+    need(
+        audit.get("hash_chain") is True,
+        "audit.hash_chain must be true (tamper evidence)",
+    )
+    need(
+        audit.get("retention") == "dataset_lifetime",
+        "audit.retention must be dataset_lifetime (C-01)",
+    )
     retirement = policy.get("retirement") or {}
-    for key in ("requires_approval", "approver_must_differ_from_requester", "bundle_before_delete"):
+    for key in (
+        "requires_approval",
+        "approver_must_differ_from_requester",
+        "bundle_before_delete",
+    ):
         need(retirement.get(key) is True, f"retirement.{key} must be true")
     return errors
 
@@ -113,13 +134,17 @@ def role_allows(policy: dict[str, Any], principal: Principal, permission: str) -
     )
 
 
-def can(policy: dict[str, Any], principal: Principal, dataset_id: str, permission: str) -> bool:
+def can(
+    policy: dict[str, Any], principal: Principal, dataset_id: str, permission: str
+) -> bool:
     """Dataset-scoped, deny-by-default permission check."""
-    return dataset_id in principal.datasets and role_allows(policy, principal, permission)
+    return dataset_id in principal.datasets and role_allows(
+        policy, principal, permission
+    )
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass(frozen=True)
@@ -162,7 +187,7 @@ class AuditLog:
     ) -> AuditEntry:
         seq = len(self._entries)
         prev_hash = self.head_hash
-        body = {
+        body: dict[str, Any] = {
             "seq": seq,
             "occurred_at": occurred_at or _now(),
             "actor_id": actor_id,
@@ -172,9 +197,10 @@ class AuditLog:
             "detail": detail or {},
             "prev_hash": prev_hash,
         }
-        entry_hash = "sha256:" + hashlib.sha256(
-            json.dumps(body, sort_keys=True).encode()
-        ).hexdigest()
+        entry_hash = (
+            "sha256:"
+            + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+        )
         entry = AuditEntry(
             entry_id=f"aud_{seq:06d}",
             entry_hash=entry_hash,
@@ -198,9 +224,10 @@ class AuditLog:
                 "detail": entry.detail,
                 "prev_hash": entry.prev_hash,
             }
-            digest = "sha256:" + hashlib.sha256(
-                json.dumps(body, sort_keys=True).encode()
-            ).hexdigest()
+            digest = (
+                "sha256:"
+                + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+            )
             if digest != entry.entry_hash:
                 return False
             prev_hash = entry.entry_hash
@@ -228,8 +255,11 @@ class EvidenceGateway:
         if can(self._policy, principal, dataset_id, permission):
             return
         self._audit.append(
-            actor_id=principal.actor_id, action=action, dataset_id=dataset_id,
-            outcome="denied", detail={"permission": permission},
+            actor_id=principal.actor_id,
+            action=action,
+            dataset_id=dataset_id,
+            outcome="denied",
+            detail={"permission": permission},
         )
         raise PermissionError(
             f"{principal.actor_id} lacks {permission} on {dataset_id}"
@@ -248,8 +278,10 @@ class EvidenceGateway:
             artifact_version_id, actor_id=principal.actor_id, purpose=purpose
         )
         self._audit.append(
-            actor_id=principal.actor_id, action="evidence.read",
-            dataset_id=dataset_id, outcome="allowed",
+            actor_id=principal.actor_id,
+            action="evidence.read",
+            dataset_id=dataset_id,
+            outcome="allowed",
             detail={"artifact_version_id": artifact_version_id, "purpose": purpose},
         )
         return data
@@ -269,7 +301,8 @@ class EvidenceGateway:
         if not candidate or not candidate.get("text"):
             return None
         digest = hashlib.sha256(
-            json.dumps(candidate, sort_keys=True).encode()).hexdigest()
+            json.dumps(candidate, sort_keys=True).encode()
+        ).hexdigest()
         decode_id = f"cand_{digest[:12]}"
         self._candidate_decodes[decode_id] = {
             "decode_id": decode_id,
@@ -279,11 +312,16 @@ class EvidenceGateway:
             "text": candidate["text"],
         }
         self._audit.append(
-            actor_id="geometric-detector", action="candidate_decode.write",
-            dataset_id=dataset_id, outcome="recorded",
-            detail={"decode_id": decode_id, "code": candidate.get("code"),
-                    "text_length": len(candidate["text"]),
-                    "artifact_version_id": artifact_version_id},
+            actor_id="geometric-detector",
+            action="candidate_decode.write",
+            dataset_id=dataset_id,
+            outcome="recorded",
+            detail={
+                "decode_id": decode_id,
+                "code": candidate.get("code"),
+                "text_length": len(candidate["text"]),
+                "artifact_version_id": artifact_version_id,
+            },
         )
         return decode_id
 
@@ -294,14 +332,17 @@ class EvidenceGateway:
         decode_id: str,
     ) -> dict[str, Any]:
         """Reviewer-only read of a candidate decode (audited, R-08)."""
-        self._gate(principal, dataset_id, "candidate.decode.read",
-                   "candidate_decode.read")
+        self._gate(
+            principal, dataset_id, "candidate.decode.read", "candidate_decode.read"
+        )
         decode = self._candidate_decodes.get(decode_id)
         if decode is None or decode["dataset_id"] != dataset_id:
             raise KeyError(f"unknown candidate decode {decode_id}")
         self._audit.append(
-            actor_id=principal.actor_id, action="candidate_decode.read",
-            dataset_id=dataset_id, outcome="allowed",
+            actor_id=principal.actor_id,
+            action="candidate_decode.read",
+            dataset_id=dataset_id,
+            outcome="allowed",
             detail={"decode_id": decode_id},
         )
         return dict(decode)
@@ -316,8 +357,10 @@ class EvidenceGateway:
         self._gate(principal, dataset_id, "payload.read", "payload.export")
         truth = scorer_ground_truth(fixtures, assignments, role="scorer")
         self._audit.append(
-            actor_id=principal.actor_id, action="payload.export",
-            dataset_id=dataset_id, outcome="allowed",
+            actor_id=principal.actor_id,
+            action="payload.export",
+            dataset_id=dataset_id,
+            outcome="allowed",
             detail={"entries": len(truth)},
         )
         return truth
@@ -342,8 +385,11 @@ class EvidenceGateway:
         }
         self._overrides.append(record)
         self._audit.append(
-            actor_id=principal.actor_id, action="verdict.override",
-            dataset_id=dataset_id, outcome="applied", detail=dict(record),
+            actor_id=principal.actor_id,
+            action="verdict.override",
+            dataset_id=dataset_id,
+            outcome="applied",
+            detail=dict(record),
         )
         return record
 
@@ -379,8 +425,10 @@ class RuntimeConfig:
     ) -> int:
         if not role_allows(self._policy, principal, "config.change"):
             self._audit.append(
-                actor_id=principal.actor_id, action="config.change",
-                dataset_id="runtime", outcome="denied",
+                actor_id=principal.actor_id,
+                action="config.change",
+                dataset_id="runtime",
+                outcome="denied",
                 detail={"key": key, "permission": "config.change"},
             )
             raise PermissionError(f"{principal.actor_id} lacks config.change")
@@ -388,10 +436,17 @@ class RuntimeConfig:
         self._values[key] = value
         self._version += 1
         self._audit.append(
-            actor_id=principal.actor_id, action="config.change",
-            dataset_id="runtime", outcome="applied",
-            detail={"key": key, "old": old, "new": value,
-                    "config_version": self._version, "reason": reason},
+            actor_id=principal.actor_id,
+            action="config.change",
+            dataset_id="runtime",
+            outcome="applied",
+            detail={
+                "key": key,
+                "old": old,
+                "new": value,
+                "config_version": self._version,
+                "reason": reason,
+            },
         )
         return self._version
 
@@ -423,16 +478,21 @@ class DatasetRetirement:
     def request(self, principal: Principal, dataset_id: str, *, reason: str) -> None:
         if not can(self._policy, principal, dataset_id, "retirement.request"):
             self._audit.append(
-                actor_id=principal.actor_id, action="retirement.request",
-                dataset_id=dataset_id, outcome="denied",
+                actor_id=principal.actor_id,
+                action="retirement.request",
+                dataset_id=dataset_id,
+                outcome="denied",
                 detail={"permission": "retirement.request"},
             )
             raise PermissionError(f"{principal.actor_id} lacks retirement.request")
         self._state = "retirement_requested"
         self._requester = principal.actor_id
         self._audit.append(
-            actor_id=principal.actor_id, action="retirement.request",
-            dataset_id=dataset_id, outcome="applied", detail={"reason": reason},
+            actor_id=principal.actor_id,
+            action="retirement.request",
+            dataset_id=dataset_id,
+            outcome="applied",
+            detail={"reason": reason},
         )
 
     def approve(self, principal: Principal, dataset_id: str) -> None:
@@ -442,15 +502,20 @@ class DatasetRetirement:
             raise RuntimeError("no retirement request to approve")
         if principal.actor_id == self._requester:
             self._audit.append(
-                actor_id=principal.actor_id, action="retirement.approve",
-                dataset_id=dataset_id, outcome="denied",
+                actor_id=principal.actor_id,
+                action="retirement.approve",
+                dataset_id=dataset_id,
+                outcome="denied",
                 detail={"reason": "approver must differ from requester"},
             )
             raise PermissionError("approver must differ from requester")
         self._state = "approved"
         self._audit.append(
-            actor_id=principal.actor_id, action="retirement.approve",
-            dataset_id=dataset_id, outcome="applied", detail={},
+            actor_id=principal.actor_id,
+            action="retirement.approve",
+            dataset_id=dataset_id,
+            outcome="applied",
+            detail={},
         )
 
     def reproducibility_bundle(self, dataset_id: str) -> dict[str, Any]:
@@ -475,9 +540,13 @@ class DatasetRetirement:
             shutil.rmtree(self._store_root)
         self._state = "deleted"
         self._audit.append(
-            actor_id=principal.actor_id, action="retirement.execute",
-            dataset_id=dataset_id, outcome="applied",
-            detail={"content_hashes": bundle["content_hashes"],
-                    "config_version": bundle["config_version"]},
+            actor_id=principal.actor_id,
+            action="retirement.execute",
+            dataset_id=dataset_id,
+            outcome="applied",
+            detail={
+                "content_hashes": bundle["content_hashes"],
+                "config_version": bundle["config_version"],
+            },
         )
         return bundle

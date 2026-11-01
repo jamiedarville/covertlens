@@ -23,17 +23,31 @@ from typing import Any
 
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
 SCORECARD_VERSION = "1.2.0"
-SCORECARD_PATH = Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
+SCORECARD_PATH = (
+    Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
+)
 DECISIONS = ("release", "release_with_limitations", "no_release")
 
 _SOURCES = {
     "detection": ("covertlens.frozen-benchmark", "docs/contracts/frozen-benchmark.md"),
-    "latency": ("covertlens.latency-reliability", "docs/contracts/latency-reliability.md"),
-    "gate_trace": ("covertlens.route-trace-audit", "docs/contracts/route-trace-audit.md"),
+    "latency": (
+        "covertlens.latency-reliability",
+        "docs/contracts/latency-reliability.md",
+    ),
+    "gate_trace": (
+        "covertlens.route-trace-audit",
+        "docs/contracts/route-trace-audit.md",
+    ),
     "exports": ("covertlens.review-export", "docs/contracts/review-exports.md"),
     "pilot": ("covertlens.seeded-pilot", "docs/contracts/seeded-pilot.md"),
-    "ablations": ("covertlens.ablations-prevention", "docs/contracts/ablations-prevention.md"),
-    "robustness": ("covertlens.robustness-evaluation", "docs/contracts/robustness-evaluation.md"),
+    "ablations": (
+        "covertlens.ablations-prevention",
+        "docs/contracts/ablations-prevention.md",
+    ),
+    "robustness": (
+        "covertlens.robustness-evaluation",
+        "docs/contracts/robustness-evaluation.md",
+    ),
     "geometric": ("covertlens.geo-benchmark", "docs/contracts/geo-benchmark.md"),
 }
 
@@ -56,11 +70,15 @@ def build_scorecard() -> dict[str, Any]:
 
     frozen = run_frozen_evaluation()
     latency = run_reliability_report()
-    pilot = run_pilot(adjudications={
-        "uns-1": {"disposition": "suspected",
-                  "note": "strong DCT evidence; no independent basis yet"},
-        "uns-5": {"disposition": "benign", "note": "clean control pattern"},
-    })
+    pilot = run_pilot(
+        adjudications={
+            "uns-1": {
+                "disposition": "suspected",
+                "note": "strong DCT evidence; no independent basis yet",
+            },
+            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
+        }
+    )
     ablations = run_ablations()
     audit = run_route_audit()
     exports = run_export_verification()
@@ -97,34 +115,34 @@ def build_scorecard() -> dict[str, Any]:
         {
             "target": "Clean-run false failures <=1% (universal covers)",
             "revision": "Scoped to gradient_noise covers; low-texture "
-                        "covers need detector recalibration first.",
+            "covers need detector recalibration first.",
             "reason": "CL-28 probes: clean smooth PNGs false-fail, "
-                      "blocks JPEGs occasionally withhold.",
+            "blocks JPEGs occasionally withhold.",
         },
         {
             "target": "P95 <=2 s for <=10 MB/20 MP at concurrency 4",
             "revision": "Holds for PNG (incl. 20 MP) and JPEG up to "
-                        "medium sequential; JPEG >=1 MP and the "
-                        "20 MP JPEG envelope deferred pending a "
-                        "faster JPEG path or a re-frozen runtime limit.",
+            "medium sequential; JPEG >=1 MP and the "
+            "20 MP JPEG envelope deferred pending a "
+            "faster JPEG path or a re-frozen runtime limit.",
             "reason": "CL-29 measurements: large/concurrent JPEG "
-                      "reaches the explicit 2 s deadline.",
+            "reaches the explicit 2 s deadline.",
         },
         {
             "target": ">=95% recall per family",
             "revision": "Claimed only within calibrated bands and "
-                        "suite-like payload densities; reduced-rate "
-                        "and larger-image attempts are out of claim.",
+            "suite-like payload densities; reduced-rate "
+            "and larger-image attempts are out of claim.",
             "reason": "CL-28 held-out is high-band only; CL-34 "
-                      "adaptive/larger-image probes evade.",
+            "adaptive/larger-image probes evade.",
         },
         {
             "target": "Metadata payload detection",
             "revision": "Declared-keyword payloads only; allowed-"
-                        "keyword payloads require a policy change "
-                        "before any enforcement claim.",
+            "keyword payloads require a policy change "
+            "before any enforcement claim.",
             "reason": "CL-34 adaptive probe scores 0 under "
-                      "Description/Title keywords (CL-23 design).",
+            "Description/Title keywords (CL-23 design).",
         },
     ]
     return {
@@ -134,125 +152,183 @@ def build_scorecard() -> dict[str, Any]:
         "release": "CovertLens MVP",
         "frozen_config_version": frozen["frozen_config_version"],
         "sections": {
-            "detection_frozen_benchmark": _section("detection", {
-                "per_family": {
-                    family: {
-                        "recall_at_triage": block["recall_at_triage"]["value"],
-                        "recall_wilson95": block["recall_at_triage"]["wilson95"],
-                        "enforcement_precision": block["enforcement_precision"]["value"],
-                        "positives": block["positives"],
-                        "prevalence": block["prevalence"]["value"],
-                    }
-                    for family, block in families.items()
+            "detection_frozen_benchmark": _section(
+                "detection",
+                {
+                    "per_family": {
+                        family: {
+                            "recall_at_triage": block["recall_at_triage"]["value"],
+                            "recall_wilson95": block["recall_at_triage"]["wilson95"],
+                            "enforcement_precision": block["enforcement_precision"][
+                                "value"
+                            ],
+                            "positives": block["positives"],
+                            "prevalence": block["prevalence"]["value"],
+                        }
+                        for family, block in families.items()
+                    },
+                    "clean_runs": frozen["clean_run_stability"]["runs"],
+                    "clean_run_failure_rate": frozen["clean_run_stability"][
+                        "false_failure_rate"
+                    ]["value"],
+                    "clean_triage_flag_rate": frozen["clean_run_stability"][
+                        "flag_rate"
+                    ]["value"],
+                    "targets_met_on_point_estimates": {
+                        "recall": frozen["assessment"]["recall_target_met_by_family"],
+                        "precision": frozen["assessment"][
+                            "precision_target_met_by_family"
+                        ],
+                    },
+                    "claim_scope": frozen["assessment"]["claim_scope"],
                 },
-                "clean_runs": frozen["clean_run_stability"]["runs"],
-                "clean_run_failure_rate":
-                    frozen["clean_run_stability"]["false_failure_rate"]["value"],
-                "clean_triage_flag_rate":
-                    frozen["clean_run_stability"]["flag_rate"]["value"],
-                "targets_met_on_point_estimates": {
-                    "recall": frozen["assessment"]["recall_target_met_by_family"],
-                    "precision": frozen["assessment"]["precision_target_met_by_family"],
+            ),
+            "latency_reliability": _section(
+                "latency",
+                {
+                    "proposal": latency["proposal"],
+                    "classes_met": sorted(
+                        name
+                        for name, met in latency["assessment"][
+                            "proposal_met_by_class"
+                        ].items()
+                        if met
+                    ),
+                    "classes_missed": sorted(
+                        name
+                        for name, met in latency["assessment"][
+                            "proposal_met_by_class"
+                        ].items()
+                        if not met
+                    ),
+                    "p95_by_class": {
+                        f"{row['class']}/{row['media']}": row["p95_s"]
+                        for row in latency_classes
+                    },
+                    "concurrent_p95_s": latency["concurrent"]["p95_s"],
+                    "limits_explicit_and_withholding": latency["assessment"][
+                        "limits_explicit_and_withholding"
+                    ],
+                    "concurrency_access_clean": latency["assessment"][
+                        "concurrency_access_clean"
+                    ],
                 },
-                "claim_scope": frozen["assessment"]["claim_scope"],
-            }),
-            "latency_reliability": _section("latency", {
-                "proposal": latency["proposal"],
-                "classes_met": sorted(
-                    name for name, met in latency["assessment"]["proposal_met_by_class"].items() if met
-                ),
-                "classes_missed": sorted(
-                    name for name, met in latency["assessment"]["proposal_met_by_class"].items() if not met
-                ),
-                "p95_by_class": {
-                    f"{row['class']}/{row['media']}": row["p95_s"]
-                    for row in latency_classes
+            ),
+            "gate_and_trace": _section(
+                "gate_trace",
+                {
+                    "routes_passed": audit["routes_passed"],
+                    "routes_partial": audit["routes_partial"],
+                    "routes_exempt_verified": audit["routes_exempt_verified"],
+                    "coverage_covered": audit["coverage"]["covered"],
+                    "trace_links_all_explained": audit["trace"][
+                        "all_missing_explained"
+                    ],
+                    "gaps": audit["gaps"],
                 },
-                "concurrent_p95_s": latency["concurrent"]["p95_s"],
-                "limits_explicit_and_withholding":
-                    latency["assessment"]["limits_explicit_and_withholding"],
-                "concurrency_access_clean":
-                    latency["assessment"]["concurrency_access_clean"],
-            }),
-            "gate_and_trace": _section("gate_trace", {
-                "routes_passed": audit["routes_passed"],
-                "routes_partial": audit["routes_partial"],
-                "routes_exempt_verified": audit["routes_exempt_verified"],
-                "coverage_covered": audit["coverage"]["covered"],
-                "trace_links_all_explained": audit["trace"]["all_missing_explained"],
-                "gaps": audit["gaps"],
-            }),
-            "evidence_exports": _section("exports", {
-                "package_valid": exports["package_valid"],
-                "audit_chain_valid": exports["verification"]["audit_chain_valid"],
-                "denials": exports["denials"],
-                "exports_logged": exports["verification"]["exports_logged"],
-            }),
-            "pilot_adjudication": _section("pilot", {
-                "seeded_traces": pilot["seeded"]["traces"],
-                "enforcement_withheld": pilot["seeded"]["enforcement"]["withheld"],
-                "seeded_attempts_delivered": len(
-                    pilot["disagreements"]["seeded_attempts_delivered_in_enforcement"]
-                ),
-                "seeded_clean_controls_withheld": len(
-                    pilot["disagreements"]["seeded_clean_controls_withheld"]
-                ),
-                "verdict_changes_between_modes":
-                    pilot["disagreements"]["verdict_changes_between_modes"],
-                "unseeded_unresolved": pilot["review_volume"]["unseeded_unresolved"],
-                "repeated_weak_signal_groups": len(pilot["repeated_weak_signals"]),
-            }),
-            "sequence_value": _section("ablations", {
-                "image_only_auc": ablations["arms"]["image_only"]["auc"],
-                "context_only_auc": ablations["arms"]["context_only"]["auc"],
-                "combined_auc": ablations["arms"]["combined"]["auc"],
-                "interpretation": "enforcement stays image-led; "
-                                  "context is a triage aid (CL-31)",
-            }),
-            "prevention": _section("ablations", {
-                "attempts": prevention["attempts"],
-                "clean_control_legitimate_success_rate":
-                    prevention["clean_controls"]["legitimate_task_success_rate"],
-                "withheld_demonstrated_transfers":
-                    prevention["by_condition"]["withheld"]["demonstrated_transfers"],
-            }),
-            "robustness_bounds": _section("robustness", {
-                "outcomes": robustness["outcomes"],
-                "unresolved": robustness["unresolved"],
-                "separate_from_frozen_benchmark": True,
-            }),
-            "geometric": _section("geometric", {
-                "family": "geometric",
-                "thresholds_status": geo["detector"]["threshold_status"],
-                "enforceable": geo["detector"]["enforceable"],
-                "per_subfamily": {
-                    name: {
-                        "encoded_recall_any_signal":
-                            block["encoded"]["recall_any_signal"]["rate"],
-                        "encoded_recall_any_wilson95":
-                            block["encoded"]["recall_any_signal"]["wilson_95"],
-                        "benign_false_structure_claim_rate":
-                            block["benign"]["false_structure_claims"]["rate"],
-                        "benign_false_structure_claim_wilson95":
-                            block["benign"]["false_structure_claims"]["wilson_95"],
-                    }
-                    for name, block in geo["subfamilies"].items()
+            ),
+            "evidence_exports": _section(
+                "exports",
+                {
+                    "package_valid": exports["package_valid"],
+                    "audit_chain_valid": exports["verification"]["audit_chain_valid"],
+                    "denials": exports["denials"],
+                    "exports_logged": exports["verification"]["exports_logged"],
                 },
-                "attacker_grid": {
-                    name: (
-                        row["encoded_quantized_recall"]["rate"]
-                        if row.get("status") == "evaluated" else row["status"]
-                    )
-                    for name, row in geo["attacker_grid"].items()
+            ),
+            "pilot_adjudication": _section(
+                "pilot",
+                {
+                    "seeded_traces": pilot["seeded"]["traces"],
+                    "enforcement_withheld": pilot["seeded"]["enforcement"]["withheld"],
+                    "seeded_attempts_delivered": len(
+                        pilot["disagreements"][
+                            "seeded_attempts_delivered_in_enforcement"
+                        ]
+                    ),
+                    "seeded_clean_controls_withheld": len(
+                        pilot["disagreements"]["seeded_clean_controls_withheld"]
+                    ),
+                    "verdict_changes_between_modes": pilot["disagreements"][
+                        "verdict_changes_between_modes"
+                    ],
+                    "unseeded_unresolved": pilot["review_volume"][
+                        "unseeded_unresolved"
+                    ],
+                    "repeated_weak_signal_groups": len(pilot["repeated_weak_signals"]),
                 },
-                "benign_controls_false_structure_claims": {
-                    kind: block["false_structure_claims"]["successes"]
-                    for kind, block in geo["benign_controls"].items()
+            ),
+            "sequence_value": _section(
+                "ablations",
+                {
+                    "image_only_auc": ablations["arms"]["image_only"]["auc"],
+                    "context_only_auc": ablations["arms"]["context_only"]["auc"],
+                    "combined_auc": ablations["arms"]["combined"]["auc"],
+                    "interpretation": "enforcement stays image-led; "
+                    "context is a triage aid (CL-31)",
                 },
-                "prevalence": geo["prevalence"],
-                "general_geometric_coverage_claimed":
-                    geo["coverage"]["general_geometric_coverage_claimed"],
-            }),
+            ),
+            "prevention": _section(
+                "ablations",
+                {
+                    "attempts": prevention["attempts"],
+                    "clean_control_legitimate_success_rate": prevention[
+                        "clean_controls"
+                    ]["legitimate_task_success_rate"],
+                    "withheld_demonstrated_transfers": prevention["by_condition"][
+                        "withheld"
+                    ]["demonstrated_transfers"],
+                },
+            ),
+            "robustness_bounds": _section(
+                "robustness",
+                {
+                    "outcomes": robustness["outcomes"],
+                    "unresolved": robustness["unresolved"],
+                    "separate_from_frozen_benchmark": True,
+                },
+            ),
+            "geometric": _section(
+                "geometric",
+                {
+                    "family": "geometric",
+                    "thresholds_status": geo["detector"]["threshold_status"],
+                    "enforceable": geo["detector"]["enforceable"],
+                    "per_subfamily": {
+                        name: {
+                            "encoded_recall_any_signal": block["encoded"][
+                                "recall_any_signal"
+                            ]["rate"],
+                            "encoded_recall_any_wilson95": block["encoded"][
+                                "recall_any_signal"
+                            ]["wilson_95"],
+                            "benign_false_structure_claim_rate": block["benign"][
+                                "false_structure_claims"
+                            ]["rate"],
+                            "benign_false_structure_claim_wilson95": block["benign"][
+                                "false_structure_claims"
+                            ]["wilson_95"],
+                        }
+                        for name, block in geo["subfamilies"].items()
+                    },
+                    "attacker_grid": {
+                        name: (
+                            row["encoded_quantized_recall"]["rate"]
+                            if row.get("status") == "evaluated"
+                            else row["status"]
+                        )
+                        for name, row in geo["attacker_grid"].items()
+                    },
+                    "benign_controls_false_structure_claims": {
+                        kind: block["false_structure_claims"]["successes"]
+                        for kind, block in geo["benign_controls"].items()
+                    },
+                    "prevalence": geo["prevalence"],
+                    "general_geometric_coverage_claimed": geo["coverage"][
+                        "general_geometric_coverage_claimed"
+                    ],
+                },
+            ),
         },
         "decision": {
             "value": "release_with_limitations",
@@ -292,30 +368,52 @@ def validate_scorecard(scorecard: dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
-    need(scorecard.get("schema") == SCORECARD_SCHEMA, f"schema must be {SCORECARD_SCHEMA}")
+    need(
+        scorecard.get("schema") == SCORECARD_SCHEMA,
+        f"schema must be {SCORECARD_SCHEMA}",
+    )
     for name in (
-        "detection_frozen_benchmark", "latency_reliability", "gate_and_trace",
-        "evidence_exports", "pilot_adjudication", "sequence_value",
-        "prevention", "robustness_bounds", "geometric",
+        "detection_frozen_benchmark",
+        "latency_reliability",
+        "gate_and_trace",
+        "evidence_exports",
+        "pilot_adjudication",
+        "sequence_value",
+        "prevention",
+        "robustness_bounds",
+        "geometric",
     ):
         section = (scorecard.get("sections") or {}).get(name)
         need(section is not None, f"sections.{name} is required")
         if section is not None:
-            need(bool(section.get("source_schema")), f"sections.{name} must cite its source")
+            need(
+                bool(section.get("source_schema")),
+                f"sections.{name} must cite its source",
+            )
     decision = scorecard.get("decision") or {}
-    need(decision.get("value") in DECISIONS, "decision.value must be a recorded decision")
+    need(
+        decision.get("value") in DECISIONS, "decision.value must be a recorded decision"
+    )
     need(bool(decision.get("limitations")), "decision.limitations are required")
-    need(bool(decision.get("target_revisions")), "decision.target_revisions are required")
+    need(
+        bool(decision.get("target_revisions")), "decision.target_revisions are required"
+    )
     if decision.get("value") == "release":
-        need(not decision.get("limitations"),
-             "an unqualified release may not carry unresolved limitations")
+        need(
+            not decision.get("limitations"),
+            "an unqualified release may not carry unresolved limitations",
+        )
     prevention = (scorecard.get("sections") or {}).get("prevention") or {}
     need(
         (prevention.get("attempts") or {}).get("blocked_counted_as_transfer") == 0,
         "blocked artifacts must never count as transfers (C-04)",
     )
-    need(scorecard.get("equated_with_collusion") is False,
-         "scorecard must not equate outcomes with collusion (C-02)")
-    need(scorecard.get("universal_claim") is False,
-         "scorecard must not make a universal claim")
+    need(
+        scorecard.get("equated_with_collusion") is False,
+        "scorecard must not equate outcomes with collusion (C-02)",
+    )
+    need(
+        scorecard.get("universal_claim") is False,
+        "scorecard must not make a universal claim",
+    )
     return errors

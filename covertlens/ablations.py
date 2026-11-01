@@ -34,7 +34,12 @@ from .metadata import analyze_all_bytes
 from .metadata_fixtures import verify_metadata_fixture
 from .pilot import build_seeded_traces
 from .replay import run_replay
-from .sequence import SequenceCase, benchmark_sequences, combined_score, context_only_score
+from .sequence import (
+    SequenceCase,
+    benchmark_sequences,
+    combined_score,
+    context_only_score,
+)
 from .verdicts import decide_verdict
 
 ABLATION_SCHEMA = "covertlens.ablations-prevention"
@@ -50,7 +55,10 @@ def _confusion(rows: list[dict[str, Any]], arm: str) -> dict[str, Any]:
     fn = sum(1 for r in rows if r["label"] == 1 and not r[f"{arm}_act"])
     tn = sum(1 for r in rows if r["label"] == 0 and not r[f"{arm}_act"])
     return {
-        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
         "precision": round(tp / (tp + fp), 6) if tp + fp else None,
         "recall": round(tp / (tp + fn), 6) if tp + fn else None,
         "false_positive_rate": round(fp / (fp + tn), 6) if fp + tn else None,
@@ -78,10 +86,15 @@ def run_ablations() -> dict[str, Any]:
         result = analyze_all_bytes(trace.data)
         decision = decide_verdict(result.findings, frozen)
         image_score = max((f.score for f in result.findings), default=0.0)
-        hist = history.setdefault(trace.sender_id, {
-            "prior_deliveries": 0, "prior_delivered": 0, "prior_actions": 0,
-            "scores": [],
-        })
+        hist = history.setdefault(
+            trace.sender_id,
+            {
+                "prior_deliveries": 0,
+                "prior_delivered": 0,
+                "prior_actions": 0,
+                "scores": [],
+            },
+        )
         features = {
             "sender_id": trace.sender_id,
             "recipient_id": "agent-b",
@@ -91,35 +104,42 @@ def run_ablations() -> dict[str, Any]:
             "prior_max_score": max(hist["scores"]) if hist["scores"] else 0.0,
             "prior_mean_score": (
                 round(sum(hist["scores"]) / len(hist["scores"]), 6)
-                if hist["scores"] else 0.0
+                if hist["scores"]
+                else 0.0
             ),
         }
         label = 1 if trace.truth_role == "encoded" else 0
         cases.append(SequenceCase(trace.trace_id, label, image_score, features))
         delivered = decision.delivery == "permit"
-        rows.append({
-            "trace_id": trace.trace_id,
-            "label": label,
-            "truth_band": trace.truth_band,
-            "image_only_act": decision.verdict.value in ("quarantine", "fail_run"),
-            "context_only_act": context_only_score(features) >= CONTEXT_OPERATING_POINT,
-            "combined_act": combined_score(image_score, features) >= COMBINED_OPERATING_POINT,
-        })
+        rows.append(
+            {
+                "trace_id": trace.trace_id,
+                "label": label,
+                "truth_band": trace.truth_band,
+                "image_only_act": decision.verdict.value in ("quarantine", "fail_run"),
+                "context_only_act": context_only_score(features)
+                >= CONTEXT_OPERATING_POINT,
+                "combined_act": combined_score(image_score, features)
+                >= COMBINED_OPERATING_POINT,
+            }
+        )
         # Prevention bookkeeping: recovery is attempted only on
         # delivered artifacts; withheld stays not_observed (C-04).
         recovered = bool(delivered and label == 1 and _recovered(fixture))
-        prevention_rows.append({
-            "trace_id": trace.trace_id,
-            "label": label,
-            "condition": "delivered" if delivered else "withheld",
-            "recovery": (
-                ("recovered" if recovered else "not_recovered")
-                if delivered and label == 1 else
-                ("not_applicable" if delivered else "not_observed")
-            ),
-            "legitimate_task_success": bool(delivered),
-            "demonstrated_transfer": bool(delivered and recovered),
-        })
+        prevention_rows.append(
+            {
+                "trace_id": trace.trace_id,
+                "label": label,
+                "condition": "delivered" if delivered else "withheld",
+                "recovery": (
+                    ("recovered" if recovered else "not_recovered")
+                    if delivered and label == 1
+                    else ("not_applicable" if delivered else "not_observed")
+                ),
+                "legitimate_task_success": bool(delivered),
+                "demonstrated_transfer": bool(delivered and recovered),
+            }
+        )
         hist["prior_deliveries"] += 1
         if delivered:
             hist["prior_delivered"] += 1
@@ -132,9 +152,12 @@ def run_ablations() -> dict[str, Any]:
             "auc": bench[f"{arm}_auc"],
             "operating_point": (
                 "frozen enforcement (quarantine_at/fail_run_at)"
-                if arm == "image_only" else
-                (CONTEXT_OPERATING_POINT if arm == "context_only"
-                 else COMBINED_OPERATING_POINT)
+                if arm == "image_only"
+                else (
+                    CONTEXT_OPERATING_POINT
+                    if arm == "context_only"
+                    else COMBINED_OPERATING_POINT
+                )
             ),
             **_confusion(rows, arm),
         }
@@ -170,26 +193,35 @@ def run_ablations() -> dict[str, Any]:
             ),
             "legitimate_task_success_rate": round(
                 sum(1 for r in controls if r["legitimate_task_success"])
-                / len(controls), 6,
-            ) if controls else None,
+                / len(controls),
+                6,
+            )
+            if controls
+            else None,
         },
         "by_condition": {
             condition: {
-                "trials": sum(1 for r in prevention_rows if r["condition"] == condition),
+                "trials": sum(
+                    1 for r in prevention_rows if r["condition"] == condition
+                ),
                 "recovery_recovered": sum(
-                    1 for r in prevention_rows
+                    1
+                    for r in prevention_rows
                     if r["condition"] == condition and r["recovery"] == "recovered"
                 ),
                 "recovery_not_observed": sum(
-                    1 for r in prevention_rows
+                    1
+                    for r in prevention_rows
                     if r["condition"] == condition and r["recovery"] == "not_observed"
                 ),
                 "legitimate_task_successes": sum(
-                    1 for r in prevention_rows
+                    1
+                    for r in prevention_rows
                     if r["condition"] == condition and r["legitimate_task_success"]
                 ),
                 "demonstrated_transfers": sum(
-                    1 for r in prevention_rows
+                    1
+                    for r in prevention_rows
                     if r["condition"] == condition and r["demonstrated_transfer"]
                 ),
             }

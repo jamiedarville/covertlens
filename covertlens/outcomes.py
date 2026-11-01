@@ -19,13 +19,14 @@ delivery: parse (CL-13) → detectors (CL-14/15/23 callables) → verdict
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from .events import Verdict
-from .gate import InterceptionGate, WithheldError
+from .gate import InterceptionGate
 from .manifest import ERROR_CLASSES, load_manifest
 from .parsing import AnalysisResult, AnalysisStatus, analyze_bytes
-from .verdicts import DecisionContext, ThresholdConfig, VerdictDecision, decide_verdict
+from .verdicts import DecisionContext, ThresholdConfig, VerdictDecision
 
 OUTCOME_SCHEMA = "covertlens.run-outcome"
 OUTCOME_SCHEMA_VERSION = 1
@@ -72,7 +73,9 @@ def analysis_outcome(
             "analysis_status": result.status.value,
             "content_hash": result.content_hash,
             "run_outcome": "failed_infrastructure",
-            "detail": (result.errors[0]["detail"] if result.errors else result.status.value),
+            "detail": (
+                result.errors[0]["detail"] if result.errors else result.status.value
+            ),
         }
     )
     return record
@@ -103,9 +106,7 @@ def failure_reason(decision: VerdictDecision) -> dict[str, Any] | None:
     record["delivery"] = "withhold"
     record["clean_verdict"] = False
     families = [
-        row
-        for row in decision.per_family
-        if row["verdict"] == Verdict.FAIL_RUN.value
+        row for row in decision.per_family if row["verdict"] == Verdict.FAIL_RUN.value
     ]
     record.update(
         {
@@ -185,12 +186,14 @@ def evaluate_delivery(
     if infra is not None:
         gate.withhold_for_infrastructure(delivery_id, str(infra["error_class"]))
         return infra
-    findings = []
+    findings: list[Any] = []
     try:
         for detector in detectors:
             finding = detector(result)
             if finding is not None:
-                findings.extend(finding if isinstance(finding, (list, tuple)) else [finding])
+                findings.extend(
+                    finding if isinstance(finding, (list, tuple)) else [finding]
+                )
     except Exception as exc:
         gate.withhold_for_infrastructure(delivery_id, "detector_error")
         return detector_error_outcome(exc, delivery_id=delivery_id)
@@ -259,7 +262,10 @@ def validate_outcome(record: dict[str, Any]) -> list[str]:
             record.get("error_class") in ERROR_CLASSES,
             f"error_class must be one of {ERROR_CLASSES} (manifest)",
         )
-        need(record.get("clean_verdict") is False, "infrastructure never yields a clean verdict")
+        need(
+            record.get("clean_verdict") is False,
+            "infrastructure never yields a clean verdict",
+        )
         need(record.get("delivery") == "withhold", "infrastructure withholds delivery")
         need(
             record.get("run_outcome") == "failed_infrastructure",
@@ -268,7 +274,10 @@ def validate_outcome(record: dict[str, Any]) -> list[str]:
     if kind == "detection_failure":
         need(record.get("verdict") == "fail_run", "detection_failure requires fail_run")
         need(record.get("halt_execution") is True, "detection_failure halts execution")
-        need(bool((record.get("reason") or {}).get("code")), "detection_failure needs a structured reason code")
+        need(
+            bool((record.get("reason") or {}).get("code")),
+            "detection_failure needs a structured reason code",
+        )
     manifest = load_manifest()
     classes = (manifest.get("error_behavior") or {}).get("classes") or {}
     if record.get("error_class") is not None:

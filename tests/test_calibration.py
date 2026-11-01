@@ -1,4 +1,3 @@
-import copy
 import json
 
 import pytest
@@ -62,8 +61,11 @@ def test_shipped_freeze_matches_recalibration_and_is_enforceable():
     # A frozen config changes CL-17 behaviour: enforcement points are
     # no longer log-only.
     finding = Finding(
-        family="metadata", detector_name="metadata-ancillary-entries",
-        detector_version="1.0.0", score=0.95, coverage={"entries": 1},
+        family="metadata",
+        detector_name="metadata-ancillary-entries",
+        detector_version="1.0.0",
+        score=0.95,
+        coverage={"entries": 1},
     )
     decision = decide_verdict([finding], config)
     assert decision.verdict.value == "fail_run"
@@ -75,8 +77,6 @@ def test_calibration_schema_accepts_frozen_artifact():
         import jsonschema
     except ImportError:
         pytest.skip("jsonschema not installed")
-    schema = json.loads(
-        open("schemas/calibration.schema.json").read()
-    )
+    schema = json.loads(open("schemas/calibration.schema.json").read())
     _, frozen = load_frozen_thresholds()
     jsonschema.validate(frozen, schema)

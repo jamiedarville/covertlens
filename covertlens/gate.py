@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from . import ids
 from .events import Event, EventType, ParseStatus, TraceLog, Verdict
@@ -76,7 +77,7 @@ class DeliveryRecord:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class InterceptionGate:
@@ -196,7 +197,9 @@ class InterceptionGate:
     ) -> DeliveryRecord:
         """Create (or reuse, on retry) a pending delivery for one version."""
         with self._lock:
-            return self._attempt_delivery(handle, recipient_id=recipient_id, attempt=attempt)
+            return self._attempt_delivery(
+                handle, recipient_id=recipient_id, attempt=attempt
+            )
 
     def _attempt_delivery(
         self,
@@ -268,7 +271,9 @@ class InterceptionGate:
         )
         return record
 
-    def recipient_access(self, delivery_id: str, *, via_route: str | None = None) -> bytes:
+    def recipient_access(
+        self, delivery_id: str, *, via_route: str | None = None
+    ) -> bytes:
         """Serve original bytes only after a permitting verdict (CL-18).
 
         Every gated route funnels here: `via_route` is recorded on the
@@ -279,7 +284,9 @@ class InterceptionGate:
         with self._lock:
             return self._recipient_access(delivery_id, via_route=via_route)
 
-    def _recipient_access(self, delivery_id: str, *, via_route: str | None = None) -> bytes:
+    def _recipient_access(
+        self, delivery_id: str, *, via_route: str | None = None
+    ) -> bytes:
         record = self._delivery(delivery_id)
         if record.state == "pending":
             self._record_attempt(delivery_id, via_route, "pending_denied")
@@ -288,9 +295,7 @@ class InterceptionGate:
             )
         if record.state == "withheld":
             self._record_attempt(delivery_id, via_route, "withheld_denied")
-            raise WithheldError(
-                f"delivery {delivery_id} was withheld; no bytes served"
-            )
+            raise WithheldError(f"delivery {delivery_id} was withheld; no bytes served")
         self._record_attempt(delivery_id, via_route, "served")
         data = self._store.get_original(
             record.artifact_version_id, actor_id=record.recipient_id, purpose="delivery"
@@ -349,7 +354,9 @@ class InterceptionGate:
 
     # -- CL-18: uniform enforcement on every access path -------------------
 
-    def _record_attempt(self, delivery_id: str, via_route: str | None, outcome: str) -> None:
+    def _record_attempt(
+        self, delivery_id: str, via_route: str | None, outcome: str
+    ) -> None:
         self._access_attempts.append(
             {"delivery_id": delivery_id, "via_route": via_route, "outcome": outcome}
         )
@@ -386,7 +393,11 @@ class InterceptionGate:
             return self.recipient_access(delivery_id, via_route="R-05")
 
     def reviewer_access(
-        self, delivery_id: str, *, actor_id: str, reviewer_ids: set[str] | frozenset[str]
+        self,
+        delivery_id: str,
+        *,
+        actor_id: str,
+        reviewer_ids: set[str] | frozenset[str],
     ) -> bytes:
         """Read a (possibly quarantined) original as an authorized reviewer.
 
@@ -414,13 +425,23 @@ class InterceptionGate:
         return {
             "attempts": len(attempts),
             "served": len(served),
-            "pending_denied": sum(1 for a in attempts if a["outcome"] == "pending_denied"),
-            "withheld_denied": sum(1 for a in attempts if a["outcome"] == "withheld_denied"),
-            "reviewer_served": sum(1 for a in attempts if a["outcome"] == "reviewer_served"),
-            "reviewer_denied": sum(1 for a in attempts if a["outcome"] == "reviewer_denied"),
+            "pending_denied": sum(
+                1 for a in attempts if a["outcome"] == "pending_denied"
+            ),
+            "withheld_denied": sum(
+                1 for a in attempts if a["outcome"] == "withheld_denied"
+            ),
+            "reviewer_served": sum(
+                1 for a in attempts if a["outcome"] == "reviewer_served"
+            ),
+            "reviewer_denied": sum(
+                1 for a in attempts if a["outcome"] == "reviewer_denied"
+            ),
             # Served only ever follows a permitting verdict by construction.
             "unauthorized_served": 0,
-            "by_route": sorted({str(a["via_route"]) for a in attempts if a["via_route"]}),
+            "by_route": sorted(
+                {str(a["via_route"]) for a in attempts if a["via_route"]}
+            ),
         }
 
     # -- reporting ---------------------------------------------------------

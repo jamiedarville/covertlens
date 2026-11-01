@@ -22,7 +22,8 @@ not decoded content and not proof of collusion (C-02).
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from .events import Event
 from .parsing import AnalysisResult
@@ -79,9 +80,7 @@ def build_run_report(
                     for f in delivery["findings"]
                 ],
             }
-    timeline = [
-        e.to_dict() if isinstance(e, Event) else dict(e) for e in event_list
-    ]
+    timeline = [e.to_dict() if isinstance(e, Event) else dict(e) for e in event_list]
     timeline.sort(key=lambda e: int(e.get("seq") or 0))
     triage = sorted(
         (

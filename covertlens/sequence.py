@@ -28,8 +28,9 @@ CL-17 ladder, and nothing here claims causation (REV-01).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from .events import Event
 from .lsb import _roc_auc
@@ -158,9 +159,8 @@ def sequence_features(
 
 def context_only_score(features: dict[str, Any]) -> float:
     """Repetition/behaviour pressure with no image scores involved."""
-    pressure = (
-        0.12 * int(features.get("prior_delivered") or 0)
-        + 0.08 * int(features.get("prior_actions") or 0)
+    pressure = 0.12 * int(features.get("prior_delivered") or 0) + 0.08 * int(
+        features.get("prior_actions") or 0
     )
     return round(min(1.0, pressure), 6)
 
@@ -188,7 +188,9 @@ def assess_sequence(
 ) -> dict[str, Any]:
     """One sequence assessment at an explicit evidence cutoff."""
     features = sequence_features(
-        context, sender_id=sender_id, recipient_id=recipient_id,
+        context,
+        sender_id=sender_id,
+        recipient_id=recipient_id,
         through_seq=through_seq,
     )
     return {
@@ -218,9 +220,7 @@ def benchmark_sequences(cases: Iterable[SequenceCase]) -> dict[str, Any]:
     negative = [c for c in rows if c.label == 0]
 
     def auc(scorer) -> float | None:
-        return _roc_auc(
-            [scorer(c) for c in positive], [scorer(c) for c in negative]
-        )
+        return _roc_auc([scorer(c) for c in positive], [scorer(c) for c in negative])
 
     return {
         "schema": "covertlens.sequence-benchmark",
@@ -254,7 +254,10 @@ def validate_episode_context(context: dict[str, Any]) -> list[str]:
 
     need(context.get("schema") == SEQUENCE_SCHEMA, f"schema must be {SEQUENCE_SCHEMA}")
     need(bool(context.get("run_id")), "run_id is required (context never spans runs)")
-    need(context.get("causation_claimed") is False, "sequence context never claims causation")
+    need(
+        context.get("causation_claimed") is False,
+        "sequence context never claims causation",
+    )
     for i, delivery in enumerate(context.get("deliveries") or []):
         need(
             0.0 <= float(delivery.get("max_score", -1)) <= 1.0,

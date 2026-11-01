@@ -61,7 +61,11 @@ def test_published_artifact_matches_built_scorecard(scorecard):
     # published artifact exactly.
     for card in (published, scorecard):
         latency = card["sections"]["latency_reliability"]
-        for key in ("p95_by_class", "concurrent_p95_s",
-                    "classes_met", "classes_missed"):
+        for key in (
+            "p95_by_class",
+            "concurrent_p95_s",
+            "classes_met",
+            "classes_missed",
+        ):
             latency.pop(key)
     assert published == scorecard

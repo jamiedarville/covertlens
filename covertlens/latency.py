@@ -35,7 +35,7 @@ from .calibration import load_frozen_thresholds
 from .events import Verdict
 from .fixtures import _save_png, encode_dct_jpeg, generate_cover
 from .gate import InterceptionContext, InterceptionGate
-from .metadata import analyze_and_decide, analyze_all_bytes
+from .metadata import analyze_all_bytes, analyze_and_decide
 from .outcomes import analysis_outcome, evaluate_delivery
 from .parsing import ParserLimits
 from .store import ArtifactStore
@@ -181,13 +181,15 @@ def limit_behavior_checks() -> dict[str, Any]:
         served = True
     except Exception:
         served = False
-    checks.update({
-        "enforcement_outcome_kind": outcome["kind"],
-        "enforcement_run_outcome": outcome["run_outcome"],
-        "enforcement_clean_verdict": outcome["clean_verdict"],
-        "enforcement_served_bytes": served,
-        "delivery_withheld": not served,
-    })
+    checks.update(
+        {
+            "enforcement_outcome_kind": outcome["kind"],
+            "enforcement_run_outcome": outcome["run_outcome"],
+            "enforcement_clean_verdict": outcome["clean_verdict"],
+            "enforcement_served_bytes": served,
+            "delivery_withheld": not served,
+        }
+    )
     return checks
 
 
@@ -253,17 +255,22 @@ def run_reliability_report(
     rows = []
     for cls in classes:
         for media in cls["media"]:
-            rows.append({
-                "class": cls["name"],
-                **measure_class(media, cls["width"], cls["height"],
-                                repetitions=repetitions, config=config),
-            })
+            rows.append(
+                {
+                    "class": cls["name"],
+                    **measure_class(
+                        media,
+                        cls["width"],
+                        cls["height"],
+                        repetitions=repetitions,
+                        config=config,
+                    ),
+                }
+            )
     concurrent = measure_concurrent(config=config)
     limits = limit_behavior_checks()
     reliability = gate_reliability_check()
-    by_class = {
-        f"{row['class']}/{row['media']}": row["meets_proposal"] for row in rows
-    }
+    by_class = {f"{row['class']}/{row['media']}": row["meets_proposal"] for row in rows}
     tradeoffs = [
         "JPEG analysis is pure-Python: the large class (1024x768) "
         "reaches the explicit 2 s runtime deadline and times out "
@@ -328,7 +335,10 @@ def validate_latency_report(report: dict[str, Any]) -> list[str]:
 
     need(report.get("schema") == LATENCY_SCHEMA, f"schema must be {LATENCY_SCHEMA}")
     assessment = report.get("assessment") or {}
-    need(assessment.get("universal_claim") is False, "report must not make a universal claim")
+    need(
+        assessment.get("universal_claim") is False,
+        "report must not make a universal claim",
+    )
     need(
         assessment.get("limits_explicit_and_withholding") is True,
         "timeout/oversize behaviour must be explicit and withholding",
@@ -338,9 +348,18 @@ def validate_latency_report(report: dict[str, Any]) -> list[str]:
         "concurrent access must serve zero unauthorized bytes",
     )
     limits = report.get("limit_behavior") or {}
-    need(limits.get("timeout_status") == "timeout", "timeout must surface as timeout status")
-    need(limits.get("oversized_status") == "oversized", "oversize must surface as oversized status")
-    need(limits.get("enforcement_served_bytes") is False, "enforcement must not serve withheld bytes")
+    need(
+        limits.get("timeout_status") == "timeout",
+        "timeout must surface as timeout status",
+    )
+    need(
+        limits.get("oversized_status") == "oversized",
+        "oversize must surface as oversized status",
+    )
+    need(
+        limits.get("enforcement_served_bytes") is False,
+        "enforcement must not serve withheld bytes",
+    )
     for row in report.get("classes") or []:
         need(row.get("p95_s") is not None, "each class needs a p95 measurement")
     return errors

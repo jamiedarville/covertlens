@@ -1,10 +1,10 @@
+from covertlens.calibration import load_frozen_thresholds
 from covertlens.frozen_benchmark import (
     clean_run_stability,
     run_frozen_evaluation,
     validate_frozen_benchmark,
     wilson_interval,
 )
-from covertlens.calibration import load_frozen_thresholds
 
 
 def test_wilson_interval_bounds():
@@ -45,7 +45,8 @@ def test_clean_smooth_covers_are_outside_the_frozen_claim():
     # Measured tradeoff behind the narrowed coverage: clean smooth
     # PNG covers fire the LSB detector above the frozen fail point.
     config, _ = load_frozen_thresholds()
-    probes = clean_run_stability(config, runs=30, seed_base=200_000,
-                                  patterns=("smooth",))
+    probes = clean_run_stability(
+        config, runs=30, seed_base=200_000, patterns=("smooth",)
+    )
     # Half the runs are PNG/LSB; every one of those false-fails.
     assert probes["per_pattern"]["smooth"]["false_failure_rate"]["value"] >= 0.5

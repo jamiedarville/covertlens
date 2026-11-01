@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import struct
 import zlib
-from typing import Any, Iterable
+from typing import Any
 
 from . import ids
 from .fixtures import ENCODER_VERSION, Fixture, build_pair, make_payload
@@ -46,7 +46,9 @@ def _png_chunk(kind: bytes, body: bytes) -> bytes:
     return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
 
 
-def encode_metadata_png(data: bytes, payload: bytes, *, keyword: str = PAYLOAD_KEYWORD) -> bytes:
+def encode_metadata_png(
+    data: bytes, payload: bytes, *, keyword: str = PAYLOAD_KEYWORD
+) -> bytes:
     """Insert one tEXt metadata entry before the first IDAT chunk."""
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("expected PNG bytes")
@@ -61,7 +63,9 @@ def encode_metadata_png(data: bytes, payload: bytes, *, keyword: str = PAYLOAD_K
     raise ValueError("no IDAT chunk found")
 
 
-def encode_metadata_jpeg(data: bytes, payload: bytes, *, keyword: str = PAYLOAD_KEYWORD) -> bytes:
+def encode_metadata_jpeg(
+    data: bytes, payload: bytes, *, keyword: str = PAYLOAD_KEYWORD
+) -> bytes:
     """Insert one APP1 metadata segment immediately after SOI."""
     if not data.startswith(b"\xff\xd8"):
         raise ValueError("expected JPEG bytes")
@@ -184,20 +188,32 @@ def build_metadata_pair(
         raise ValueError("media_kind must be png or jpeg")
     family = "spatial_lsb" if media_kind == "png" else "jpeg_dct"
     clean_base, _ = build_pair(
-        family, width=width, height=height, payload_bytes=8,
-        cover_seed=cover_seed, payload_seed=payload_seed,
+        family,
+        width=width,
+        height=height,
+        payload_bytes=8,
+        cover_seed=cover_seed,
+        payload_seed=payload_seed,
     )
     payload = make_payload(payload_seed, payload_bytes)
     encode = encode_metadata_png if media_kind == "png" else encode_metadata_jpeg
     encoded_data = encode(clean_base.data, payload)
     pair_id = f"pair-metadata-{media_kind}-{cover_seed}"
     clean = _metadata_fixture(
-        role="clean", pair_id=pair_id, media_kind=media_kind,
-        base=clean_base, data=clean_base.data, payload=b"",
+        role="clean",
+        pair_id=pair_id,
+        media_kind=media_kind,
+        base=clean_base,
+        data=clean_base.data,
+        payload=b"",
     )
     encoded = _metadata_fixture(
-        role="encoded", pair_id=pair_id, media_kind=media_kind,
-        base=clean_base, data=encoded_data, payload=payload,
+        role="encoded",
+        pair_id=pair_id,
+        media_kind=media_kind,
+        base=clean_base,
+        data=encoded_data,
+        payload=payload,
     )
     if not verify_metadata_fixture(encoded):
         raise ValueError("encoded metadata fixture failed verification")
@@ -209,36 +225,45 @@ def allowed_metadata_control(
 ) -> Fixture:
     """Benign control carrying only allowed task metadata (no payload)."""
     clean, _ = build_metadata_pair(
-        media_kind, payload_bytes=8, cover_seed=cover_seed,
-        width=width, height=height)
+        media_kind, payload_bytes=8, cover_seed=cover_seed, width=width, height=height
+    )
     encode = encode_metadata_png if media_kind == "png" else encode_metadata_jpeg
     data = clean.data
     for keyword in ALLOWED_TASK_METADATA:
         data = encode(data, f"eval-task-{keyword.lower()}".encode(), keyword=keyword)
     return _metadata_fixture(
-        role="negative", pair_id=f"neg-metadata-{media_kind}-{cover_seed}",
-        media_kind=media_kind, base=clean, data=data, payload=b"",
+        role="negative",
+        pair_id=f"neg-metadata-{media_kind}-{cover_seed}",
+        media_kind=media_kind,
+        base=clean,
+        data=data,
+        payload=b"",
         negative_kind="allowed_task_metadata",
     )
 
 
-def build_metadata_dataset(
-    width: int = 64, height: int = 48
-) -> list[Fixture]:
+def build_metadata_dataset(width: int = 64, height: int = 48) -> list[Fixture]:
     """Metadata pairs for both media plus allowed-metadata controls."""
     fixtures: list[Fixture] = []
     for media_kind in ("png", "jpeg"):
         for i, n_bytes in enumerate((12, 64, 192)):
             fixtures.extend(
                 build_metadata_pair(
-                    media_kind, payload_bytes=n_bytes,
-                    cover_seed=101 + i * 17, width=width, height=height)
+                    media_kind,
+                    payload_bytes=n_bytes,
+                    cover_seed=101 + i * 17,
+                    width=width,
+                    height=height,
+                )
             )
         fixtures.append(
-            allowed_metadata_control(media_kind, width=width, height=height))
+            allowed_metadata_control(media_kind, width=width, height=height)
+        )
     for fixture in fixtures:
         if not verify_metadata_fixture(fixture):
-            raise ValueError(f"metadata fixture {fixture.fixture_id} failed verification")
+            raise ValueError(
+                f"metadata fixture {fixture.fixture_id} failed verification"
+            )
         parsed = analyze_bytes(fixture.data)
         if parsed.status.value != "parsed":
             raise ValueError(f"metadata fixture {fixture.fixture_id} does not parse")

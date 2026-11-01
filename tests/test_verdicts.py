@@ -39,18 +39,22 @@ TS = "2026-10-28T12:00:00Z"
 RUN = "run_verdict"
 
 # Synthetic frozen points for tests only; shipped config stays unfrozen.
-FROZEN = ThresholdConfig(families={
-    "spatial_lsb": FamilyThresholds(
-        "spatial_lsb", "frozen", 0.30, 0.60, 0.90),
-    "jpeg_dct": FamilyThresholds("jpeg_dct", "frozen", 0.30, 0.60, 0.90),
-    "metadata": FamilyThresholds("metadata", "frozen", 0.30, 0.60, 0.90),
-})
+FROZEN = ThresholdConfig(
+    families={
+        "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.30, 0.60, 0.90),
+        "jpeg_dct": FamilyThresholds("jpeg_dct", "frozen", 0.30, 0.60, 0.90),
+        "metadata": FamilyThresholds("metadata", "frozen", 0.30, 0.60, 0.90),
+    }
+)
 
 
 def finding(family="spatial_lsb", score=0.5):
     return Finding(
-        family=family, detector_name="test-detector",
-        detector_version="1.0.0", score=score, coverage={"samples": 10},
+        family=family,
+        detector_name="test-detector",
+        detector_version="1.0.0",
+        score=score,
+        coverage={"samples": 10},
     )
 
 
@@ -60,7 +64,8 @@ def test_ladder_mapping_permits_and_withholds():
     assert delivery_for_verdict(Verdict.QUARANTINE) == "withhold"
     assert delivery_for_verdict(Verdict.FAIL_RUN) == "withhold"
     manifest_ladder = {
-        row["verdict"]: row["delivery"] for row in load_manifest()["verdict_ladder"]}
+        row["verdict"]: row["delivery"] for row in load_manifest()["verdict_ladder"]
+    }
     for verdict in Verdict:
         assert delivery_for_verdict(verdict) == manifest_ladder[verdict.value]
 
@@ -90,12 +95,19 @@ def test_operating_points_are_separately_configured():
         FamilyThresholds("spatial_lsb", "frozen", 0.3, 0.6, 1.5)
 
 
-@pytest.mark.parametrize("score,expected", [
-    (0.0, Verdict.LOG), (0.29, Verdict.LOG), (0.30, Verdict.FLAG),
-    (0.59, Verdict.FLAG), (0.60, Verdict.QUARANTINE),
-    (0.89, Verdict.QUARANTINE), (0.90, Verdict.FAIL_RUN),
-    (1.0, Verdict.FAIL_RUN),
-])
+@pytest.mark.parametrize(
+    "score,expected",
+    [
+        (0.0, Verdict.LOG),
+        (0.29, Verdict.LOG),
+        (0.30, Verdict.FLAG),
+        (0.59, Verdict.FLAG),
+        (0.60, Verdict.QUARANTINE),
+        (0.89, Verdict.QUARANTINE),
+        (0.90, Verdict.FAIL_RUN),
+        (1.0, Verdict.FAIL_RUN),
+    ],
+)
 def test_frozen_points_map_scores_to_the_ladder(score, expected):
     decision = decide_verdict([finding(score=score)], FROZEN)
     assert decision.verdict is expected
@@ -109,7 +121,8 @@ def test_frozen_points_map_scores_to_the_ladder(score, expected):
 
 def test_most_severe_family_wins_and_unfrozen_is_log_only():
     decision = decide_verdict(
-        [finding("spatial_lsb", 0.35), finding("jpeg_dct", 0.95)], FROZEN)
+        [finding("spatial_lsb", 0.35), finding("jpeg_dct", 0.95)], FROZEN
+    )
     assert decision.verdict is Verdict.FAIL_RUN
     assert {r["family"] for r in decision.per_family} == {"spatial_lsb", "jpeg_dct"}
     unfrozen = decide_verdict([finding(score=0.99)])  # shipped default
@@ -120,7 +133,11 @@ def test_most_severe_family_wins_and_unfrozen_is_log_only():
     empty = decide_verdict([], FROZEN)
     assert empty.verdict is Verdict.LOG
     assert set(empty.families_without_findings) == {
-        "spatial_lsb", "jpeg_dct", "metadata", "geometric"}
+        "spatial_lsb",
+        "jpeg_dct",
+        "metadata",
+        "geometric",
+    }
 
 
 def test_invalid_findings_and_hashes_are_rejected():
@@ -128,8 +145,8 @@ def test_invalid_findings_and_hashes_are_rejected():
         decide_verdict([finding(score=1.5)], FROZEN)
     with pytest.raises(ValueError, match="content_hash"):
         decide_verdict(
-            [finding()], FROZEN,
-            context=DecisionContext(content_hash="not-a-hash"))
+            [finding()], FROZEN, context=DecisionContext(content_hash="not-a-hash")
+        )
 
 
 def pending_delivery(gate, data):
@@ -138,17 +155,23 @@ def pending_delivery(gate, data):
     return gate.attempt_delivery(handle, recipient_id="agent-b")
 
 
-@pytest.mark.parametrize("score,verdict,served", [
-    (0.10, Verdict.LOG, True), (0.40, Verdict.FLAG, True),
-    (0.70, Verdict.QUARANTINE, False), (0.95, Verdict.FAIL_RUN, False),
-])
+@pytest.mark.parametrize(
+    "score,verdict,served",
+    [
+        (0.10, Verdict.LOG, True),
+        (0.40, Verdict.FLAG, True),
+        (0.70, Verdict.QUARANTINE, False),
+        (0.95, Verdict.FAIL_RUN, False),
+    ],
+)
 def test_gate_enforces_the_decision(score, verdict, served):
     gate = InterceptionGate(ArtifactStore())
     delivery = pending_delivery(gate, b"\x89PNG\r\n\x1a\nimg")
     with pytest.raises(PendingDeliveryError):
         gate.recipient_access(delivery.delivery_id)
     decision = decide_and_record(
-        gate, delivery.delivery_id, [finding(score=score)], FROZEN)
+        gate, delivery.delivery_id, [finding(score=score)], FROZEN
+    )
     assert decision.verdict is verdict
     assert decision.delivery_id == delivery.delivery_id
     if served:
@@ -161,33 +184,51 @@ def test_gate_enforces_the_decision(score, verdict, served):
 
 def test_recipient_actions_and_future_events_are_lookahead():
     attempted = Event(
-        EventType.DELIVERY_ATTEMPTED, RUN, 1, TS, delivery_id="dlv_x",
+        EventType.DELIVERY_ATTEMPTED,
+        RUN,
+        1,
+        TS,
+        delivery_id="dlv_x",
         content_hash=ids.content_hash(b"x"),
-        sender_id="agent-a", recipient_id="agent-b")
+        sender_id="agent-a",
+        recipient_id="agent-b",
+    )
     action = Event(
-        EventType.RECIPIENT_ACTION, RUN, 2, TS, delivery_id="dlv_x",
-        payload={"action": "answer"})
+        EventType.RECIPIENT_ACTION,
+        RUN,
+        2,
+        TS,
+        delivery_id="dlv_x",
+        payload={"action": "answer"},
+    )
     with pytest.raises(LookaheadError, match="recipient actions"):
         decide_verdict([finding()], FROZEN, observed_events=[attempted, action])
     future = Event(EventType.ARTIFACT_ACCESSED, RUN, 9, TS, delivery_id="dlv_x")
     with pytest.raises(LookaheadError, match="lookahead"):
         decide_verdict(
-            [finding()], FROZEN,
+            [finding()],
+            FROZEN,
             context=DecisionContext(evidence_through_seq=3),
-            observed_events=[attempted, future])
+            observed_events=[attempted, future],
+        )
     # The same events at or before the cutoff are admissible evidence.
     decision = decide_verdict(
-        [finding(score=0.4)], FROZEN,
+        [finding(score=0.4)],
+        FROZEN,
         context=DecisionContext(evidence_through_seq=3),
-        observed_events=[attempted])
+        observed_events=[attempted],
+    )
     assert decision.verdict is Verdict.FLAG
 
 
 def test_real_detector_scores_flow_through_the_ladder():
     _, encoded = build_pair("spatial_lsb", width=64, height=48, payload_bytes=192)
     result = analyze_lsb_bytes(encoded.data)
-    frozen_lsb_only = ThresholdConfig(families={
-        "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.60, 0.90)})
+    frozen_lsb_only = ThresholdConfig(
+        families={
+            "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.60, 0.90)
+        }
+    )
     decision = decide_verdict(result.findings, frozen_lsb_only)
     assert decision.findings_count == 1
     assert decision.per_family[0]["detectors"] == ["lsb-pov-chisquare@1.0.0"]

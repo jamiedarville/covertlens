@@ -63,8 +63,12 @@ def test_tampered_package_and_audit_chain_are_detected(verification):
     assert any("seal" in e for e in validate_review_package(package))
 
     log = AuditLog()
-    entry = log.append(actor_id="researcher-1", action="evidence.read",
-                       dataset_id="ds-pilot", outcome="allowed")
+    entry = log.append(
+        actor_id="researcher-1",
+        action="evidence.read",
+        dataset_id="ds-pilot",
+        outcome="allowed",
+    )
     assert log.verify_chain() is True
     log._entries[0] = replace(entry, actor_id="mallory")
     assert log.verify_chain() is False

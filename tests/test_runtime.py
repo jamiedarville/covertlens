@@ -69,8 +69,12 @@ def test_payloads_are_scorer_only_through_the_gateway():
         gateway.export_held_out_truth(RESEARCHER, DATASET, fixtures, assignments)
     truth = gateway.export_held_out_truth(SCORER, DATASET, fixtures, assignments)
     assert all(isinstance(v, dict) for v in truth.values())
-    assert any(e.action == "payload.export" and e.outcome == "denied" for e in audit.entries)
-    assert any(e.action == "payload.export" and e.outcome == "allowed" for e in audit.entries)
+    assert any(
+        e.action == "payload.export" and e.outcome == "denied" for e in audit.entries
+    )
+    assert any(
+        e.action == "payload.export" and e.outcome == "allowed" for e in audit.entries
+    )
 
 
 def test_config_changes_are_permissioned_versioned_and_audited():
@@ -79,7 +83,9 @@ def test_config_changes_are_permissioned_versioned_and_audited():
     with pytest.raises(PermissionError):
         config.apply_change(AGENT, "max_image_bytes", 5, reason="shrink")
     assert config.version == 1
-    new_version = config.apply_change(OPERATOR, "max_image_bytes", 5_000_000, reason="worker limit")
+    new_version = config.apply_change(
+        OPERATOR, "max_image_bytes", 5_000_000, reason="worker limit"
+    )
     assert new_version == 2 and config.get("max_image_bytes") == 5_000_000
     entry = [e for e in audit.entries if e.action == "config.change"][-1]
     assert entry.detail["old"] == 10_000_000 and entry.detail["new"] == 5_000_000
@@ -90,18 +96,28 @@ def test_verdict_overrides_need_permission_reason_and_are_audited():
     audit = AuditLog()
     gateway = EvidenceGateway(ArtifactStore(), audit)
     with pytest.raises(PermissionError):
-        gateway.record_override(SCORER, DATASET, "vrd_1", "flag", reason="manual review")
+        gateway.record_override(
+            SCORER, DATASET, "vrd_1", "flag", reason="manual review"
+        )
     with pytest.raises(ValueError):
         gateway.record_override(RESEARCHER, DATASET, "vrd_1", "flag", reason="")
-    record = gateway.record_override(RESEARCHER, DATASET, "vrd_1", "flag", reason="benign skyline")
+    record = gateway.record_override(
+        RESEARCHER, DATASET, "vrd_1", "flag", reason="benign skyline"
+    )
     assert record["verdict_id"] == "vrd_1" and record["override"] == "flag"
-    assert any(e.action == "verdict.override" and e.outcome == "applied" for e in audit.entries)
+    assert any(
+        e.action == "verdict.override" and e.outcome == "applied" for e in audit.entries
+    )
 
 
 def test_audit_chain_is_tamper_evident():
     audit = AuditLog()
-    audit.append(actor_id="a", action="evidence.read", dataset_id=DATASET, outcome="allowed")
-    audit.append(actor_id="b", action="config.change", dataset_id=DATASET, outcome="applied")
+    audit.append(
+        actor_id="a", action="evidence.read", dataset_id=DATASET, outcome="allowed"
+    )
+    audit.append(
+        actor_id="b", action="config.change", dataset_id=DATASET, outcome="applied"
+    )
     assert audit.verify_chain() is True
     object.__setattr__(audit.entries[0], "actor_id", "mallory")
     assert audit.verify_chain() is False

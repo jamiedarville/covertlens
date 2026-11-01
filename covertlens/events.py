@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from . import ids
@@ -20,7 +20,7 @@ from . import ids
 SCHEMA_VERSION = 1
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     ARTIFACT_CREATED = "artifact.created"
     DELIVERY_ATTEMPTED = "delivery.attempted"
     GATE_VERDICT = "gate.verdict"
@@ -40,14 +40,14 @@ REQUIRED_FAMILIES: dict[str, EventType] = {
 }
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     LOG = "log"
     FLAG = "flag"
     QUARANTINE = "quarantine"
     FAIL_RUN = "fail_run"
 
 
-class ParseStatus(str, Enum):
+class ParseStatus(StrEnum):
     PARSED = "parsed"
     PARSE_FAILED = "parse_failed"
     NOT_OBSERVED = "not_observed"  # withheld/blocked: never "transferred" (C-04)
@@ -76,7 +76,9 @@ class Event:
 
     @property
     def event_id(self) -> str:
-        return ids.event_id(self.run_id, self.seq, self.event_type.value, self.idempotency_key)
+        return ids.event_id(
+            self.run_id, self.seq, self.event_type.value, self.idempotency_key
+        )
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -99,12 +101,17 @@ def validate_event(event: Event | dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
+    raw_type = data.get("event_type")
     try:
-        etype = EventType(data.get("event_type"))
+        etype = EventType(raw_type) if isinstance(raw_type, str) else None
     except ValueError:
-        return [f"unknown event_type: {data.get('event_type')!r}"]
+        etype = None
+    if etype is None:
+        return [f"unknown event_type: {raw_type!r}"]
     need(bool(data.get("run_id")), "run_id is required")
-    need(isinstance(data.get("seq"), int) and data["seq"] >= 0, "seq must be an int >= 0")
+    need(
+        isinstance(data.get("seq"), int) and data["seq"] >= 0, "seq must be an int >= 0"
+    )
     need(bool(data.get("occurred_at")), "occurred_at is required")
     eid = data.get("event_id")
     if eid is not None:
@@ -115,27 +122,38 @@ def validate_event(event: Event | dict[str, Any]) -> list[str]:
 
     if etype is EventType.ARTIFACT_CREATED:
         need(bool(data.get("artifact_id")), "artifact.created requires artifact_id")
-        need(bool(data.get("artifact_version_id")), "artifact.created requires artifact_version_id")
+        need(
+            bool(data.get("artifact_version_id")),
+            "artifact.created requires artifact_version_id",
+        )
         need(bool(digest), "artifact.created requires content_hash of original bytes")
     if etype is EventType.DELIVERY_ATTEMPTED:
         need(bool(data.get("delivery_id")), "delivery.attempted requires delivery_id")
         need(bool(digest), "delivery.attempted requires original content_hash (REV-01)")
-        need(bool(data.get("sender_id")) and bool(data.get("recipient_id")),
-             "delivery.attempted requires sender_id and recipient_id")
+        need(
+            bool(data.get("sender_id")) and bool(data.get("recipient_id")),
+            "delivery.attempted requires sender_id and recipient_id",
+        )
     if etype is EventType.GATE_VERDICT:
         need(bool(data.get("verdict_id")), "gate.verdict requires verdict_id")
-        need(data.get("verdict") in {v.value for v in Verdict},
-             "gate.verdict requires a verdict-ladder value")
+        need(
+            data.get("verdict") in {v.value for v in Verdict},
+            "gate.verdict requires a verdict-ladder value",
+        )
         need(bool(data.get("delivery_id")), "gate.verdict requires delivery_id")
     if etype is EventType.ARTIFACT_ACCESSED:
         need(bool(data.get("delivery_id")), "artifact.accessed requires delivery_id")
     if etype is EventType.ARTIFACT_PARSED:
-        need(data.get("parse_status") in {p.value for p in ParseStatus},
-             "artifact.parsed requires parse_status")
+        need(
+            data.get("parse_status") in {p.value for p in ParseStatus},
+            "artifact.parsed requires parse_status",
+        )
     if etype is EventType.RUN_FINALIZED:
-        need(data.get("payload", {}).get("outcome") in
-             ("completed", "failed_detection", "failed_infrastructure", "aborted"),
-             "run.finalized requires payload.outcome")
+        need(
+            data.get("payload", {}).get("outcome")
+            in ("completed", "failed_detection", "failed_infrastructure", "aborted"),
+            "run.finalized requires payload.outcome",
+        )
     return errors
 
 
@@ -163,22 +181,34 @@ class TraceLog:
             raise ValueError("no events after run.finalized")
         expected = len(self._events)
         if event.seq != expected:
-            raise ValueError(f"seq must be {expected} (monotonic per run), got {event.seq}")
+            raise ValueError(
+                f"seq must be {expected} (monotonic per run), got {event.seq}"
+            )
         if event.event_id in self._seen_ids:
             raise ValueError(f"duplicate event_id {event.event_id} (idempotent retry?)")
         # No lookahead (C-03): a verdict may only reference deliveries already attempted.
         if event.event_type is EventType.GATE_VERDICT:
-            attempted = {e.delivery_id for e in self._events
-                         if e.event_type is EventType.DELIVERY_ATTEMPTED}
+            attempted = {
+                e.delivery_id
+                for e in self._events
+                if e.event_type is EventType.DELIVERY_ATTEMPTED
+            }
             if event.delivery_id not in attempted:
-                raise ValueError("gate.verdict precedes its delivery.attempted (lookahead)")
+                raise ValueError(
+                    "gate.verdict precedes its delivery.attempted (lookahead)"
+                )
         # Withheld deliveries must not later claim a successful parse (C-04).
         if event.event_type is EventType.ARTIFACT_PARSED:
-            verdicts = {e.delivery_id: e.verdict for e in self._events
-                        if e.event_type is EventType.GATE_VERDICT}
+            verdicts = {
+                e.delivery_id: e.verdict
+                for e in self._events
+                if e.event_type is EventType.GATE_VERDICT
+            }
             verdict = verdicts.get(event.delivery_id)
-            if verdict in (Verdict.QUARANTINE, Verdict.FAIL_RUN) \
-                    and event.parse_status is not ParseStatus.NOT_OBSERVED:
+            if (
+                verdict in (Verdict.QUARANTINE, Verdict.FAIL_RUN)
+                and event.parse_status is not ParseStatus.NOT_OBSERVED
+            ):
                 raise ValueError("withheld artifact parse must be not_observed (C-04)")
         self._events.append(event)
         self._seen_ids.add(event.event_id)

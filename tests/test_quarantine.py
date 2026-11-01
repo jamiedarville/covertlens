@@ -111,8 +111,9 @@ def test_no_access_before_verdict_under_concurrent_attempts():
 def test_concurrent_permitted_access_serves_consistently():
     gate, delivery = pending_gate(Verdict.LOG)
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(
-            lambda _: gate.recipient_access(delivery.delivery_id), range(16)))
+        results = list(
+            pool.map(lambda _: gate.recipient_access(delivery.delivery_id), range(16))
+        )
     assert results == [PNG] * 16
     assert gate.access_attempt_report()["served"] == 16
     seqs = [e.seq for e in gate.events("run_q")]
@@ -122,15 +123,20 @@ def test_concurrent_permitted_access_serves_consistently():
 def test_quarantined_originals_are_reviewer_only():
     gate, delivery = pending_gate(Verdict.QUARANTINE)
     reviewers = {"researcher-1"}
-    assert gate.reviewer_access(
-        delivery.delivery_id, actor_id="researcher-1",
-        reviewer_ids=reviewers) == PNG
+    assert (
+        gate.reviewer_access(
+            delivery.delivery_id, actor_id="researcher-1", reviewer_ids=reviewers
+        )
+        == PNG
+    )
     with pytest.raises(ReviewerAccessError):
         gate.reviewer_access(
-            delivery.delivery_id, actor_id="agent-b", reviewer_ids=reviewers)
+            delivery.delivery_id, actor_id="agent-b", reviewer_ids=reviewers
+        )
     with pytest.raises(ReviewerAccessError):
         gate.reviewer_access(
-            delivery.delivery_id, actor_id="researcher-2", reviewer_ids=reviewers)
+            delivery.delivery_id, actor_id="researcher-2", reviewer_ids=reviewers
+        )
     history = gate.store.access_history(delivery.artifact_version_id)
     assert [(h.actor_id, h.purpose) for h in history] == [("researcher-1", "review")]
     report = gate.access_attempt_report()

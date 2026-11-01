@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +53,7 @@ def sniff_media_kind(data: bytes) -> str:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass(frozen=True)
@@ -243,7 +243,10 @@ class ArtifactStore:
     def verify(self, artifact_version_id: str) -> bool:
         """True when stored bytes still hash to the recorded value."""
         version = self._require(artifact_version_id)
-        return ids.content_hash(self._read_blob(version.content_hash)) == version.content_hash
+        return (
+            ids.content_hash(self._read_blob(version.content_hash))
+            == version.content_hash
+        )
 
     def verify_all(self) -> bool:
         return all(self.verify(v) for v in self._versions)
@@ -365,6 +368,8 @@ class ArtifactStore:
         tmp.replace(self._root / "index.json")
 
     def _load(self) -> None:
+        if self._root is None:
+            return
         index = self._root / "index.json"
         if not index.exists():
             return

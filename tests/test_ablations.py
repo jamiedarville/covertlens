@@ -14,7 +14,10 @@ def test_three_arms_reported_with_confusion(report):
         block = report["arms"][arm]
         assert block["auc"] is not None
         assert block["tp"] + block["fn"] == report["prevention"]["attempts"]["trials"]
-        assert block["fp"] + block["tn"] == report["prevention"]["clean_controls"]["trials"]
+        assert (
+            block["fp"] + block["tn"]
+            == report["prevention"]["clean_controls"]["trials"]
+        )
 
 
 def test_image_only_beats_context_only(report):

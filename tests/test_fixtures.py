@@ -78,7 +78,10 @@ def test_dct_round_trip_and_clean_control():
 def test_provenance_records_versions_seeds_and_configs():
     clean, encoded = build_pair("spatial_lsb", width=W, height=H, payload_bytes=8)
     for fixture in (clean, encoded):
-        assert fixture.generator["name"] and fixture.generator["version"] == GENERATOR_VERSION
+        assert (
+            fixture.generator["name"]
+            and fixture.generator["version"] == GENERATOR_VERSION
+        )
         assert isinstance(fixture.generator["seed"], int)
         assert fixture.encoder["version"] == ENCODER_VERSION
         assert fixture.encoder["config"]
@@ -121,4 +124,7 @@ def test_fixtures_ingest_into_cl8_store_with_matching_hashes():
             declared_hash=fixture.content_hash,
         )
         assert version.content_hash == fixture.content_hash
-        assert store.get_original(version.artifact_version_id, actor_id="test") == fixture.data
+        assert (
+            store.get_original(version.artifact_version_id, actor_id="test")
+            == fixture.data
+        )

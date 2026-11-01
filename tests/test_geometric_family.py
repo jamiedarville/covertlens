@@ -6,13 +6,22 @@ from covertlens.events import ParseStatus, Verdict
 from covertlens.gate import InterceptionContext, InterceptionGate
 from covertlens.geometric import analyze_geometric_bytes
 from covertlens.geometric_fixtures import build_geo_pair
-from covertlens.manifest import FAMILIES, channel_families, load_manifest, validate_manifest
+from covertlens.manifest import (
+    FAMILIES,
+    channel_families,
+    load_manifest,
+    validate_manifest,
+)
 from covertlens.metadata import analyze_all_bytes
 from covertlens.parsing import validate_finding, validate_result
 from covertlens.pinning import build_pin, export_bundle, validate_pin
 from covertlens.report import build_run_report, validate_run_report
 from covertlens.scorecard import load_scorecard
-from covertlens.segmentation import FAILURE_MODES, SegmentationResult, validate_segmentation
+from covertlens.segmentation import (
+    FAILURE_MODES,
+    SegmentationResult,
+    validate_segmentation,
+)
 from covertlens.store import ArtifactStore
 from covertlens.verdicts import decide_verdict
 
@@ -65,22 +74,22 @@ def test_corrupt_source_is_a_recorded_failure_mode():
 def test_report_export_and_pin_carry_geometric(geo_pair):
     _clean, encoded = geo_pair
     gate = InterceptionGate(ArtifactStore())
-    ctx = InterceptionContext(run_id="run_geo44", episode_id="ep_1",
-                              sender_id="agent-a")
+    ctx = InterceptionContext(
+        run_id="run_geo44", episode_id="ep_1", sender_id="agent-a"
+    )
     handle = gate.intercept_bytes("R-01", encoded.data, ctx)
     result = analyze_all_bytes(
-        encoded.data, artifact_version_id=handle.artifact_version_id)
+        encoded.data, artifact_version_id=handle.artifact_version_id
+    )
     delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
     gate.record_verdict(delivery.delivery_id, Verdict.LOG)
     gate.recipient_access(delivery.delivery_id)
     gate.record_parse(delivery.delivery_id, ParseStatus.PARSED)
 
-    report = build_run_report(gate.events("run_geo44"), [result],
-                              report_id="rpt_geo44")
+    report = build_run_report(gate.events("run_geo44"), [result], report_id="rpt_geo44")
     assert validate_run_report(report) == []
     families = {
-        f["family"] for original in report["originals"]
-        for f in original["findings"]
+        f["family"] for original in report["originals"] for f in original["findings"]
     }
     assert "geometric" in families
 
@@ -100,7 +109,10 @@ def test_published_scorecard_has_geometric_section_per_subfamily():
     geometric = card["sections"]["geometric"]
     assert geometric["source_schema"] == "covertlens.geo-benchmark"
     assert set(geometric["per_subfamily"]) == {
-        "height_position", "gap_timing", "lit_dark", "colour_code",
+        "height_position",
+        "gap_timing",
+        "lit_dark",
+        "colour_code",
         "angle_tilt",
     }
     assert geometric["general_geometric_coverage_claimed"] is False

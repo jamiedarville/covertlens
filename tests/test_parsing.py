@@ -40,7 +40,10 @@ def jpeg_fixture():
 def stored_version(data: bytes):
     store = ArtifactStore()
     version = store.put_original(
-        data, run_id="run_test", producer_id="agent-a", occurred_at=TS,
+        data,
+        run_id="run_test",
+        producer_id="agent-a",
+        occurred_at=TS,
     )
     return store, version
 
@@ -182,7 +185,10 @@ def test_corrupt_png_and_jpeg_have_explicit_results():
 
 
 def test_unsupported_format_and_encodings_have_explicit_results():
-    assert analyze_bytes(b"GIF89a-not-in-scope").status == AnalysisStatus.UNSUPPORTED_FORMAT
+    assert (
+        analyze_bytes(b"GIF89a-not-in-scope").status
+        == AnalysisStatus.UNSUPPORTED_FORMAT
+    )
     assert analyze_bytes(b"").status == AnalysisStatus.UNSUPPORTED_FORMAT
     depth16 = analyze_bytes(minimal_png_header(depth=16))
     assert depth16.status == AnalysisStatus.UNSUPPORTED_ENCODING
@@ -196,7 +202,9 @@ def test_unsupported_format_and_encodings_have_explicit_results():
     subsampled = bytearray(fixture)
     sof = fixture.index(b"\xff\xc0")
     subsampled[sof + 9] = 0x22  # first component sampling 2x2
-    assert analyze_bytes(bytes(subsampled)).status == AnalysisStatus.UNSUPPORTED_ENCODING
+    assert (
+        analyze_bytes(bytes(subsampled)).status == AnalysisStatus.UNSUPPORTED_ENCODING
+    )
     for result in (depth16, interlaced):
         assert result.errors and result.findings == ()
         assert validate_result(result) == []
@@ -209,7 +217,8 @@ def test_oversized_and_timeout_cases_have_explicit_results():
     by_pixels = analyze_bytes(fixture.data, limits=ParserLimits(max_pixels=100))
     assert by_pixels.status == AnalysisStatus.OVERSIZED
     by_decompressed = analyze_bytes(
-        fixture.data, limits=ParserLimits(max_decompressed_bytes=64))
+        fixture.data, limits=ParserLimits(max_decompressed_bytes=64)
+    )
     assert by_decompressed.status == AnalysisStatus.OVERSIZED
     timed_out = analyze_bytes(fixture.data, limits=ParserLimits(max_runtime_s=0))
     assert timed_out.status == AnalysisStatus.TIMEOUT

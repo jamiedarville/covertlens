@@ -9,7 +9,10 @@ import hashlib
 
 import pytest
 
+from covertlens.events import ParseStatus, Verdict
 from covertlens.fixtures import build_pair
+from covertlens.gate import InterceptionContext, InterceptionGate
+from covertlens.lsb import analyze_lsb_version
 from covertlens.metadata import analyze_all_bytes
 from covertlens.pinning import (
     build_pin,
@@ -20,14 +23,13 @@ from covertlens.pinning import (
     verify_reproducibility,
 )
 from covertlens.report import build_run_report
-from covertlens.events import ParseStatus, Verdict
-from covertlens.gate import InterceptionContext, InterceptionGate
-from covertlens.lsb import analyze_lsb_version
 from covertlens.store import ArtifactStore
 from covertlens.verdicts import FamilyThresholds, ThresholdConfig
 
-FROZEN = ThresholdConfig(version="pin-test-1", families={
-    "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)})
+FROZEN = ThresholdConfig(
+    version="pin-test-1",
+    families={"spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)},
+)
 
 
 def fixtures():
@@ -42,18 +44,26 @@ def test_pin_covers_dataset_detectors_config_and_seeds():
     assert pin["threshold_config_version"] == "pin-test-1"
     assert pin["seeds"] == {"replay": 7}
     assert len(pin["detectors"]) == 4  # + geometric (CL-44)
-    assert pin_differences(
-        pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 7}) == []
+    assert (
+        pin_differences(pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 7})
+        == []
+    )
     # Each kind of drift is named.
     _, other = build_pair("spatial_lsb", width=32, height=24, payload_bytes=17)
     drifts = pin_differences(
-        pin, [fixtures()[0], other], threshold_config=FROZEN, seeds={"replay": 7})
+        pin, [fixtures()[0], other], threshold_config=FROZEN, seeds={"replay": 7}
+    )
     assert "dataset" in drifts
     assert "seeds" in pin_differences(
-        pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 8})
+        pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 8}
+    )
     assert "detectors" in pin_differences(
-        pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 7},
-        detector_versions=["other@9"])
+        pin,
+        fixtures(),
+        threshold_config=FROZEN,
+        seeds={"replay": 7},
+        detector_versions=["other@9"],
+    )
     tampered = dict(pin, seeds={"replay": 99})
     assert validate_pin(tampered) != []
 
@@ -75,8 +85,12 @@ def test_stochastic_scorer_meets_documented_bounds():
         return base + jitter
 
     result = verify_reproducibility(
-        fixtures(), repetitions=4, stochastic_scorer=noisy,
-        base_seed=100, agreement_min=0.5)
+        fixtures(),
+        repetitions=4,
+        stochastic_scorer=noisy,
+        base_seed=100,
+        agreement_min=0.5,
+    )
     assert result["deterministic"] is False
     assert result["seeds"] == [100, 101, 102, 103]
     assert result["within_bounds"] == (result["verdict_agreement"] >= 0.5)
@@ -89,8 +103,11 @@ def test_export_carries_hashes_trace_versions_and_decisions():
     results = []
     for fixture in (clean, encoded):
         handle = gate.intercept_bytes("R-01", fixture.data, ctx)
-        results.append(analyze_lsb_version(
-            gate.store, handle.artifact_version_id, actor_id="detector"))
+        results.append(
+            analyze_lsb_version(
+                gate.store, handle.artifact_version_id, actor_id="detector"
+            )
+        )
         delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
         gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
         gate.recipient_access(delivery.delivery_id)
@@ -103,7 +120,9 @@ def test_export_carries_hashes_trace_versions_and_decisions():
     assert bundle["pin_hash"] == pin["pin_hash"]
     assert bundle["trace_references"]["event_ids"]
     assert {o["content_hash"] for o in bundle["originals"]} == {
-        clean.content_hash, encoded.content_hash}
+        clean.content_hash,
+        encoded.content_hash,
+    }
     assert {d["verdict"] for d in bundle["decisions"]} == {"flag"}
     assert all("data" not in o for o in bundle["originals"])
     broken = dict(bundle, threshold_config_version="other")

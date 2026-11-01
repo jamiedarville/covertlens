@@ -24,7 +24,7 @@ import struct
 import time
 import zlib
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from . import ids
@@ -42,7 +42,7 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 
 
-class AnalysisStatus(str, Enum):
+class AnalysisStatus(StrEnum):
     PARSED = "parsed"
     CORRUPT = "corrupt"
     UNSUPPORTED_FORMAT = "unsupported_format"
@@ -65,7 +65,10 @@ class ParserLimits:
 
     def __post_init__(self) -> None:
         for name in (
-            "max_input_bytes", "max_pixels", "max_width", "max_height",
+            "max_input_bytes",
+            "max_pixels",
+            "max_width",
+            "max_height",
             "max_decompressed_bytes",
         ):
             if getattr(self, name) < 1:
@@ -176,20 +179,33 @@ def validate_finding(finding: Finding | dict[str, Any]) -> list[str]:
             errors.append(msg)
 
     need(data.get("family") in FAMILIES, f"family must be one of {FAMILIES}")
-    need(isinstance(data.get("detector_name"), str) and bool(data.get("detector_name")),
-         "detector_name is required")
-    need(isinstance(data.get("detector_version"), str)
-         and bool(data.get("detector_version")), "detector_version is required")
+    need(
+        isinstance(data.get("detector_name"), str) and bool(data.get("detector_name")),
+        "detector_name is required",
+    )
+    need(
+        isinstance(data.get("detector_version"), str)
+        and bool(data.get("detector_version")),
+        "detector_version is required",
+    )
     score = data.get("score")
-    need(isinstance(score, (int, float)) and not isinstance(score, bool)
-         and 0.0 <= float(score) <= 1.0, "score must be a number in [0, 1]")
+    need(
+        isinstance(score, (int, float))
+        and not isinstance(score, bool)
+        and 0.0 <= float(score) <= 1.0,
+        "score must be a number in [0, 1]",
+    )
     need(isinstance(data.get("coverage"), dict), "coverage must be an object")
     need(isinstance(data.get("evidence", {}), dict), "evidence must be an object")
-    need(isinstance(data.get("limitations", []), list)
-         and all(isinstance(x, str) for x in data.get("limitations", [])),
-         "limitations must be a list of strings")
-    need(data.get("schema_version") == FINDING_SCHEMA_VERSION,
-         f"finding schema_version must be {FINDING_SCHEMA_VERSION}")
+    need(
+        isinstance(data.get("limitations", []), list)
+        and all(isinstance(x, str) for x in data.get("limitations", [])),
+        "limitations must be a list of strings",
+    )
+    need(
+        data.get("schema_version") == FINDING_SCHEMA_VERSION,
+        f"finding schema_version must be {FINDING_SCHEMA_VERSION}",
+    )
     return errors
 
 
@@ -203,18 +219,28 @@ def validate_result(result: AnalysisResult | dict[str, Any]) -> list[str]:
             errors.append(msg)
 
     need(data.get("schema") == RESULT_SCHEMA, f"schema must be {RESULT_SCHEMA}")
-    need(data.get("schema_version") == RESULT_SCHEMA_VERSION,
-         f"schema_version must be {RESULT_SCHEMA_VERSION}")
-    need(ids.is_content_hash(data.get("content_hash")),
-         "content_hash must be sha256:<hex> of the original bytes")
+    need(
+        data.get("schema_version") == RESULT_SCHEMA_VERSION,
+        f"schema_version must be {RESULT_SCHEMA_VERSION}",
+    )
+    need(
+        ids.is_content_hash(data.get("content_hash")),
+        "content_hash must be sha256:<hex> of the original bytes",
+    )
     status = data.get("status")
-    need(status in {s.value for s in AnalysisStatus},
-         f"status must be one of {[s.value for s in AnalysisStatus]}")
-    need(data.get("transform_applied") is False,
-         "transform_applied must be false (original bytes only, DET-01)")
+    need(
+        status in {s.value for s in AnalysisStatus},
+        f"status must be one of {[s.value for s in AnalysisStatus]}",
+    )
+    need(
+        data.get("transform_applied") is False,
+        "transform_applied must be false (original bytes only, DET-01)",
+    )
     parser = data.get("parser") or {}
-    need(parser.get("name") == PARSER_NAME and parser.get("version") == PARSER_VERSION,
-         "parser name/version must be the bounded parser's")
+    need(
+        parser.get("name") == PARSER_NAME and parser.get("version") == PARSER_VERSION,
+        "parser name/version must be the bounded parser's",
+    )
     limits = data.get("limits") or {}
     need(limits.get("version") == LIMITS_VERSION, "limits version is required")
     findings = data.get("findings", [])
@@ -225,11 +251,15 @@ def validate_result(result: AnalysisResult | dict[str, Any]) -> list[str]:
         need(findings == [], "failed parses carry no findings (C-02)")
         need(bool(data.get("errors")), "failed parses must carry explicit errors")
     if status == AnalysisStatus.PARSED.value:
-        need(data.get("media_kind") in ("png", "jpeg"),
-             "parsed results must name png or jpeg media")
+        need(
+            data.get("media_kind") in ("png", "jpeg"),
+            "parsed results must name png or jpeg media",
+        )
         coverage = data.get("coverage") or {}
-        need(any(v for v in coverage.values() if isinstance(v, int) and v > 0),
-             "parsed results must report positive coverage")
+        need(
+            any(v for v in coverage.values() if isinstance(v, int) and v > 0),
+            "parsed results must report positive coverage",
+        )
     return errors
 
 
@@ -281,20 +311,25 @@ def _result(
 
 def _check_deadline(start: float, limits: ParserLimits) -> None:
     if time.monotonic() - start > limits.max_runtime_s:
-        raise _Fail(AnalysisStatus.TIMEOUT,
-                    f"runtime deadline {limits.max_runtime_s}s exceeded")
+        raise _Fail(
+            AnalysisStatus.TIMEOUT, f"runtime deadline {limits.max_runtime_s}s exceeded"
+        )
 
 
 def _check_dimensions(width: int, height: int, limits: ParserLimits) -> None:
     if width < 1 or height < 1:
         raise _Fail(AnalysisStatus.CORRUPT, "image dimensions must be positive")
     if width > limits.max_width or height > limits.max_height:
-        raise _Fail(AnalysisStatus.OVERSIZED,
-                    f"dimensions {width}x{height} exceed "
-                    f"{limits.max_width}x{limits.max_height}")
+        raise _Fail(
+            AnalysisStatus.OVERSIZED,
+            f"dimensions {width}x{height} exceed "
+            f"{limits.max_width}x{limits.max_height}",
+        )
     if width * height > limits.max_pixels:
-        raise _Fail(AnalysisStatus.OVERSIZED,
-                    f"pixel count {width * height} exceeds {limits.max_pixels}")
+        raise _Fail(
+            AnalysisStatus.OVERSIZED,
+            f"pixel count {width * height} exceeds {limits.max_pixels}",
+        )
 
 
 def _paeth(a: int, b: int, c: int) -> int:
@@ -329,25 +364,36 @@ def _parse_png(
         body = data[pos + 8 : pos + 8 + length]
         stored = struct.unpack(">I", data[pos + 8 + length : end])[0]
         if _crc(kind, body) != stored:
-            raise _Fail(AnalysisStatus.CORRUPT, f"CRC mismatch in {kind.decode('latin1')}")
+            raise _Fail(
+                AnalysisStatus.CORRUPT, f"CRC mismatch in {kind.decode('latin1')}"
+            )
         if ihdr is None and kind != b"IHDR":
             raise _Fail(AnalysisStatus.CORRUPT, "first PNG chunk must be IHDR")
         if kind == b"IHDR":
             if ihdr is not None or length != 13:
                 raise _Fail(AnalysisStatus.CORRUPT, "invalid IHDR chunk")
             width, height, depth, color, _comp, _filt, interlace = struct.unpack(
-                ">IIBBBBB", body)
-            ihdr = {"width": width, "height": height, "bit_depth": depth,
-                    "color_type": color, "interlace": interlace}
+                ">IIBBBBB", body
+            )
+            ihdr = {
+                "width": width,
+                "height": height,
+                "bit_depth": depth,
+                "color_type": color,
+                "interlace": interlace,
+            }
             if depth != 8:
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            f"PNG bit depth {depth} outside declared 8-bit subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    f"PNG bit depth {depth} outside declared 8-bit subset",
+                )
             if color not in _PNG_CHANNELS:
-                raise _Fail(AnalysisStatus.CORRUPT,
-                            f"unknown PNG colour type {color}")
+                raise _Fail(AnalysisStatus.CORRUPT, f"unknown PNG colour type {color}")
             if interlace != 0:
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            "interlaced PNG outside declared subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    "interlaced PNG outside declared subset",
+                )
             _check_dimensions(width, height, limits)
         elif kind == b"IDAT":
             idat += body
@@ -357,8 +403,10 @@ def _parse_png(
         elif kind == b"PLTE":
             pass  # palette bytes; indices are still parsed row-wise
         elif kind[:1].isupper():
-            raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                        f"unknown critical PNG chunk {kind.decode('latin1')}")
+            raise _Fail(
+                AnalysisStatus.UNSUPPORTED_ENCODING,
+                f"unknown critical PNG chunk {kind.decode('latin1')}",
+            )
         pos = end
     if ihdr is None or not idat or not seen_iend:
         raise _Fail(AnalysisStatus.CORRUPT, "PNG missing IHDR, IDAT or IEND")
@@ -371,9 +419,10 @@ def _parse_png(
     stride = width * channels
     expected = height * (1 + stride)
     if expected > limits.max_decompressed_bytes:
-        raise _Fail(AnalysisStatus.OVERSIZED,
-                    f"decompressed size {expected} exceeds "
-                    f"{limits.max_decompressed_bytes}")
+        raise _Fail(
+            AnalysisStatus.OVERSIZED,
+            f"decompressed size {expected} exceeds {limits.max_decompressed_bytes}",
+        )
     _check_deadline(start, limits)
     try:
         engine = zlib.decompressobj()
@@ -417,18 +466,82 @@ def _parse_png(
             raise _Fail(AnalysisStatus.CORRUPT, f"unknown PNG filter {ftype}")
         rows.append(bytes(line))
         prev = line
-    image = {"width": width, "height": height,
-             "bit_depth": int(ihdr["bit_depth"]),
-             "color_type": int(ihdr["color_type"]), "channels": channels}
+    image = {
+        "width": width,
+        "height": height,
+        "bit_depth": int(ihdr["bit_depth"]),
+        "color_type": int(ihdr["color_type"]),
+        "channels": channels,
+    }
     coverage = {"rows_parsed": height, "pixels_parsed": width * height}
     return image, coverage, b"".join(rows)
 
 
 _ZIGZAG = (
-    0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5,
-    12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28,
-    35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
-    58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+    0,
+    1,
+    8,
+    16,
+    9,
+    2,
+    3,
+    10,
+    17,
+    24,
+    32,
+    25,
+    18,
+    11,
+    4,
+    5,
+    12,
+    19,
+    26,
+    33,
+    40,
+    48,
+    41,
+    34,
+    27,
+    20,
+    13,
+    6,
+    7,
+    14,
+    21,
+    28,
+    35,
+    42,
+    49,
+    56,
+    57,
+    50,
+    43,
+    36,
+    29,
+    22,
+    15,
+    23,
+    30,
+    37,
+    44,
+    51,
+    58,
+    59,
+    52,
+    45,
+    38,
+    31,
+    39,
+    46,
+    53,
+    60,
+    61,
+    54,
+    47,
+    55,
+    62,
+    63,
 )
 
 
@@ -447,9 +560,11 @@ class _BitReader:
                     i += 2
                     continue
                 if 0xD0 <= nxt <= 0xD9:
-                    raise _Fail(AnalysisStatus.CORRUPT,
-                                "restart/EOI marker inside entropy data "
-                                "(restart intervals outside declared subset)")
+                    raise _Fail(
+                        AnalysisStatus.CORRUPT,
+                        "restart/EOI marker inside entropy data "
+                        "(restart intervals outside declared subset)",
+                    )
             self._bits.extend((byte >> s) & 1 for s in range(7, -1, -1))
             i += 1
         self._pos = 0
@@ -535,38 +650,64 @@ def _parse_jpeg(
             has_dqt = True
         elif marker == 0xC4:
             tables.update(_parse_huffman(body))
-        elif marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
-                        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+        elif marker in (
+            0xC0,
+            0xC1,
+            0xC2,
+            0xC3,
+            0xC5,
+            0xC6,
+            0xC7,
+            0xC9,
+            0xCA,
+            0xCB,
+            0xCD,
+            0xCE,
+            0xCF,
+        ):
             if marker != 0xC0:
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            f"JPEG frame type 0xFF{marker:02X} outside "
-                            "declared baseline (SOF0) subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    f"JPEG frame type 0xFF{marker:02X} outside "
+                    "declared baseline (SOF0) subset",
+                )
             if len(body) < 6:
                 raise _Fail(AnalysisStatus.CORRUPT, "short SOF0 segment")
             precision = body[0]
             height, width = struct.unpack(">HH", body[1:5])
             ncomp = body[5]
             if precision != 8:
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            f"JPEG precision {precision} outside declared 8-bit subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    f"JPEG precision {precision} outside declared 8-bit subset",
+                )
             if ncomp != 3:
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            f"JPEG with {ncomp} components outside declared "
-                            "4:4:4 subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    f"JPEG with {ncomp} components outside declared 4:4:4 subset",
+                )
             sampling = [body[6 + i * 3 + 1] for i in range(ncomp)]
             if any(s != 0x11 for s in sampling):
-                raise _Fail(AnalysisStatus.UNSUPPORTED_ENCODING,
-                            f"JPEG sampling {sampling} outside declared "
-                            "4:4:4 subset")
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    f"JPEG sampling {sampling} outside declared 4:4:4 subset",
+                )
             _check_dimensions(width, height, limits)
-            sof = {"width": width, "height": height, "precision": precision,
-                   "components": ncomp, "sampling": "4:4:4"}
+            sof = {
+                "width": width,
+                "height": height,
+                "precision": precision,
+                "components": ncomp,
+                "sampling": "4:4:4",
+            }
         elif marker == 0xDA:
             if sof is None:
                 raise _Fail(AnalysisStatus.CORRUPT, "SOS before SOF0")
             if not has_dqt or not tables:
-                raise _Fail(AnalysisStatus.CORRUPT,
-                            "JPEG scan without quantisation/Huffman tables")
+                raise _Fail(
+                    AnalysisStatus.CORRUPT,
+                    "JPEG scan without quantisation/Huffman tables",
+                )
             scan = data[pos + 2 + length :]
             break
         pos += 2 + length
@@ -611,8 +752,7 @@ def _parse_jpeg(
                 coeffs[_ZIGZAG[k]] = reader.read_value(sz)
                 k += 1
             blocks.append(tuple(coeffs))
-    coverage = {"blocks_parsed": len(blocks),
-                "coefficients_parsed": len(blocks) * 64}
+    coverage = {"blocks_parsed": len(blocks), "coefficients_parsed": len(blocks) * 64}
     return sof, coverage, tuple(blocks)
 
 
@@ -635,45 +775,81 @@ def analyze_bytes(
     active = limits or DEFAULT_LIMITS
     start = time.monotonic()
     if len(raw) > active.max_input_bytes:
-        return _result(raw, AnalysisStatus.OVERSIZED, active, start,
-                       detail=f"input size {len(raw)} exceeds "
-                              f"{active.max_input_bytes}",
-                       artifact_id=artifact_id,
-                       artifact_version_id=artifact_version_id)
+        return _result(
+            raw,
+            AnalysisStatus.OVERSIZED,
+            active,
+            start,
+            detail=f"input size {len(raw)} exceeds {active.max_input_bytes}",
+            artifact_id=artifact_id,
+            artifact_version_id=artifact_version_id,
+        )
     is_png = raw.startswith(_PNG_MAGIC)
     is_jpeg = raw.startswith(b"\xff\xd8")
     if not is_png and not is_jpeg:
-        return _result(raw, AnalysisStatus.UNSUPPORTED_FORMAT, active, start,
-                       detail="original must be PNG or JPEG bytes (eval scope)",
-                       artifact_id=artifact_id,
-                       artifact_version_id=artifact_version_id)
+        return _result(
+            raw,
+            AnalysisStatus.UNSUPPORTED_FORMAT,
+            active,
+            start,
+            detail="original must be PNG or JPEG bytes (eval scope)",
+            artifact_id=artifact_id,
+            artifact_version_id=artifact_version_id,
+        )
     try:
         if is_png:
             image, coverage, pixels = _parse_png(raw, active, start)
             _check_deadline(start, active)
             return _result(
-                raw, AnalysisStatus.PARSED, active, start, media_kind="png",
-                artifact_id=artifact_id, artifact_version_id=artifact_version_id,
-                image=image, coverage=coverage, pixels=pixels,
-                limitations=("parser subset: 8-bit non-interlaced PNG; "
-                             "metadata channels scored separately (CL-23)",))
+                raw,
+                AnalysisStatus.PARSED,
+                active,
+                start,
+                media_kind="png",
+                artifact_id=artifact_id,
+                artifact_version_id=artifact_version_id,
+                image=image,
+                coverage=coverage,
+                pixels=pixels,
+                limitations=(
+                    "parser subset: 8-bit non-interlaced PNG; "
+                    "metadata channels scored separately (CL-23)",
+                ),
+            )
         image, coverage, blocks = _parse_jpeg(raw, active, start)
         _check_deadline(start, active)
         return _result(
-            raw, AnalysisStatus.PARSED, active, start, media_kind="jpeg",
-            artifact_id=artifact_id, artifact_version_id=artifact_version_id,
-            image=image, coverage=coverage, coefficients=blocks,
-            limitations=("parser subset: 8-bit baseline 4:4:4 JPEG, quantized "
-                         "coefficient domain; metadata scored separately (CL-23)",))
+            raw,
+            AnalysisStatus.PARSED,
+            active,
+            start,
+            media_kind="jpeg",
+            artifact_id=artifact_id,
+            artifact_version_id=artifact_version_id,
+            image=image,
+            coverage=coverage,
+            coefficients=blocks,
+            limitations=(
+                "parser subset: 8-bit baseline 4:4:4 JPEG, quantized "
+                "coefficient domain; metadata scored separately (CL-23)",
+            ),
+        )
     except _Fail as fail:
         kind = "png" if is_png else "jpeg"
         limits_note: tuple[str, ...] = ()
         if fail.status is AnalysisStatus.UNSUPPORTED_ENCODING:
             limits_note = ("declared subset only; see contract doc",)
-        return _result(raw, fail.status, active, start, detail=fail.detail,
-                       media_kind=kind, artifact_id=artifact_id,
-                       artifact_version_id=artifact_version_id,
-                       limitations=limits_note)
+        return _result(
+            raw,
+            fail.status,
+            active,
+            start,
+            detail=fail.detail,
+            media_kind=kind,
+            artifact_id=artifact_id,
+            artifact_version_id=artifact_version_id,
+            limitations=limits_note,
+        )
 
 
 def analyze_version(
@@ -689,7 +865,10 @@ def analyze_version(
     instead of being analysed; a failed check is never an access.
     """
     version = store._require(artifact_version_id)  # same-package lookup
-    raw = store.get_original(artifact_version_id, actor_id=actor_id,
-                             purpose="analysis")
-    return analyze_bytes(raw, limits=limits, artifact_id=version.artifact_id,
-                         artifact_version_id=artifact_version_id)
+    raw = store.get_original(artifact_version_id, actor_id=actor_id, purpose="analysis")
+    return analyze_bytes(
+        raw,
+        limits=limits,
+        artifact_id=version.artifact_id,
+        artifact_version_id=artifact_version_id,
+    )

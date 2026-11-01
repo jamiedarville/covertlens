@@ -5,6 +5,10 @@ number). Each entry corresponds to one merged pull request; the
 deliverables ledger in [README.md](README.md) maps every entry to
 its acceptance criteria, code, contract doc, schema, and tests.
 
+## Unreleased
+
+- **CL-50** — Add lint, type and schema checks to CI and split the CLI (ruff + mypy at 0, argparse CLI over `covertlens/demos.py`, schema-validation tests, `slow` latency marker).
+
 ## 0.1.0 — 2026-11-01
 
 Initial public release: the four-family gate, frozen benchmarks,

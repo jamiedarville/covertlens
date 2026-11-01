@@ -1,5 +1,6 @@
 import pytest
 
+from covertlens.fixtures import _load_png
 from covertlens.geometric_fixtures import (
     SUBFAMILIES,
     assign_geo_splits,
@@ -11,7 +12,6 @@ from covertlens.geometric_fixtures import (
     validate_geo_splits,
     verify_geo_fixture,
 )
-from covertlens.fixtures import _load_png
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +26,10 @@ def test_dataset_covers_all_subfamilies_with_pairs(dataset):
         assert {"clean", "encoded"} <= roles
     negatives = [f for f in dataset if f.role == "negative"]
     assert {f.negative_kind for f in negatives} == {
-        "legitimate_chart", "unencoded_scene", "benign_edit", "generator_variation",
+        "legitimate_chart",
+        "unencoded_scene",
+        "benign_edit",
+        "generator_variation",
     }
 
 

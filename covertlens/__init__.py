@@ -6,6 +6,26 @@ the immutable artifact store with dataset-lifetime evidence retention.
 """
 
 from . import ids
+from .ablations import run_ablations, validate_ablations
+from .calibration import (
+    calibrate_family,
+    calibrate_thresholds,
+    load_frozen_thresholds,
+    validate_calibration,
+)
+from .dct import (
+    CONFIG_VERSION as DCT_CONFIG_VERSION,
+)
+from .dct import (
+    DCT_DETECTOR_NAME,
+    DCT_DETECTOR_VERSION,
+    DctConfig,
+    analyze_dct_bytes,
+    analyze_dct_version,
+    benchmark_dct,
+    detect_dct,
+    validate_dct_benchmark,
+)
 from .events import (
     Event,
     EventType,
@@ -28,16 +48,12 @@ from .fixtures import (
     make_payload,
     manifest,
 )
-from .dct import (
-    CONFIG_VERSION as DCT_CONFIG_VERSION,
-    DCT_DETECTOR_NAME,
-    DCT_DETECTOR_VERSION,
-    DctConfig,
-    analyze_dct_bytes,
-    analyze_dct_version,
-    benchmark_dct,
-    detect_dct,
-    validate_dct_benchmark,
+from .frozen_benchmark import (
+    clean_run_stability,
+    evaluate_held_out,
+    run_frozen_evaluation,
+    validate_frozen_benchmark,
+    wilson_interval,
 )
 from .gate import (
     DeliveryRecord,
@@ -47,8 +63,54 @@ from .gate import (
     ReviewerAccessError,
     WithheldError,
 )
+from .geo_benchmark import (
+    benign_controls,
+    build_structured_pair,
+    run_geo_benchmark,
+    run_structured_recall,
+    validate_geo_benchmark,
+)
+from .geometric import (
+    CODES_V2,
+    GeometricConfig,
+    analyze_geometric,
+    analyze_geometric_bytes,
+    chart_likeness,
+    detect_geometric,
+    trigram_score,
+    validate_geometric_report,
+)
+from .geometric_fixtures import (
+    GeoFixture,
+    assign_geo_splits,
+    attacker_grid,
+    build_attacker_geo_pair,
+    build_geo_dataset,
+    build_geo_pair,
+    geo_ground_truth,
+    geo_manifest,
+    measure_attributes,
+    scene_plan,
+    segment_elements,  # noqa: F401  (re-exported for CL-39 consumers)
+    validate_geo_splits,
+    verify_geo_fixture,
+)
+from .grid import discover_grid, fit_declared_grid, rayleigh
+from .handoff import run_handoff_verification, validate_handoff
+from .integrity import AnalysisCache, context_fingerprint
+from .latency import (
+    gate_reliability_check,
+    limit_behavior_checks,
+    measure_class,
+    measure_concurrent,
+    percentile,
+    run_reliability_report,
+    validate_latency_report,
+)
 from .lsb import (
     CONFIG_VERSION as LSB_CONFIG_VERSION,
+)
+from .lsb import (
     LSB_DETECTOR_NAME,
     LSB_DETECTOR_VERSION,
     LsbConfig,
@@ -58,7 +120,6 @@ from .lsb import (
     detect_lsb,
     validate_benchmark,
 )
-from .integrity import AnalysisCache, context_fingerprint
 from .manifest import (
     channel_families,
     declared_geometric_channels,
@@ -91,93 +152,17 @@ from .outcomes import (
     finalize_run_outcome,
     validate_outcome,
 )
-from .replay import ReplayConfig, build_trials, run_replay, validate_replay
-from .report import (
-    DISPOSITIONS,
-    apply_review,
-    build_run_report,
-    validate_run_report,
+from .parsing import (
+    DEFAULT_LIMITS,
+    AnalysisResult,
+    AnalysisStatus,
+    Finding,
+    ParserLimits,
+    analyze_bytes,
+    analyze_version,
+    validate_finding,
+    validate_result,
 )
-from .calibration import (
-    calibrate_family,
-    calibrate_thresholds,
-    load_frozen_thresholds,
-    validate_calibration,
-)
-from .frozen_benchmark import (
-    clean_run_stability,
-    evaluate_held_out,
-    run_frozen_evaluation,
-    validate_frozen_benchmark,
-    wilson_interval,
-)
-from .latency import (
-    gate_reliability_check,
-    limit_behavior_checks,
-    measure_class,
-    measure_concurrent,
-    percentile,
-    run_reliability_report,
-    validate_latency_report,
-)
-from .ablations import run_ablations, validate_ablations
-from .review_export import (
-    build_review_package,
-    create_review_export,
-    run_export_verification,
-    validate_review_package,
-    verify_evidence_access,
-)
-from .robustness import run_robustness, validate_robustness
-from .route_audit import run_route_audit, validate_route_audit
-from .grid import discover_grid, fit_declared_grid, rayleigh
-from .geometric_fixtures import (
-    GeoFixture,
-    assign_geo_splits,
-    attacker_grid,
-    build_attacker_geo_pair,
-    build_geo_dataset,
-    build_geo_pair,
-    geo_ground_truth,
-    geo_manifest,
-    measure_attributes,
-    scene_plan,
-    segment_elements,  # noqa: F401  (re-exported for CL-39 consumers)
-    validate_geo_splits,
-    verify_geo_fixture,
-)
-from .handoff import run_handoff_verification, validate_handoff
-from .geometric import (
-    CODES_V2,
-    GeometricConfig,
-    analyze_geometric,
-    analyze_geometric_bytes,
-    chart_likeness,
-    detect_geometric,
-    trigram_score,
-    validate_geometric_report,
-)
-from .geo_benchmark import (
-    benign_controls,
-    build_structured_pair,
-    run_geo_benchmark,
-    run_structured_recall,
-    validate_geo_benchmark,
-)
-from .vector_source import (
-    analyze_with_source,
-    build_vector_source,
-    parse_vector_source,
-    register_source_lineage,
-    validate_vector_binding,
-)
-from .segmentation import (
-    SegmentationResult,
-    SegmenterConfig,
-    segment_image,
-    validate_segmentation,
-)
-from .scorecard import build_scorecard, load_scorecard, validate_scorecard
 from .pilot import (
     PilotTrace,
     build_seeded_traces,
@@ -193,26 +178,23 @@ from .pinning import (
     validate_pin,
     verify_reproducibility,
 )
-from .parsing import (
-    DEFAULT_LIMITS,
-    AnalysisResult,
-    AnalysisStatus,
-    Finding,
-    ParserLimits,
-    analyze_bytes,
-    analyze_version,
-    validate_finding,
-    validate_result,
+from .replay import ReplayConfig, build_trials, run_replay, validate_replay
+from .report import (
+    DISPOSITIONS,
+    apply_review,
+    build_run_report,
+    validate_run_report,
 )
+from .review_export import (
+    build_review_package,
+    create_review_export,
+    run_export_verification,
+    validate_review_package,
+    verify_evidence_access,
+)
+from .robustness import run_robustness, validate_robustness
+from .route_audit import run_route_audit, validate_route_audit
 from .routes import ROUTES, Route, routes_by_kind, validate_inventory
-from .sequence import (
-    SequenceCase,
-    assess_sequence,
-    benchmark_sequences,
-    build_episode_context,
-    sequence_features,
-    validate_episode_context,
-)
 from .runtime import (
     AuditLog,
     DatasetRetirement,
@@ -221,6 +203,21 @@ from .runtime import (
     RuntimeConfig,
     load_runtime_policy,
     validate_runtime_policy,
+)
+from .scorecard import build_scorecard, load_scorecard, validate_scorecard
+from .segmentation import (
+    SegmentationResult,
+    SegmenterConfig,
+    segment_image,
+    validate_segmentation,
+)
+from .sequence import (
+    SequenceCase,
+    assess_sequence,
+    benchmark_sequences,
+    build_episode_context,
+    sequence_features,
+    validate_episode_context,
 )
 from .splits import (
     SPLITS,
@@ -238,11 +235,22 @@ from .splits import (
 from .store import RETENTION_POLICY, ArtifactStore, ArtifactVersion
 from .trace_join import (
     JOIN_VERSION as TRACE_JOIN_VERSION,
+)
+from .trace_join import (
     join_trace,
     validate_trace_join,
 )
+from .vector_source import (
+    analyze_with_source,
+    build_vector_source,
+    parse_vector_source,
+    register_source_lineage,
+    validate_vector_binding,
+)
 from .verdicts import (
     CONFIG_VERSION as THRESHOLD_CONFIG_VERSION,
+)
+from .verdicts import (
     LADDER_VERSION,
     DecisionContext,
     FamilyThresholds,

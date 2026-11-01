@@ -25,8 +25,9 @@ a pinned threshold config.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Iterable
+from typing import Any
 
 from .dct import detect_dct
 from .fixtures import Fixture
@@ -190,7 +191,9 @@ def analyze_all_bytes(
 ) -> AnalysisResult:
     """One parse, all applicable family findings, individually visible."""
     result = analyze_bytes(
-        data, limits=limits, artifact_id=artifact_id,
+        data,
+        limits=limits,
+        artifact_id=artifact_id,
         artifact_version_id=artifact_version_id,
     )
     if result.status is not AnalysisStatus.PARSED:
@@ -273,13 +276,19 @@ def benchmark_metadata(
             raise ValueError("thresholds must lie in [0, 1]")
     sweep = []
     for threshold in sweep_thresholds:
-        tp = sum(1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold)
-        fp = sum(1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold)
+        tp = sum(
+            1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold
+        )
+        fp = sum(
+            1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold
+        )
         sweep.append(
             {
                 "threshold": round(threshold, 6),
-                "tp": tp, "fp": fp,
-                "tn": len(negative) - fp, "fn": len(positive) - tp,
+                "tp": tp,
+                "fp": fp,
+                "tn": len(negative) - fp,
+                "fn": len(positive) - tp,
                 "precision": _wilson(tp, tp + fp),
                 "recall": _wilson(tp, tp + len(positive) - tp),
                 "false_positive_rate": _wilson(fp, len(negative)),

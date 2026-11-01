@@ -30,8 +30,11 @@ def gate_with_two_deliveries():
     results, deliveries = [], []
     for fixture in (clean, encoded):
         handle = gate.intercept_bytes("R-01", fixture.data, ctx)
-        results.append(analyze_lsb_version(
-            gate.store, handle.artifact_version_id, actor_id="detector"))
+        results.append(
+            analyze_lsb_version(
+                gate.store, handle.artifact_version_id, actor_id="detector"
+            )
+        )
         delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
         gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
         gate.recipient_access(delivery.delivery_id)
@@ -40,8 +43,15 @@ def gate_with_two_deliveries():
 
 
 def action_event(seq, **kw):
-    return Event(EventType.RECIPIENT_ACTION, RUN, seq, TS,
-                 recipient_id="agent-b", payload={"action": "answer"}, **kw)
+    return Event(
+        EventType.RECIPIENT_ACTION,
+        RUN,
+        seq,
+        TS,
+        recipient_id="agent-b",
+        payload={"action": "answer"},
+        **kw,
+    )
 
 
 def test_every_attempted_delivery_has_hash_and_verdict_reference():
@@ -95,8 +105,10 @@ def test_delivered_artifacts_link_parse_and_next_action_or_missing():
     assert first["next_action"]["linkage"] in ("candidate", "referenced")
     # Second delivery was served but never parsed: explicit missing.
     assert second["parse"] == {
-        "linkage": "missing", "parse_status": "missing",
-        "event_id": None, "seq": None,
+        "linkage": "missing",
+        "parse_status": "missing",
+        "event_id": None,
+        "seq": None,
     }
     assert "parse_event" in second["missing"]
     assert validate_trace_join(report) == []
@@ -127,8 +139,7 @@ def test_multiple_candidates_stay_visible_without_causation():
     action = report["actions"][0]
     assert action["causation_claimed"] is False
     assert action["candidate_count"] == 2
-    assert set(action["candidate_delivery_ids"]) == {
-        d.delivery_id for d in deliveries}
+    assert set(action["candidate_delivery_ids"]) == {d.delivery_id for d in deliveries}
     for record in report["deliveries"]:
         assert record["next_actions"]
         assert all(a["causation_claimed"] is False for a in record["next_actions"])
@@ -158,21 +169,29 @@ def test_hash_mismatch_findings_are_rejected_not_attached():
 
 def test_unjoined_results_are_listed_with_reasons():
     gate, results, _ = gate_with_two_deliveries()
-    orphan = analyze_bytes(build_pair(
-        "spatial_lsb", width=32, height=24, payload_bytes=8)[0].data)
+    orphan = analyze_bytes(
+        build_pair("spatial_lsb", width=32, height=24, payload_bytes=8)[0].data
+    )
     report = join_trace(gate.events(RUN), [*results, orphan])
     assert report["unjoined_results"]
     assert any(
-        "artifact_version_id" in row["reason"] for row in report["unjoined_results"])
+        "artifact_version_id" in row["reason"] for row in report["unjoined_results"]
+    )
     assert validate_trace_join(report) == []
 
 
 def test_cross_run_join_is_rejected_and_dict_events_accepted():
     gate, results, _ = gate_with_two_deliveries()
     events = gate.events(RUN)
-    other = Event(EventType.ARTIFACT_CREATED, "run_other", 99, TS,
-                  artifact_id=ids.new_artifact_id(),
-                  artifact_version_id="x", content_hash=ids.content_hash(b"x"))
+    other = Event(
+        EventType.ARTIFACT_CREATED,
+        "run_other",
+        99,
+        TS,
+        artifact_id=ids.new_artifact_id(),
+        artifact_version_id="x",
+        content_hash=ids.content_hash(b"x"),
+    )
     with pytest.raises(ValueError, match="across runs"):
         join_trace([*events, other], results)
     as_dicts = [e.to_dict() for e in events]
@@ -199,7 +218,8 @@ def test_join_does_not_claim_causation_even_for_single_candidate():
     _, encoded = build_pair("spatial_lsb", width=32, height=24, payload_bytes=16)
     handle = gate.intercept_bytes("R-01", encoded.data, ctx)
     result = analyze_lsb_version(
-        gate.store, handle.artifact_version_id, actor_id="detector")
+        gate.store, handle.artifact_version_id, actor_id="detector"
+    )
     delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
     gate.record_verdict(delivery.delivery_id, Verdict.LOG)
     gate.recipient_access(delivery.delivery_id)
@@ -214,8 +234,9 @@ def test_join_does_not_claim_causation_even_for_single_candidate():
 
 def test_analyze_bytes_result_without_version_is_unjoined():
     gate, _, deliveries = gate_with_two_deliveries()
-    loose = analyze_lsb_bytes(build_pair(
-        "spatial_lsb", width=32, height=24, payload_bytes=8)[1].data)
+    loose = analyze_lsb_bytes(
+        build_pair("spatial_lsb", width=32, height=24, payload_bytes=8)[1].data
+    )
     report = join_trace(gate.events(RUN), [loose])
     assert report["deliveries"][0]["findings_status"] == "no_findings_recorded"
     assert report["unjoined_results"]

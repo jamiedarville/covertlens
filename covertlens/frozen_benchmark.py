@@ -24,10 +24,11 @@ whose structured LSB planes fire the CL-14 detector on clean images.
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from .calibration import load_frozen_thresholds
-from .fixtures import Fixture, build_dataset, encode_dct_jpeg, generate_cover, _save_png
+from .fixtures import Fixture, _save_png, build_dataset, encode_dct_jpeg, generate_cover
 from .metadata import analyze_all_bytes
 from .metadata_fixtures import build_metadata_dataset
 from .pinning import dataset_hash
@@ -48,7 +49,9 @@ IN_COVERAGE_PATTERNS = ("gradient_noise",)
 PROBE_PATTERNS = ("smooth", "blocks")
 
 
-def wilson_interval(successes: int, n: int, z: float = 1.959964) -> dict[str, float | None]:
+def wilson_interval(
+    successes: int, n: int, z: float = 1.959964
+) -> dict[str, float | None]:
     """Wilson score interval for a binomial proportion."""
     if n == 0:
         return {"low": None, "high": None}
@@ -56,7 +59,10 @@ def wilson_interval(successes: int, n: int, z: float = 1.959964) -> dict[str, fl
     denom = 1.0 + z * z / n
     centre = (p + z * z / (2 * n)) / denom
     half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return {"low": round(max(0.0, centre - half), 6), "high": round(min(1.0, centre + half), 6)}
+    return {
+        "low": round(max(0.0, centre - half), 6),
+        "high": round(min(1.0, centre + half), 6),
+    }
 
 
 def _rate(numerator: int, denominator: int) -> dict[str, Any]:
@@ -85,26 +91,29 @@ def evaluate_held_out(
     held_out = [f for f in fixtures if assignments.get(f.fixture_id) == "held_out"]
     families: dict[str, Any] = {}
     for family in FAMILIES:
-        owned = [
-            f for f in held_out
-            if f.family == family
-        ]
+        owned = [f for f in held_out if f.family == family]
         thresholds = config.for_family(family)
-        positives = [f for f in owned if f.role == "encoded"]
-        negatives = [f for f in owned if f.role in ("clean", "negative")]
         rows = []
         for fixture in owned:
             score = _family_score(fixture, family)
-            rows.append({
-                "fixture_id": fixture.fixture_id,
-                "role": fixture.role,
-                "payload_band": fixture.payload_band,
-                "score": round(score, 6) if score is not None else None,
-                "at_triage": bool(score is not None and thresholds.triage_flag_at is not None
-                                  and score >= float(thresholds.triage_flag_at)),
-                "at_enforcement": bool(score is not None and thresholds.enforcement_quarantine_at is not None
-                                       and score >= float(thresholds.enforcement_quarantine_at)),
-            })
+            rows.append(
+                {
+                    "fixture_id": fixture.fixture_id,
+                    "role": fixture.role,
+                    "payload_band": fixture.payload_band,
+                    "score": round(score, 6) if score is not None else None,
+                    "at_triage": bool(
+                        score is not None
+                        and thresholds.triage_flag_at is not None
+                        and score >= float(thresholds.triage_flag_at)
+                    ),
+                    "at_enforcement": bool(
+                        score is not None
+                        and thresholds.enforcement_quarantine_at is not None
+                        and score >= float(thresholds.enforcement_quarantine_at)
+                    ),
+                }
+            )
         pos_rows = [r for r in rows if r["role"] == "encoded"]
         neg_rows = [r for r in rows if r["role"] in ("clean", "negative")]
         tp_triage = sum(1 for r in pos_rows if r["at_triage"])
@@ -212,19 +221,24 @@ def run_frozen_evaluation(
 
     families = held_out["families"]
     recall_met = {
-        family: (block["recall_at_triage"]["value"] is not None
-                 and block["recall_at_triage"]["value"] >= RECALL_TARGET)
+        family: (
+            block["recall_at_triage"]["value"] is not None
+            and block["recall_at_triage"]["value"] >= RECALL_TARGET
+        )
         for family, block in families.items()
     }
     precision_met = {
-        family: (block["enforcement_precision"]["value"] is not None
-                 and block["enforcement_precision"]["value"] >= PRECISION_TARGET)
+        family: (
+            block["enforcement_precision"]["value"] is not None
+            and block["enforcement_precision"]["value"] >= PRECISION_TARGET
+        )
         for family, block in families.items()
     }
     stability_rate = stability["false_failure_rate"]["value"]
     stability_met = bool(
         stability["runs"] >= MIN_CLEAN_RUNS
-        and stability_rate is not None and stability_rate <= CLEAN_FAILURE_TARGET
+        and stability_rate is not None
+        and stability_rate <= CLEAN_FAILURE_TARGET
     )
     probe_failures = {
         pattern: block["false_failure_rate"]["value"]
@@ -290,7 +304,10 @@ def validate_frozen_benchmark(report: dict[str, Any]) -> list[str]:
             errors.append(msg)
 
     need(report.get("schema") == BENCHMARK_SCHEMA, f"schema must be {BENCHMARK_SCHEMA}")
-    need(report.get("evaluation_set") == "held_out_only", "evaluation must be held-out only")
+    need(
+        report.get("evaluation_set") == "held_out_only",
+        "evaluation must be held-out only",
+    )
     need(
         report.get("calibration_overlap_fixture_ids") == [],
         "held-out evaluation must not overlap calibration fixtures (C-07)",

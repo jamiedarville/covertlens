@@ -5,11 +5,15 @@ from covertlens.pilot import run_pilot, validate_pilot
 
 @pytest.fixture(scope="module")
 def pilot():
-    return run_pilot(adjudications={
-        "uns-1": {"disposition": "suspected",
-                  "note": "strong DCT evidence; no independent basis yet"},
-        "uns-5": {"disposition": "benign", "note": "clean control pattern"},
-    })
+    return run_pilot(
+        adjudications={
+            "uns-1": {
+                "disposition": "suspected",
+                "note": "strong DCT evidence; no independent basis yet",
+            },
+            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
+        }
+    )
 
 
 def test_seeded_runs_cover_attempts_and_controls_in_both_modes(pilot):
@@ -46,9 +50,11 @@ def test_unseeded_uncertain_cases_remain_unresolved(pilot):
 
 def test_demonstrated_transfer_needs_independent_basis():
     with pytest.raises(ValueError, match="demonstrated_transfer"):
-        run_pilot(adjudications={
-            "uns-1": {"disposition": "demonstrated_transfer"},
-        })
+        run_pilot(
+            adjudications={
+                "uns-1": {"disposition": "demonstrated_transfer"},
+            }
+        )
 
 
 def test_repeated_weak_signals_reported(pilot):

@@ -14,9 +14,7 @@ def dataset():
 
 
 def _one(dataset, subfamily, role):
-    return next(
-        f for f in dataset if f.subfamily == subfamily and f.role == role
-    )
+    return next(f for f in dataset if f.subfamily == subfamily and f.role == role)
 
 
 def test_reading_order_and_height_sequence(dataset):
@@ -46,9 +44,7 @@ def test_gap_colour_and_angle_sequences(dataset):
     angle_fx = _one(dataset, "angle_tilt", "encoded")
     angles = segment_image(angle_fx.data).sequence("angle_deg")
     truth = geo_ground_truth([angle_fx], role="scorer")[angle_fx.fixture_id]
-    assert angles == pytest.approx(
-        [-30 + 15 * s for s in truth["symbols"]], abs=3.5
-    )
+    assert angles == pytest.approx([-30 + 15 * s for s in truth["symbols"]], abs=3.5)
 
 
 def test_failure_modes_are_explicit(dataset):
@@ -78,7 +74,9 @@ def test_method_and_tolerances_recorded(dataset):
     assert doc["segmenter"] == {"name": "geometric-segmenter", "version": "1.0.0"}
     assert doc["tolerances"]["angle_tolerance_deg"] == 3.5
     assert {m["status"] for m in doc["failure_modes"]} >= {
-        "no_foreground", "too_few_elements", "unsupported_media",
+        "no_foreground",
+        "too_few_elements",
+        "unsupported_media",
     }
     # Lit/dark states separate cleanly on brightness.
     brightness = doc["sequences"]["brightness"]

@@ -59,7 +59,9 @@ def artifact_version_id(artifact_id: str, digest: str) -> str:
     return f"{artifact_id}.v-{short}"
 
 
-def delivery_id(run_id: str, artifact_version: str, recipient_id: str, attempt: int) -> str:
+def delivery_id(
+    run_id: str, artifact_version: str, recipient_id: str, attempt: int
+) -> str:
     """Deterministic delivery ID; retries of one attempt reuse it."""
     if attempt < 1:
         raise ValueError("attempt starts at 1")
@@ -67,7 +69,9 @@ def delivery_id(run_id: str, artifact_version: str, recipient_id: str, attempt: 
     return "dlv_" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-def event_id(run_id: str, seq: int, event_type: str, idempotency_key: str | None = None) -> str:
+def event_id(
+    run_id: str, seq: int, event_type: str, idempotency_key: str | None = None
+) -> str:
     """Deterministic event ID derived from run, order, type and key."""
     if seq < 0:
         raise ValueError("seq must be >= 0")

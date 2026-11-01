@@ -16,9 +16,7 @@ def dataset():
 
 
 def _one(dataset, subfamily, role):
-    return next(
-        f for f in dataset if f.subfamily == subfamily and f.role == role
-    )
+    return next(f for f in dataset if f.subfamily == subfamily and f.role == role)
 
 
 def test_vector_parse_reads_attributes_directly_in_reading_order(dataset):
@@ -37,9 +35,7 @@ def test_vector_parse_reads_attributes_directly_in_reading_order(dataset):
 def test_lineage_links_source_to_rendered_version(dataset):
     fixture = _one(dataset, "gap_timing", "encoded")
     store = ArtifactStore()
-    report = analyze_with_source(
-        fixture, build_vector_source(fixture), store=store
-    )
+    report = analyze_with_source(fixture, build_vector_source(fixture), store=store)
     assert validate_vector_binding(report) == []
     lineage = report["lineage"]
     assert lineage["relation"] == "rendered_from_vector_source"

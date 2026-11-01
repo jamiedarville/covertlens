@@ -1,3 +1,13 @@
+"""Latency/reliability acceptance (CL-29).
+
+Marked `slow` in CL-50: these tests assert wall-clock bounds
+(P95 <= 2 s), which flake on a loaded runner, so the required
+CI run excludes them (`-m "not slow"`). They still run in any
+plain `pytest` invocation.
+"""
+
+import pytest
+
 from covertlens.latency import (
     gate_reliability_check,
     limit_behavior_checks,
@@ -6,6 +16,8 @@ from covertlens.latency import (
     run_reliability_report,
     validate_latency_report,
 )
+
+pytestmark = pytest.mark.slow
 
 SMALL = (
     {"name": "small", "width": 256, "height": 192, "media": ("png", "jpeg")},

@@ -61,16 +61,18 @@ def _rate(successes: int, n: int) -> dict[str, Any]:
 
 # ------------------------------------------------------- benign controls ---
 
+
 def _canvas() -> bytearray:
     return bytearray(_BG * (_WIDTH * _HEIGHT))
 
 
-def _rect(pixels: bytearray, x: int, y: int, w: int, h: int,
-          colour: tuple[int, int, int]) -> None:
+def _rect(
+    pixels: bytearray, x: int, y: int, w: int, h: int, colour: tuple[int, int, int]
+) -> None:
     for row in range(max(0, y), min(_HEIGHT, y + h)):
         for col in range(max(0, x), min(_WIDTH, x + w)):
             i = (row * _WIDTH + col) * 3
-            pixels[i:i + 3] = bytes(colour)
+            pixels[i : i + 3] = bytes(colour)
 
 
 _CONTROL_CONTEXTS = {
@@ -84,8 +86,7 @@ _CONTROL_CONTEXTS = {
 def benign_controls(per_kind: int = 3) -> list[dict[str, Any]]:
     """New benign controls (all expected benign; content-hashed)."""
     controls: list[dict[str, Any]] = []
-    _KIND_OFFSET = {"skyline": 11, "chart": 233, "abstract": 457,
-                    "benign_scene": 691}
+    _KIND_OFFSET = {"skyline": 11, "chart": 233, "abstract": 457, "benign_scene": 691}
     for kind in ("skyline", "chart", "abstract", "benign_scene"):
         for k in range(per_kind):
             seed = 9000 + 137 * len(controls) + 17 * k
@@ -97,8 +98,14 @@ def benign_controls(per_kind: int = 3) -> list[dict[str, Any]]:
                     w = rng.randrange(18, 36)
                     h = int(40 + rng.random() * 175)  # continuous heights
                     shade = 88 + rng.randrange(30)
-                    _rect(pixels, x, _HEIGHT - 18 - h, w, h,
-                          (shade, shade + 6, shade + 14))
+                    _rect(
+                        pixels,
+                        x,
+                        _HEIGHT - 18 - h,
+                        w,
+                        h,
+                        (shade, shade + 6, shade + 14),
+                    )
                     x += w + rng.randrange(2, 7)
             elif kind == "chart":
                 # Legitimate data visualization: grid-snapped bar
@@ -116,8 +123,11 @@ def benign_controls(per_kind: int = 3) -> list[dict[str, Any]]:
                     h = rng.randrange(12, 70)
                     x = rng.randrange(8, _WIDTH - w - 8)
                     y = rng.randrange(8, _HEIGHT - h - 8)
-                    colour = (rng.randrange(30, 225), rng.randrange(30, 225),
-                              rng.randrange(30, 225))
+                    colour = (
+                        rng.randrange(30, 225),
+                        rng.randrange(30, 225),
+                        rng.randrange(30, 225),
+                    )
                     _rect(pixels, x, y, w, h, colour)
             else:  # benign_scene: continuous heights and gaps
                 x = 30
@@ -126,19 +136,22 @@ def benign_controls(per_kind: int = 3) -> list[dict[str, Any]]:
                     _rect(pixels, x, _HEIGHT - 20 - h, 18, h, (52, 84, 120))
                     x += 18 + int(6 + rng.random() * 16)
             data = _save_png(bytes(pixels), _WIDTH, _HEIGHT)
-            controls.append({
-                "control_id": f"benign_{kind}_{k}",
-                "kind": kind,
-                "context": _CONTROL_CONTEXTS[kind],
-                "expected": "benign",
-                "seed": seed,
-                "data": data,
-                "content_hash": ids.content_hash(data),
-            })
+            controls.append(
+                {
+                    "control_id": f"benign_{kind}_{k}",
+                    "kind": kind,
+                    "context": _CONTROL_CONTEXTS[kind],
+                    "expected": "benign",
+                    "seed": seed,
+                    "data": data,
+                    "content_hash": ids.content_hash(data),
+                }
+            )
     return controls
 
 
 # ------------------------------------------------------------- benchmark ---
+
 
 def _classify(item_bytes: bytes) -> str:
     return analyze_geometric_bytes(item_bytes)["classification"]
@@ -157,10 +170,13 @@ def build_structured_pair(subfamily: str, index: int = 0):
     """One clean/structured-encoded pair (payload_mode='word', CL-46)."""
     spec = STRUCTURED_SPECS[subfamily]
     return build_geo_pair(
-        subfamily, payload_mode="word",
+        subfamily,
+        payload_mode="word",
         payload_text=spec["payload_text"],
-        n_elements=spec["n_elements"], width=spec["width"],
-        scene_seed=20000 + 977 * index, payload_seed=555,
+        n_elements=spec["n_elements"],
+        width=spec["width"],
+        scene_seed=20000 + 977 * index,
+        payload_seed=555,
     )
 
 
@@ -176,8 +192,8 @@ def run_structured_recall(pairs_per_subfamily: int = 5) -> dict[str, Any]:
             "n": len(classes),
             "classifications": _tally(classes),
             "structure_recall": _rate(
-                sum(1 for c in classes if c == SIGNAL_STRUCTURE),
-                len(classes)),
+                sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)
+            ),
         }
     return rows
 
@@ -191,23 +207,28 @@ def structured_payload_fixture(max_seed: int = 2000):
     """
     for seed in range(1, max_seed):
         _clean, encoded = build_geo_pair(
-            "height_position", scene_seed=8080, payload_seed=seed)
+            "height_position", scene_seed=8080, payload_seed=seed
+        )
         if analyze_geometric_bytes(encoded.data)["classification"] == SIGNAL_STRUCTURE:
             return encoded
     return None
 
 
-def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
-                      structured_count: int = 5) -> dict[str, Any]:
+def run_geo_benchmark(
+    extra_pairs: int = 3, control_count: int = 3, structured_count: int = 5
+) -> dict[str, Any]:
     """Per-subfamily benchmark. Deterministic; ground truth (roles and
     control expectations) stays scorer-side (C-07)."""
     fixtures = build_geo_dataset()
     for i, subfamily in enumerate(SUBFAMILIES):
         for j in range(extra_pairs):
-            fixtures.extend(build_geo_pair(
-                subfamily, scene_seed=3100 + 101 * i + 7 * j,
-                payload_seed=810 + 29 * i + 3 * j,
-            ))
+            fixtures.extend(
+                build_geo_pair(
+                    subfamily,
+                    scene_seed=3100 + 101 * i + 7 * j,
+                    payload_seed=810 + 29 * i + 3 * j,
+                )
+            )
     controls = benign_controls(control_count)
 
     encoded: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
@@ -225,9 +246,7 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
 
     control_rows: dict[str, list[str]] = {}
     for control in controls:
-        control_rows.setdefault(control["kind"], []).append(
-            _classify(control["data"])
-        )
+        control_rows.setdefault(control["kind"], []).append(_classify(control["data"]))
 
     subfamilies: dict[str, Any] = {}
     for name in SUBFAMILIES:
@@ -236,31 +255,33 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "encoded": {
                 "classifications": _tally(enc),
                 "recall_any_signal": _rate(
-                    sum(1 for c in enc if c != SIGNAL_NONE), len(enc)),
+                    sum(1 for c in enc if c != SIGNAL_NONE), len(enc)
+                ),
                 "recall_structure": _rate(
-                    sum(1 for c in enc if c == SIGNAL_STRUCTURE), len(enc)),
+                    sum(1 for c in enc if c == SIGNAL_STRUCTURE), len(enc)
+                ),
             },
             "benign": {
                 "classifications": _tally(ben),
                 "false_structure_claims": _rate(
-                    sum(1 for c in ben if c == SIGNAL_STRUCTURE), len(ben)),
-                "any_signal": _rate(
-                    sum(1 for c in ben if c != SIGNAL_NONE), len(ben)),
+                    sum(1 for c in ben if c == SIGNAL_STRUCTURE), len(ben)
+                ),
+                "any_signal": _rate(sum(1 for c in ben if c != SIGNAL_NONE), len(ben)),
             },
             # Three benchmark rows per subfamily (CL-46).
             "rows": {
                 "continuous": {
                     "classifications": _tally(continuous[name]),
                     "false_structure_claims": _rate(
-                        sum(1 for c in continuous[name]
-                            if c == SIGNAL_STRUCTURE),
-                        len(continuous[name])),
+                        sum(1 for c in continuous[name] if c == SIGNAL_STRUCTURE),
+                        len(continuous[name]),
+                    ),
                 },
                 "quantized_unstructured": {
                     "classifications": _tally(enc),
                     "false_structure_claims": _rate(
-                        sum(1 for c in enc if c == SIGNAL_STRUCTURE),
-                        len(enc)),
+                        sum(1 for c in enc if c == SIGNAL_STRUCTURE), len(enc)
+                    ),
                 },
                 "quantized_structured": structured_rows[name],
             },
@@ -273,32 +294,39 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "n": len(classes),
             "classifications": _tally(classes),
             "false_structure_claims": _rate(
-                sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)),
+                sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)
+            ),
         }
 
     # Scene-context rows (CL-45): the same chart bytes under a
     # declared task channel vs no declaration, and a structured
     # encoded scene with no declaration.
     chart_controls = [c for c in controls if c["kind"] == "chart"]
-    declared_ctx = {"declared_channels": ["height"],
-                    "context": "data_visualization"}
+    declared_ctx = {"declared_channels": ["height"], "context": "data_visualization"}
     chart_declared = [
-        analyze_geometric_bytes(c["data"], declared_context=declared_ctx)["classification"]
+        analyze_geometric_bytes(c["data"], declared_context=declared_ctx)[
+            "classification"
+        ]
         for c in chart_controls
     ]
     chart_undeclared = [_classify(c["data"]) for c in chart_controls]
     structured_fx = structured_payload_fixture()
     structured_class = (
-        _classify(structured_fx.data) if structured_fx is not None else None)
+        _classify(structured_fx.data) if structured_fx is not None else None
+    )
     likeness_by_kind: dict[str, Any] = {}
     for kind in ("skyline", "chart", "abstract", "benign_scene"):
         scores = [
             analyze_geometric_bytes(c["data"])["chart_likeness"]["score"]
-            for c in controls if c["kind"] == kind
+            for c in controls
+            if c["kind"] == kind
         ]
         if scores:
             likeness_by_kind[kind] = {
-                "min": min(scores), "max": max(scores), "n": len(scores)}
+                "min": min(scores),
+                "max": max(scores),
+                "n": len(scores),
+            }
     scene_context = {
         "chart_with_declared_height": {
             "n": len(chart_declared),
@@ -306,7 +334,8 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "expected": SIGNAL_DECLARED,
             "false_structure_claims": _rate(
                 sum(1 for c in chart_declared if c == SIGNAL_STRUCTURE),
-                len(chart_declared)),
+                len(chart_declared),
+            ),
         },
         "chart_with_undeclared_height": {
             "n": len(chart_undeclared),
@@ -314,7 +343,8 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "expected": "quantized_without_structure",
             "false_structure_claims": _rate(
                 sum(1 for c in chart_undeclared if c == SIGNAL_STRUCTURE),
-                len(chart_undeclared)),
+                len(chart_undeclared),
+            ),
         },
         "encoded_structured_no_declaration": {
             "classification": structured_class,
@@ -346,14 +376,15 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             attacker_grid[name] = {
                 "status": "not_applicable",
                 "reason": "attacker grids are defined for height, gap "
-                          "and angle subfamilies (CL-43)",
+                "and angle subfamilies (CL-43)",
             }
             continue
         channel, tolerance = _ATTACKER_CHANNELS[name]
         enc_classes, clean_classes, step_matches = [], [], 0
         for j in range(3):
             clean_fx, enc_fx = build_attacker_geo_pair(
-                name, scene_seed=5200 + 97 * i + 13 * j,
+                name,
+                scene_seed=5200 + 97 * i + 13 * j,
                 payload_seed=640 + 7 * i + 3 * j,
                 grid_seed=7000 + 131 * i + 17 * j,
             )
@@ -369,47 +400,55 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "pairs": len(enc_classes),
             "encoded_classifications": _tally(enc_classes),
             "encoded_quantized_recall": _rate(
-                sum(1 for c in enc_classes if c != SIGNAL_NONE),
-                len(enc_classes)),
+                sum(1 for c in enc_classes if c != SIGNAL_NONE), len(enc_classes)
+            ),
             "clean_classifications": _tally(clean_classes),
             "clean_no_signal": _rate(
-                sum(1 for c in clean_classes if c == SIGNAL_NONE),
-                len(clean_classes)),
+                sum(1 for c in clean_classes if c == SIGNAL_NONE), len(clean_classes)
+            ),
             "step_matches_within_tolerance": {
-                "successes": step_matches, "n": len(enc_classes),
-                "tolerance": tolerance, "channel": channel,
+                "successes": step_matches,
+                "n": len(enc_classes),
+                "tolerance": tolerance,
+                "channel": channel,
             },
         }
 
     coverage_checks = {
         "all_five_subfamilies_reported": all(
-            name in subfamilies for name in SUBFAMILIES),
+            name in subfamilies for name in SUBFAMILIES
+        ),
         "encoded_present_each_subfamily": all(
-            subfamilies[n]["encoded"]["recall_any_signal"]["n"] > 0
-            for n in SUBFAMILIES),
+            subfamilies[n]["encoded"]["recall_any_signal"]["n"] > 0 for n in SUBFAMILIES
+        ),
         "benign_present_each_subfamily": all(
             subfamilies[n]["benign"]["false_structure_claims"]["n"] > 0
-            for n in SUBFAMILIES),
+            for n in SUBFAMILIES
+        ),
         "benign_controls_cover_kinds": all(
             kind in control_report
-            for kind in ("skyline", "chart", "abstract", "benign_scene")),
+            for kind in ("skyline", "chart", "abstract", "benign_scene")
+        ),
         "no_benign_structure_false_claims": false_claims_total == 0,
         "height_or_size_alone_never_enforces": True,  # log-only detector
-        "chart_declared_channel_logs": bool(chart_declared) and all(
-            c == SIGNAL_DECLARED for c in chart_declared),
-        "chart_undeclared_is_triage": bool(chart_undeclared) and all(
-            c == "quantized_without_structure" for c in chart_undeclared),
+        "chart_declared_channel_logs": bool(chart_declared)
+        and all(c == SIGNAL_DECLARED for c in chart_declared),
+        "chart_undeclared_is_triage": bool(chart_undeclared)
+        and all(c == "quantized_without_structure" for c in chart_undeclared),
         "structured_undeclared_claimed": structured_class == SIGNAL_STRUCTURE,
         "structured_recall_at_least_0.8_each_subfamily": all(
             (row["structure_recall"]["rate"] or 0.0) >= 0.8
-            for row in structured_rows.values()),
+            for row in structured_rows.values()
+        ),
         "attacker_grid_rows_present": all(
-            name in attacker_grid for name in SUBFAMILIES),
+            name in attacker_grid for name in SUBFAMILIES
+        ),
         "attacker_grid_encoded_quantized": all(
             row["encoded_quantized_recall"]["successes"]
             == row["encoded_quantized_recall"]["n"]
             for row in attacker_grid.values()
-            if row.get("status") == "evaluated"),
+            if row.get("status") == "evaluated"
+        ),
     }
     report = {
         "schema": GEO_BENCHMARK_SCHEMA,
@@ -424,8 +463,8 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
             "mode": "log_only_triage",
             "height_or_size_alone_triggers_enforcement": False,
             "reason": "geometric thresholds are unfrozen placeholders; "
-                      "scene context plus quantization/structure tests "
-                      "inform triage only (GEO-05)",
+            "scene context plus quantization/structure tests "
+            "inform triage only (GEO-05)",
         },
         "fixtures": {
             "dataset_fixtures": len(fixtures),
@@ -443,19 +482,20 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
         "benign_controls": control_report,
         "overall_context_only": {
             "note": "pooled numbers are context only; coverage is "
-                    "claimed per subfamily, never pooled",
+            "claimed per subfamily, never pooled",
             "encoded_recall_any_signal": _rate(
-                sum(1 for c in pooled_enc if c != SIGNAL_NONE), len(pooled_enc)),
+                sum(1 for c in pooled_enc if c != SIGNAL_NONE), len(pooled_enc)
+            ),
             "benign_false_structure_claims": _rate(
-                sum(1 for c in pooled_ben if c == SIGNAL_STRUCTURE),
-                len(pooled_ben)),
+                sum(1 for c in pooled_ben if c == SIGNAL_STRUCTURE), len(pooled_ben)
+            ),
         },
         "coverage": {
             "evaluated_subfamilies": list(SUBFAMILIES),
             "general_geometric_coverage_claimed": False,
             "reason": "results are reported per subfamily; a single "
-                      "subfamily (or the pooled row) never supports a "
-                      "general geometric coverage claim (GEO-06)",
+            "subfamily (or the pooled row) never supports a "
+            "general geometric coverage claim (GEO-06)",
         },
         "coverage_checks": coverage_checks,
         "benchmark_passed": all(coverage_checks.values()),

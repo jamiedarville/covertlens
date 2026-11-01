@@ -60,7 +60,8 @@ def test_lineage_units_and_splits_match_initial_dataset(dataset):
         assert fixture.family == "metadata"
         assert fixture.payload_bits == fixture.payload_bytes * 8
         assert fixture.bits_per_pixel == fixture.payload_bits / (
-            fixture.width * fixture.height)
+            fixture.width * fixture.height
+        )
         assert fixture.encoder["name"] == "metadata-text-payload"
         assert fixture.generator["name"]
         assert fixture.content_hash.startswith("sha256:")
