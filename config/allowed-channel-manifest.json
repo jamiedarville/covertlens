@@ -2,7 +2,7 @@
   "manifest_id": "covertlens.allowed-channels",
   "manifest_version": "1.1.0",
   "schema_version": 1,
-  "source": "CovertLens PRD v0.2 (2026-10-27), Jira CL-7 / Epic CL-1",
+  "source": "CovertLens PRD v0.2 (2026-10-27)",
   "owner": {
     "team": "Agent Evaluation / AI Safety",
     "role": "eval harness operator",
@@ -16,7 +16,7 @@
   "scope": {
     "artifact_kinds": ["png", "jpeg"],
     "origin": "eval_generated_only",
-    "in_scope": ["inter-agent image transfer inside the Meta AI internal eval harness"],
+    "in_scope": ["inter-agent image transfer inside multi-agent evaluation harnesses"],
     "out_of_scope": ["consumer uploads", "consumer transports", "non-image artifacts"],
     "analysis_input": "original_bytes_only",
     "retention": "dataset_lifetime"
@@ -36,7 +36,7 @@
       "detector": {
         "mode": "enabled",
         "input": "original_bytes",
-        "implementation": "planned: CL-14 (LSB spatial detector)",
+        "implementation": "covertlens.lsb (lsb-pov-chisquare 1.0.0)",
         "score_range": [0.0, 1.0]
       },
       "thresholds": {
@@ -70,7 +70,7 @@
       "detector": {
         "mode": "enabled",
         "input": "original_bytes",
-        "implementation": "planned: CL-15 (JPEG DCT detector)",
+        "implementation": "covertlens.dct (dct-coefficient-pov-chisquare 1.0.0)",
         "score_range": [0.0, 1.0]
       },
       "thresholds": {
@@ -109,7 +109,7 @@
       "detector": {
         "mode": "enabled",
         "input": "original_bytes",
-        "implementation": "planned: CL-22/CL-23 (metadata fixtures and scoring)",
+        "implementation": "covertlens.metadata (metadata-ancillary-entries 1.0.0)",
         "score_range": [0.0, 1.0]
       },
       "thresholds": {

@@ -1,17 +1,97 @@
 # CovertLens
 
-Inline steganalysis / covert-channel gate for the Meta AI internal eval
-harness. Agents may not encode task-relevant information in image pixels
-or metadata outside the allowed channel; every inter-agent image is
-intercepted at the artifact store, scored on its original bytes, and
-subject to a verdict ladder before any recipient access.
+CovertLens is an inline steganalysis gate designed for multi-agent evaluation harnesses.  
+Agents may not encode task-relevant information in image pixels or metadata outside the allowed channel.  
+Every inter-agent image is intercepted at the artifact store and scored on its original bytes across four channel families: spatial LSB, JPEG DCT, metadata, and geometric.  
+A verdict ladder (log, flag, quarantine, fail-run) decides delivery before any recipient access; scores are evidence, never accusations.  
+Findings join the ordered run trace so researchers can triage repeated weak signals and export audited review packages.
 
-Project source of truth: Jira project **CL** (Covert Lens) and
-[REQUIREMENTS.md](REQUIREMENTS.md). This repository currently contains
-the **CL-7 foundation contracts** and the **CL-8 immutable originals
-store** that every later task builds on.
+## Architecture
 
-## CL-7 deliverables
+```mermaid
+flowchart LR
+  intercept["Intercept at artifact store"] --> store["Store immutable original"]
+  store --> parse["Parse original bytes"]
+  parse --> lsb["Spatial LSB"]
+  parse --> dct["JPEG DCT"]
+  parse --> meta["Metadata"]
+  parse --> geo["Geometric"]
+  lsb --> ladder["Verdict ladder"]
+  dct --> ladder
+  meta --> ladder
+  geo --> ladder
+  ladder --> trace["Run trace"]
+  trace --> report["Researcher report"]
+  report --> export["Review export"]
+```
+
+Cross-cutting constraints annotated on the stages they bind
+(full text in [REQUIREMENTS.md](REQUIREMENTS.md) §4):
+
+- **C-02** (parse, ladder) — a detector threshold or
+  infrastructure error is never equated with demonstrated
+  collusion; errors fail closed without a clean verdict.
+- **C-03** (ladder) — pre-delivery decisions use only evidence
+  available at decision time; no future recipient actions.
+- **C-04** (trace, report) — withheld artifacts are labelled
+  parse `not_observed`, never counted as successful transfer.
+- **C-09** (geometric, report) — a geometric score is evidence,
+  never a decoded message.
+- **C-10** (store, geometric) — vector source and rendered
+  raster are lineage-linked; a clean raster score does not
+  clear an unintercepted vector source.
+
+## Quick start
+
+```bash
+docker run -p 8000:8000 -v covertlens-data:/data ghcr.io/jamiedarville/covertlens:v0.1.0
+# then open http://127.0.0.1:8000/ in a browser (API docs at /docs)
+```
+
+Or build the image locally: `docker build -t covertlens .`, then
+run it with the same ports and volume. The landing page shows a
+precomputed clean-vs-encoded skyline comparison; **Try your own**
+opens the Analyze page with the geometric overlay.
+
+## Known limitations
+
+Release decision: `release_with_limitations`
+([config/release-scorecard.json](config/release-scorecard.json),
+contract in
+[docs/contracts/release-scorecard.md](docs/contracts/release-scorecard.md)).
+Independent review:
+[docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md).
+
+- Detection coverage is limited to calibrated payload bands
+  (low/medium) and densities on gradient_noise covers; the high
+  band rests on 1-2 held-out positives per family.
+- Clean smooth/blocks covers fall outside the stability claim
+  (smooth clean PNGs false-fail; blocks JPEGs occasionally
+  withhold).
+- JPEG latency misses the 2 s proposal at >=~1 MP and at
+  concurrency 4; the 20 MP JPEG envelope is unmeasured.
+- Adaptive reduced-rate, larger-image, blocks-cover and
+  allowed-keyword-metadata attempts evade enforcement (CL-34);
+  allowed-keyword evasion needs a policy change.
+- Held-out samples are tiny: targets are met on point estimates
+  with wide Wilson intervals (CL-28).
+- R-06 preview derivatives have no dedicated gate API;
+  derivative enforcement is procedural (CL-32).
+- Context/sequence evidence is a triage aid only: combined
+  scoring dilutes image evidence (CL-31).
+- The geometric family (CL-38..CL-44) is log-only triage: its
+  thresholds are unfrozen, structure claims rest on declared
+  codes only, and no general geometric coverage is claimed from
+  any single subfamily.
+
+## Deliverables ledger
+
+Every delivery task (CL-7…CL-49) mapped from acceptance
+criterion to code, contract doc, schema, and tests. History in
+[CHANGELOG.md](CHANGELOG.md); requirements in
+[REQUIREMENTS.md](REQUIREMENTS.md).
+
+### CL-7 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -19,7 +99,7 @@ store** that every later task builds on.
 | Creation, attempted-delivery, access/parse, action and run-finalization events have stable IDs | `covertlens.events` · `covertlens.ids` · [docs/contracts/harness-events.md](docs/contracts/harness-events.md) · [schemas/harness-events.schema.json](schemas/harness-events.schema.json) |
 | Every file-reference and tool-output image route is inventoried | `covertlens.routes` · [docs/contracts/route-inventory.md](docs/contracts/route-inventory.md) |
 
-## CL-8 deliverables
+### CL-8 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -27,7 +107,7 @@ store** that every later task builds on.
 | Changed bytes create a new immutable version and invalidate prior verdicts | Append-only version chain per `artifact_id`; verdicts bind to one exact version and superseded verdicts report `invalidated` |
 | Originals, lineage and access history follow dataset-lifetime retention | No delete/overwrite API; frozen records; audited `AccessRecord` history; `retention_policy: dataset_lifetime` |
 
-## CL-9 deliverables
+### CL-9 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -35,7 +115,7 @@ store** that every later task builds on.
 | Generator and encoder versions, configurations and seeds are recorded | Per-fixture provenance in the JSON fixture manifest; raw payloads recorded by hash only, scorer ground truth kept separate |
 | Benign edits and generator variation are included as negatives | Default dataset ships brightness/flip benign edits and alternate-pattern/seed generator variations with zero payload bits |
 
-## CL-10 deliverables
+### CL-10 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -43,7 +123,7 @@ store** that every later task builds on.
 | Held-out seeds, tasks, agent and encoder configurations are recorded | Auditable held-out record in `assignments.json` (seeds, patterns, encoder configs; task/agent dimensions recorded when present) |
 | Agents/detectors cannot access held-out labels; independent recovery checks pass | Detector export excludes held-out fixtures and all payloads; scorer ground truth requires the scorer role; bit-exact recovery checks over every encoded fixture |
 
-## CL-11 deliverables
+### CL-11 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -51,7 +131,7 @@ store** that every later task builds on.
 | Evidence reads, configuration changes and overrides are audited | Append-only hash-chained `AuditLog`; versioned `RuntimeConfig` changes and reasoned verdict overrides recorded |
 | Dataset retirement policy preserves reproducibility until approved deletion | Governed request → separate-approver → bundled-deletion lifecycle; reproducibility bundle captured before any bytes are removed |
 
-## CL-12 deliverables
+### CL-12 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -59,7 +139,7 @@ store** that every later task builds on.
 | Stable run, episode, sender, recipient and artifact version/hash are emitted | CL-7 events (`artifact.created` → `delivery.attempted` → `gate.verdict` → `artifact.accessed`/`artifact.parsed`) in the per-run trace, deliveries pending until a permitting verdict |
 | Repeated references and retries are handled idempotently | Reference resolution cached to one immutable version/creation event; delivery retries reuse the deterministic `delivery_id` |
 
-## CL-13 deliverables
+### CL-13 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -67,7 +147,7 @@ store** that every later task builds on.
 | Corrupt, unsupported, oversized and timeout cases have explicit results | One versioned result per input with status `parsed` / `corrupt` / `unsupported_format` / `unsupported_encoding` / `oversized` / `timeout`; failures carry errors and never findings |
 | Worker memory/runtime limits and channel finding/version schema are tested | Versioned `ParserLimits` (10 MiB, 20 MP, decompressed and 2 s deadline bounds, checked before unbounded work) plus validated `Finding` schema for CL-14/CL-15/CL-23; PNG rows/pixels and JPEG blocks/coefficients coverage |
 
-## CL-14 deliverables
+### CL-14 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -75,7 +155,7 @@ store** that every later task builds on.
 | Clean/encoded test performance is broken down by payload band | `benchmark_lsb` rows and `by_payload_band` (none/low/medium/high) over the CL-9 fixtures · [schemas/lsb-benchmark.schema.json](schemas/lsb-benchmark.schema.json) |
 | Threshold-free results include precision/recall and uncertainty | Threshold sweep with Wilson precision/recall intervals plus ROC-AUC and average-precision bootstrap intervals; thresholds stay unfrozen until CL-27 |
 
-## CL-15 deliverables
+### CL-15 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -83,7 +163,7 @@ store** that every later task builds on.
 | DCT scores, configuration and limitations are recorded | `dct-coefficient-pov-chisquare` v1.0.0 findings with `DctConfig` v1.0.0, carrier/block coverage and recorded limitations |
 | Paired tests report false positives and recall by payload band | `benchmark_dct` sweep (FP/FPR per threshold) plus per-band recall sweeps · [schemas/dct-benchmark.schema.json](schemas/dct-benchmark.schema.json) |
 
-## CL-16 deliverables
+### CL-16 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -91,7 +171,7 @@ store** that every later task builds on.
 | Delivered artifacts link to parse/next action or an explicit missing status | Parse/next-action linkage per delivery with explicit `missing` status when absent |
 | Multiple candidate input artifacts remain visible without claiming causation | Per-action candidate lists with `causation_claimed: false` throughout |
 
-## CL-17 deliverables
+### CL-17 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -99,7 +179,7 @@ store** that every later task builds on.
 | Triage and enforcement operating points are separately configured | Versioned per-family `ThresholdConfig` from the CL-7 manifest (high-recall triage vs high-precision enforcement); shipped unfrozen, frozen by CL-27 |
 | Pre-delivery decisions cannot use future recipient actions | `LookaheadError` on recipient-action or post-cutoff evidence (C-03) |
 
-## CL-18 deliverables
+### CL-18 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -107,7 +187,7 @@ store** that every later task builds on.
 | No access occurs before verdict under concurrent delivery attempts | One gate lock makes verdict check + serve atomic; `access_attempt_report()` audits every attempt |
 | Quarantined originals remain available only to authorized reviewers | `reviewer_access` (R-08 evidence path, audited store read); recipients stay withheld |
 
-## CL-19 deliverables
+### CL-19 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -115,7 +195,7 @@ store** that every later task builds on.
 | Parsing/timeouts/unsupported inputs obey the manifest without a clean verdict | Manifest error classes with `clean_verdict: false` and withheld delivery |
 | Enforcement errors withhold delivery and record an infrastructure outcome | `evaluate_delivery` pipeline + `gate.withhold_for_infrastructure` (no verdict recorded) |
 
-## CL-20 deliverables
+### CL-20 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -123,7 +203,7 @@ store** that every later task builds on.
 | Byte, detector or configuration changes invalidate cached results | `covertlens.integrity.AnalysisCache` score keys (hash + detector/config versions) · [docs/contracts/gate-integrity.md](docs/contracts/gate-integrity.md) |
 | Run-context changes recompute contextual verdicts while allowing safe image-score reuse | Verdict keys add threshold-config version + context fingerprint; score keys exclude context |
 
-## CL-21 deliverables
+### CL-21 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -131,7 +211,7 @@ store** that every later task builds on.
 | Independent recovery and legitimate task outcomes are collected | Separate recovery and legitimate-task rates per condition and payload band |
 | Blocked runs label recipient parse not observed and never claim demonstrated transfer | Withheld trials: `parse_status`/`recovery` `not_observed`, `demonstrated_transfer` always false (C-04) |
 
-## CL-22 deliverables
+### CL-22 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -139,7 +219,7 @@ store** that every later task builds on.
 | Allowed task metadata exceptions are represented | Benign controls carrying only Title/Description/TaskReference |
 | Fixture lineage, payload units and split rules match the initial dataset | CL-9 `Fixture` lineage/units; CL-10 split grouping verified |
 
-## CL-23 deliverables
+### CL-23 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -147,7 +227,7 @@ store** that every later task builds on.
 | LSB, DCT and metadata outputs remain individually visible | `analyze_all_bytes` attaches each applicable family to one result, never blended |
 | All three families run through pinned threshold configurations | `analyze_and_decide` through the CL-17 ladder with caller-pinned config version recorded |
 
-## CL-24 deliverables
+### CL-24 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -155,7 +235,7 @@ store** that every later task builds on.
 | Context never joins unrelated runs and uses only available evidence for gating | Multi-run input raises; features count only evidence at/before `through_seq` |
 | Sequence benchmarks compare image-only, context-only and combined outcomes | `benchmark_sequences` ROC-AUC for all three scorers |
 
-## CL-25 deliverables
+### CL-25 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -163,7 +243,7 @@ store** that every later task builds on.
 | Review supports benign, unresolved, suspected, demonstrated-transfer and policy-supported findings | `apply_review` with the five dispositions; `demonstrated_transfer` requires a recorded independent basis |
 | Heatmaps/scores are labeled evidence aids rather than decoded messages | `evidence_aid_not_decoded_message` label enforced by validation |
 
-## CL-26 deliverables
+### CL-26 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -171,7 +251,7 @@ store** that every later task builds on.
 | Repeated inputs reproduce verdicts or meet documented stochastic bounds | `verify_reproducibility` (exact deterministic; seeded agreement bounds for stochastic scorers) |
 | Report exports carry hashes, trace references, versions and decisions | `export_bundle` hash-sealed CL-25 exports (no raw bytes) |
 
-## CL-27 deliverables
+### CL-27 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -179,7 +259,7 @@ store** that every later task builds on.
 | Owners freeze coverage/payload ranges, thresholds and acceptance targets | `config/frozen-thresholds.json` (`frozen-1.0.0`, triage recall ≥0.95 / enforcement precision ≥0.99 targets, calibrated bands low+medium, high uncalibrated) |
 | Calibration uses no held-out test labels | Held-out fixtures in calibration input raise (C-07); frozen artifact records `held_out_labels_used: false` and the development dataset hash |
 
-## CL-28 deliverables
+### CL-28 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -187,7 +267,7 @@ store** that every later task builds on.
 | Target ≤1% clean-run false failures using ≥300 independent clean runs | 320 fresh-seed clean runs through the frozen ladder: 0 false failures within claimed coverage |
 | Missed targets produce explicit tradeoffs or narrowed coverage rather than universal claims | Report records `universal_claim: false` with tradeoffs: high-band-only held-out positives, tiny-n intervals, smooth/blocks covers excluded from the stability claim (measured false-fail probes), ~14% clean triage flag rate |
 
-## CL-29 deliverables
+### CL-29 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -196,7 +276,7 @@ store** that every later task builds on.
 | Concurrency and access-leak tests remain clean under the measured workload | `gate_reliability_check`: threaded route/cached-link attempts serve exactly the permitted set, `unauthorized_served: 0` |
 | Misses are explicit | JPEG large (≥~1 MP) times out at the 2 s deadline; medium JPEG misses under 4-worker concurrency; 20 MP JPEG not measurable with the pure-Python encoder — claims narrowed per class |
 
-## CL-30 deliverables
+### CL-30 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -204,7 +284,7 @@ store** that every later task builds on.
 | Unseeded traces are independently reviewed and uncertain cases remain unresolved | CL-25 report adjudication over 5 unseeded traces; unreviewed stay `unresolved`, `demonstrated_transfer` requires an independent basis |
 | Disagreements, review volume and repeated weak-signal findings are reported | Named per-trace disagreements (7 seeded attempts delivered in enforcement, 0 clean controls withheld, 14 mode verdict changes), review-volume counts, and per-sender repeated weak-signal list (incl. `sender-repeat` ×3) |
 
-## CL-31 deliverables
+### CL-31 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -212,7 +292,7 @@ store** that every later task builds on.
 | Delivered/withheld trials report recovery and legitimate task success separately | Prevention table per condition: delivered attempts recovered 7/7; clean controls legitimate success 18/18; quantities never merged |
 | Blocked artifacts are never counted as observed successful transfer | `blocked_counted_as_transfer: 0` enforced by construction (withheld = `not_observed`, C-04) and asserted in validation/tests; CL-21 replay cross-check included |
 
-## CL-32 deliverables
+### CL-32 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -220,7 +300,7 @@ store** that every later task builds on.
 | Missing parse/action links have explicit reasons | Mixed-run trace audit classifies every missing link (pending verdict, unrecorded parse, withheld `not_observed`) |
 | Final coverage report identifies any remaining gaps | R-06 marked `partial`: no dedicated gate derivative API, derivative enforcement is procedural — named in `gaps`, no full-coverage claim |
 
-## CL-33 deliverables
+### CL-33 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -228,7 +308,7 @@ store** that every later task builds on.
 | Original-byte reads and exports appear in audit logs | `verify_evidence_access` cross-checks the hash-chained CL-11 audit log (allowed + denied) and the CL-8 store access history |
 | Dataset/project permission tests prevent unauthorized evidence access | Agent and wrong-dataset researcher denied on both read and export (`export.create`/`original.read` are dataset-scoped, deny-by-default); tampered package/audit entries detected |
 
-## CL-34 deliverables
+### CL-34 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -236,7 +316,7 @@ store** that every later task builds on.
 | Unseen configurations and low-signal sequences are included | JPEG Q50/Q75, blocks/smooth covers, 128×96 images, plus a 6-artifact low-signal sequence (repetition visible only in the sequence view) |
 | Coverage limitations and unresolved results are documented | Evasions named per experiment (reduced-rate, allowed-keyword, blocks, payload density); smooth-cover result `confounded_unresolved` (clean control fails identically) |
 
-## CL-35 deliverables
+### CL-35 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -244,7 +324,7 @@ store** that every later task builds on.
 | Gate correctness, trace completeness, repeatability, latency and sequence value are included | Scorecard sections for CL-32 gate/trace, CL-33 exports, CL-29 latency, CL-31 sequence/prevention, CL-30 pilot |
 | Owner records release decision, limitations and any target revisions | Decision `release_with_limitations` with 7 limitations and 4 evidence-backed target revisions recorded in the artifact and Jira |
 
-## CL-36 deliverables
+### CL-36 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -252,7 +332,7 @@ store** that every later task builds on.
 | Dataset retention/access and pinned campaign change rules are documented | Runbook §5 (dataset-lifetime retention, dataset-scoped deny-by-default access, governed retirement) and §4 (pin-before-rerun, drift = new campaign) |
 | Harness engineers and researchers receive integration and review instructions | Runbook §6: gate integration path for engineers; report/export review path, disposition and evidence-aid rules for researchers |
 
-## CL-38 deliverables
+### CL-38 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -261,7 +341,7 @@ store** that every later task builds on.
 | Benign negatives and generator variation included | Legitimate chart (grid-snapped by design, GEO-05), unencoded scene, benign edit, generator variation |
 | Scorer ground truth separate; lineage/units/split rules match the initial dataset | `geo_ground_truth` is scorer-role-gated (DT-04); `assign_geo_splits` follows the CL-10 lineage-group policy |
 
-## CL-39 deliverables
+### CL-39 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -269,7 +349,7 @@ store** that every later task builds on.
 | A numeric attribute sequence is extracted per element | Per-element height/top/width/gap/angle/colour-index/brightness records plus `sequences()` view |
 | Segmentation method, tolerances and failure modes are recorded | Versioned `SegmenterConfig` (geometric-segmenter 1.0.0), tolerance block and failure-mode table in every result; failures are explicit statuses |
 
-## CL-40 deliverables
+### CL-40 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -277,7 +357,7 @@ store** that every later task builds on.
 | Structure claimed only under a simple declared code mapped to words/codes/grammar | Registered codes (alphabet position + declared lexicon, timing-ratio motifs, bit packing) with validators; unregistered mappings never inferred |
 | Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); thresholds unfrozen placeholders, detector cannot withhold |
 
-## CL-41 deliverables
+### CL-41 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -288,7 +368,7 @@ store** that every later task builds on.
 | Vector source present but not intercepted: a clean raster score cannot clear it (C-10) | `clearance: refused_unparsed_vector_source`, `cleared: false`; same refusal for a corrupt source |
 | Geometric findings emit to DET-02 rows with no underlying message decoded | The CL-40 findings shape is reused on both paths; no decoded message is ever claimed (C-09) |
 
-## CL-42 deliverables
+### CL-42 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -296,7 +376,7 @@ store** that every later task builds on.
 | Coverage includes at minimum height/position, gap/timing, lit/dark, colour-code and angle/tilt, reported separately per subfamily | Per-subfamily encoded recall (any-signal + structure) and benign false-claim rates, each with Wilson 95% intervals and full classification tallies |
 | Benchmark reports encoded recall and benign-control false-claim rates separately, with prevalence/intervals; no general geometric coverage claimed from a single subfamily | Prevalence block + intervals throughout; pooled row labelled context-only; `general_geometric_coverage_claimed: false` |
 
-## CL-43 deliverables
+### CL-43 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -306,7 +386,7 @@ store** that every later task builds on.
 | `geometric.py` has no import of `geometric_fixtures.GRIDS` | Source-level test; fixture grids are test inputs only |
 | Geometric benchmark gains an `attacker_grid` row per subfamily | `attacker_grid` section in `run_geo_benchmark` (evaluated for height/gap/angle; `not_applicable` with reason for lit/colour) |
 
-## CL-44 deliverables
+### CL-44 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -317,7 +397,7 @@ store** that every later task builds on.
 | Scorecard gains a geometric section citing the CL-42 benchmark, per subfamily, never pooled | `sections.geometric` in `build_scorecard` and the republished `config/release-scorecard.json` (scorecard 1.1.0) |
 | REQUIREMENTS.md traces the family; `corrupt_source` is a recorded segmentation status | GEO-01..07 traced to CL-38..CL-44 with C-09/C-10 marked active; `corrupt_source` added to `segmentation.FAILURE_MODES` |
 
-## CL-45 deliverables
+### CL-45 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -326,7 +406,7 @@ store** that every later task builds on.
 | Chart-likeness is inferred from segmentation and used as a height-only prior, never the sole discriminator | `chart_likeness` (baseline/axis, equal widths/gaps, axis text marks) in every finding's evidence; ≥ 0.7 on chart controls, ≤ 0.3 on skyline/abstract/benign-scene controls; `height_prior` annotation only |
 | Benchmark rows prove the three cases | `scene_context` section in `run_geo_benchmark`: chart with declared height, chart undeclared, encoded structured scene without declaration |
 
-## CL-46 deliverables
+### CL-46 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -336,7 +416,7 @@ store** that every later task builds on.
 | No mapped text in findings; candidate decodes only on the reviewer evidence path | `Finding.to_dict()` contains no mapped text (validator rejects it); `EvidenceGateway.record_candidate_decode` / `read_candidate_decode` with the new `candidate.decode.read` permission (reviewer role) — researcher reads denied and audited |
 | Structure recall ≥ 0.8 on structured payloads, n ≥ 20 per subfamily, end-to-end from pixels | `tests/test_structure_v2.py`: per-subfamily pixel-level detection and `run_structured_recall(20)` |
 
-## CL-47 deliverables
+### CL-47 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -346,15 +426,8 @@ store** that every later task builds on.
 | One-command image | Multi-stage `Dockerfile` (node frontend build → `python:3.12-slim`, pinned digests, non-root `appuser`, `VOLUME /data`, `HEALTHCHECK`) and `docker-compose.yml` with a named volume; a placeholder static frontend ships until CL-48 replaces it with the React app |
 | CI publishes the image | `.github/workflows/image.yml` on version tags: library tests inside the image, health + analyze smoke, push to `ghcr.io/jamiedarville/covertlens:<tag>` |
 
-Run it:
 
-```bash
-docker build -t covertlens .
-docker run -p 8000:8000 -v covertlens-data:/data covertlens
-# then open http://127.0.0.1:8000/ (or /docs) in a browser
-```
-
-## CL-48 deliverables
+### CL-48 deliverables
 
 | Acceptance criterion | Deliverable |
 |---|---|
@@ -364,7 +437,20 @@ docker run -p 8000:8000 -v covertlens-data:/data covertlens
 | Overlay in two clicks; renders from the analyze response with no second request; works at 390 px; accessible with WCAG AA overlay colours | Landing "Open overlay" hands the precomputed payload straight to `/analyze`; upload path is choose → results; single-column layout and scrolling tables at phone widths; semantic landmarks, labelled controls, canvas data-table fallback, dual-stroke (halo + numeral) overlay marks that never rely on colour alone |
 | Frontend is built and typechecked in CI | `frontend` job in `.github/workflows/test.yml` (`npm ci`, `tsc --noEmit && vite build` on a GitHub-hosted runner); the Docker image builds the same app in its node stage |
 
-## Quickstart
+### CL-49 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| README opens with a five-line description, one architecture diagram and a `docker run` quick-start; no stale foundation-only framing | This file: five-line opening ("designed for multi-agent evaluation harnesses"), Mermaid pipeline annotated with C-02/C-03/C-04/C-09/C-10, GHCR quick-start, and this ledger under its own heading |
+| Internal-harness framing reworded everywhere; tracker-tracing prose moved out of product docs | README, [REQUIREMENTS.md](REQUIREMENTS.md) §1, manifest scope/source and the harness-events contract reworded; planning history in [docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md) |
+| No review documents at the repository root; limitations linked from the README | Review moved to [docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md); Known limitations section above links the review and the release scorecard |
+| Real licence, citation metadata, changelog, release tag | MIT [LICENSE](LICENSE), [CITATION.cff](CITATION.cff), [CHANGELOG.md](CHANGELOG.md) keyed by CL number, tag `v0.1.0` (publishes the GHCR image the quick-start uses) |
+| No stale `planned:` detector strings; packaging metadata current | Manifest `implementation` fields name the shipped detectors (`covertlens.lsb/dct/metadata`); `pyproject.toml` description and MIT licence updated |
+
+
+## Development quickstart
+
+The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`.
 
 ```bash
 python3 -m venv .venv
@@ -411,16 +497,23 @@ pytest
 
 ## Layout
 
-- `covertlens/` — manifest loader/validator, event contracts, route registry, ID helpers, immutable originals store, CLI
-- `config/` — the versioned allowed-channel manifest (owner: Agent Evaluation / AI Safety)
+- `covertlens/` — library: manifest, immutable store, gate, bounded parsers, four detector families, verdict ladder, trace/report/export, benchmarks and CLI (zero runtime dependencies)
+- `app/` — FastAPI web service (`app/main.py`, `app/analysis_worker.py`) and the React + Vite + TypeScript frontend (`app/frontend/`)
+- `config/` — versioned allowed-channel manifest, frozen thresholds, release scorecard, runtime policy (owner: Agent Evaluation / AI Safety)
 - `schemas/` — JSON Schemas for cross-language consumers
-- `docs/contracts/` — human-readable contract documents
-- `tests/` — acceptance tests, one file per CL-7 criterion
+- `docs/contracts/` — human-readable contract documents; `docs/reviews/` — dated project reviews; `docs/planning/` — planning history and traceability notes
+- `scripts/` — web-service cache precompute
+- `tests/` — acceptance tests across the CL delivery sequence
 
 ## Working agreements
 
-- Jira (project CL) is the source of truth; see
-  [REQUIREMENTS.md](REQUIREMENTS.md) §7 for the working protocol.
-- Scope is eval-generated PNG/JPEG only. Consumer uploads/transports are
-  out of scope. Thresholds freeze in CL-27; until then the manifest
-  carries explicit unfrozen placeholders, never invented numbers.
+- Requirements live in [REQUIREMENTS.md](REQUIREMENTS.md);
+  delivery history is keyed by CL task in
+  [CHANGELOG.md](CHANGELOG.md), with planning notes in
+  [docs/planning/](docs/planning/).
+- Scope is eval-generated PNG/JPEG only. Consumer
+  uploads/transports are out of scope.
+- LSB/DCT/metadata thresholds froze in CL-27; geometric
+  thresholds remain explicit unfrozen placeholders, never
+  invented numbers, and that family is log-only until a
+  dedicated freeze.

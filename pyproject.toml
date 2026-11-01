@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "covertlens"
 version = "0.1.0"
-description = "CovertLens harness contracts: allowed-channel manifest, stable harness events, artifact route inventory (CL-7)"
+description = "CovertLens: inline steganalysis gate designed for multi-agent evaluation harnesses — four-family image scoring, verdict ladder, audited evidence"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Internal" }
+license = { text = "MIT" }
 authors = [{ name = "Agent Evaluation / AI Safety" }]
 dependencies = []
 

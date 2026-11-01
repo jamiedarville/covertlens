@@ -1,6 +1,6 @@
 # Harness events and stable IDs (CL-7 · EV-01)
 
-Every inter-agent image in the Meta AI internal eval harness produces an
+Every inter-agent image in a multi-agent evaluation harness produces an
 ordered, single-run event trail. This contract defines the event families,
 their stable IDs, and the invariants downstream tasks rely on. Machine
 contracts: [harness-events.schema.json](../../schemas/harness-events.schema.json)
