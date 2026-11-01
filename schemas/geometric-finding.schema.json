@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/geometric-finding.schema.json",
+  "title": "CovertLens geometric quantization/structure finding (CL-40)",
+  "type": "object",
+  "required": ["family", "detector_name", "detector_version", "score",
+               "coverage", "evidence", "limitations"],
+  "properties": {
+    "family": {"const": "geometric"},
+    "detector_name": {"const": "geometric-quantization-structure"},
+    "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "evidence": {
+      "type": "object",
+      "required": ["label", "primary_channel", "channels", "structure", "classification"],
+      "properties": {
+        "label": {"const": "evidence_aid_not_decoded_message"},
+        "classification": {
+          "enum": ["structure_claimed", "quantized_without_structure",
+                   "weak_signal", "no_signal"]
+        },
+        "channels": {
+          "type": "object",
+          "patternProperties": {
+            "^(height|gap|lit|colour|angle)$": {
+              "type": "object",
+              "required": ["grid", "symbols", "residuals", "supporting",
+                           "support_fraction", "score", "applicable"]
+            }
+          }
+        }
+      }
+    }
+  }
+}
