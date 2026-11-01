@@ -6,8 +6,8 @@ needs a raster, so this module decodes 8-bit sequential Huffman
 JPEGs (SOF0/SOF1) to RGB pixels: per-component quantisation and
 Huffman tables, restart intervals, sampling factors 4:4:4 /
 4:2:2 / 4:2:0 (nearest-neighbour upsampling), separable IDCT,
-YCbCr conversion (Adobe transform flag ignored; 3-component
-scans are treated as YCbCr, 1-component as greyscale).
+YCbCr conversion (Adobe transform 0 / RGB component IDs use RGB
+directly; 1-component frames are greyscale).
 
 Progressive (SOF2), arithmetic-coded, lossless, and 4-component
 (CMYK/YCCK) files raise `JpegDecodeError` — the segmenter maps
@@ -23,6 +23,22 @@ import math
 import struct
 
 from .parsing import _ZIGZAG, _parse_huffman
+
+_SOF_MARKERS = (
+    0xC0,
+    0xC1,
+    0xC2,
+    0xC3,
+    0xC5,
+    0xC6,
+    0xC7,
+    0xC9,
+    0xCA,
+    0xCB,
+    0xCD,
+    0xCE,
+    0xCF,
+)
 
 
 class JpegDecodeError(ValueError):
@@ -96,7 +112,7 @@ class _ScanBits:
         return value
 
 
-def _split_scan(scan: bytes) -> list[bytes]:
+def _split_scan(scan: bytes, restart_interval: int) -> list[bytes]:
     """Split entropy data at restart markers, unstuffing FF00."""
     segments: list[bytes] = []
     current = bytearray()
@@ -110,20 +126,22 @@ def _split_scan(scan: bytes) -> list[bytes]:
                 i += 2
                 continue
             if 0xD0 <= nxt <= 0xD7:
+                if not restart_interval or nxt != 0xD0 + len(segments) % 8:
+                    raise JpegDecodeError("invalid JPEG restart marker sequence")
                 segments.append(bytes(current))
                 current = bytearray()
                 i += 2
                 continue
             if nxt == 0xD9:  # EOI: image data ends
-                break
+                segments.append(bytes(current))
+                return segments
             if nxt == 0xFF:  # fill byte before a marker
                 i += 1
                 continue
-            break  # any other marker ends the scan for our purposes
+            raise JpegDecodeError("only a single sequential JPEG scan is supported")
         current.append(byte)
         i += 1
-    segments.append(bytes(current))
-    return segments
+    raise JpegDecodeError("JPEG missing end-of-image marker")
 
 
 def probe_jpeg_size(data: bytes) -> tuple[int, int] | None:
@@ -135,13 +153,16 @@ def probe_jpeg_size(data: bytes) -> tuple[int, int] | None:
         if data[pos] != 0xFF:
             return None
         marker = data[pos + 1]
+        if marker == 0xFF:
+            pos += 1
+            continue
         if marker == 0x01 or 0xD0 <= marker <= 0xD9:
             pos += 2
             continue
         length = struct.unpack(">H", data[pos + 2 : pos + 4])[0]
-        if length < 2:
+        if length < 2 or pos + 2 + length > len(data):
             return None
-        if marker in (0xC0, 0xC1, 0xC2) and pos + 9 <= len(data):
+        if marker in _SOF_MARKERS and length >= 8:
             height, width = struct.unpack(">HH", data[pos + 5 : pos + 9])
             return width, height
         pos += 2 + length
@@ -190,10 +211,15 @@ def decode_jpeg_rgb(
     frame_comps: list[dict[str, int]] | None = None
     scan_start: int | None = None
     scan_tables: dict[int, tuple[int, int]] = {}
+    scan_order: list[int] = []
+    adobe_transform: int | None = None
     while pos < len(data):
         if data[pos] != 0xFF:
             raise JpegDecodeError("corrupt JPEG marker stream")
         marker = data[pos + 1] if pos + 1 < len(data) else 0
+        if marker == 0xFF:
+            pos += 1
+            continue
         if marker == 0xD9:
             break
         if marker == 0x01 or 0xD0 <= marker <= 0xD7:
@@ -216,21 +242,13 @@ def decode_jpeg_rgb(
             if len(body) != 2:
                 raise JpegDecodeError("short DRI segment")
             restart_interval = struct.unpack(">H", body)[0]
-        elif marker in (
-            0xC0,
-            0xC1,
-            0xC2,
-            0xC3,
-            0xC5,
-            0xC6,
-            0xC7,
-            0xC9,
-            0xCA,
-            0xCB,
-            0xCD,
-            0xCE,
-            0xCF,
-        ):
+        elif marker == 0xEE and body.startswith(b"Adobe"):
+            if len(body) != 12:
+                raise JpegDecodeError("invalid Adobe JPEG colour transform")
+            adobe_transform = body[11]
+            if adobe_transform not in (0, 1):
+                raise JpegDecodeError("unsupported Adobe JPEG colour transform")
+        elif marker in _SOF_MARKERS:
             if marker not in (0xC0, 0xC1):
                 raise JpegDecodeError(
                     f"JPEG frame type 0xFF{marker:02X} outside sequential Huffman subset"
@@ -250,16 +268,34 @@ def decode_jpeg_rgb(
                 if not (1 <= hsamp <= 4 and 1 <= vsamp <= 4):
                     raise JpegDecodeError("unsupported JPEG sampling factor")
                 comps.append({"id": cid, "h": hsamp, "v": vsamp, "q": qid})
+            if len({c["id"] for c in comps}) != ncomp:
+                raise JpegDecodeError("duplicate JPEG frame component")
+            if ncomp == 1 and (comps[0]["h"], comps[0]["v"]) != (1, 1):
+                raise JpegDecodeError("unsupported grayscale sampling factor")
+            if ncomp == 3 and (
+                (comps[0]["h"], comps[0]["v"]) not in ((1, 1), (2, 1), (2, 2))
+                or any((c["h"], c["v"]) != (1, 1) for c in comps[1:])
+            ):
+                raise JpegDecodeError("unsupported JPEG sampling layout")
             frame_w, frame_h, frame_comps = width, height, comps
         elif marker == 0xDA:
             if frame_comps is None or not quant or not huff:
                 raise JpegDecodeError("JPEG scan before frame/tables")
             nscan = body[0] if body else 0
-            if nscan != len(frame_comps) or len(body) < 1 + 2 * nscan:
+            if nscan != len(frame_comps) or len(body) != 4 + 2 * nscan:
                 raise JpegDecodeError("only interleaved scans are supported")
+            if body[-3:] != b"\x00\x3f\x00":
+                raise JpegDecodeError(
+                    "only sequential JPEG scan parameters are supported"
+                )
             for i in range(nscan):
                 cid, tables_byte = body[1 + 2 * i], body[2 + 2 * i]
+                if cid in scan_tables or cid not in {c["id"] for c in frame_comps}:
+                    raise JpegDecodeError("invalid JPEG scan component")
                 scan_tables[cid] = (tables_byte >> 4, tables_byte & 0x0F)
+                scan_order.append(
+                    next(j for j, c in enumerate(frame_comps) if c["id"] == cid)
+                )
             scan_start = pos + 2 + length
             break
         pos += 2 + length
@@ -294,6 +330,8 @@ def decode_jpeg_rgb(
             raise JpegDecodeError("JPEG missing quantisation table")
         coeffs = [0] * 64
         size = reader.read_code(dc_table)
+        if size > 11:
+            raise JpegDecodeError("invalid JPEG DC coefficient size")
         prev[comp_idx] += reader.read_value(size)
         coeffs[0] = prev[comp_idx]
         k = 1
@@ -304,7 +342,11 @@ def decode_jpeg_rgb(
                 break
             if rs == 0xF0:
                 k += 16
+                if k > 64:
+                    raise JpegDecodeError("JPEG AC run overflows block")
                 continue
+            if sz == 0 or sz > 10:
+                raise JpegDecodeError("invalid JPEG AC coefficient size")
             k += run
             if k >= 64:
                 raise JpegDecodeError("JPEG AC run overflows block")
@@ -312,8 +354,13 @@ def decode_jpeg_rgb(
             k += 1
         return _idct_block([coeffs[i] * qtable[i] for i in range(64)])
 
-    segments = _split_scan(data[scan_start:])
+    segments = _split_scan(data[scan_start:], restart_interval)
     total_mcus = mcus_x * mcus_y
+    expected_segments = (
+        (total_mcus - 1) // restart_interval + 1 if restart_interval else 1
+    )
+    if len(segments) != expected_segments:
+        raise JpegDecodeError("JPEG restart marker count does not match interval")
     mcu_index = 0
     for seg_index, segment in enumerate(segments):
         if restart_interval and seg_index > 0 and mcu_index % restart_interval != 0:
@@ -327,7 +374,8 @@ def decode_jpeg_rgb(
         )
         for _ in range(segment_mcus):
             mcu_x, mcu_y = mcu_index % mcus_x, mcu_index // mcus_x
-            for ci, comp in enumerate(comps):
+            for ci in scan_order:
+                comp = comps[ci]
                 _sw, _sh, blocks_w, _blocks_h = plane_dims[ci]
                 plane = planes[ci]
                 plane_w = blocks_w * 8
@@ -346,17 +394,20 @@ def decode_jpeg_rgb(
         raise JpegDecodeError("truncated JPEG scan")
 
     pixels = bytearray(width * height * 3)
+    direct_rgb = adobe_transform == 0 or [c["id"] for c in comps] == [82, 71, 66]
     for y in range(height):
         for x in range(width):
             samples = []
             for ci, (_sw, _sh, blocks_w, _bh) in enumerate(plane_dims):
                 samples_w, samples_h = plane_dims[ci][0], plane_dims[ci][1]
-                src_x = min(samples_w - 1, (x * samples_w) // width)
-                src_y = min(samples_h - 1, (y * samples_h) // height)
+                src_x = min(samples_w - 1, x * comps[ci]["h"] // hmax)
+                src_y = min(samples_h - 1, y * comps[ci]["v"] // vmax)
                 samples.append(planes[ci][src_y * (blocks_w * 8) + src_x])
             offset = (y * width + x) * 3
             if len(samples) == 1:
                 pixels[offset : offset + 3] = bytes((samples[0],) * 3)
+            elif direct_rgb:
+                pixels[offset : offset + 3] = bytes(samples)
             else:
                 lum, cb, cr = samples
                 pixels[offset] = max(0, min(255, int(round(lum + 1.402 * (cr - 128)))))

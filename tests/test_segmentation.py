@@ -96,6 +96,7 @@ def test_method_and_tolerances_recorded(dataset):
     assert doc["tolerances"]["background_distance_tolerance"] == 24.0
     assert doc["tolerances"]["background_distance_floor"] == 3.0
     assert doc["tolerances"]["coherent_colour_fraction"] == 0.9
+    assert doc["tolerances"]["preserve_thin_components"] is True
     assert doc["media_kind"] == "png"
     assert {m["status"] for m in doc["failure_modes"]} >= {
         "no_foreground",

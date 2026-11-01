@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- Self-authored browser-rendered signal dashboard fixture; MIT. -->
+<meta charset="utf-8">
+<title>Signal dashboard fixture</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 640px; height: 240px; overflow: hidden; }
+  body { background: linear-gradient(#edf2f8, #d9e4ee); }
+  main { display: flex; align-items: end; gap: 24px; padding: 32px; height: 200px; }
+  i { display: block; width: 64px; flex-shrink: 0; border-radius: 8px;
+      border: 1px solid #376591; background: linear-gradient(120deg, #5497c8, #39698c);
+      box-shadow: 0 2px 3px #14253644; }
+</style>
+<main aria-label="Six signal bars">
+  <i style="height: 64px"></i><i style="height: 112px"></i>
+  <i style="height: 80px"></i><i style="height: 136px"></i>
+  <i style="height: 96px"></i><i style="height: 120px"></i>
+</main>

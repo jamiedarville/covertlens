@@ -34,11 +34,11 @@ def geo_pair():
 def test_manifest_has_four_channels():
     manifest = load_manifest()
     assert validate_manifest(manifest) == []
-    assert manifest["manifest_version"] == "1.1.0"
+    assert manifest["manifest_version"] == "1.2.0"
     assert channel_families(manifest) == list(FAMILIES)
     assert "geometric" in FAMILIES
     channel = next(c for c in manifest["channels"] if c["family"] == "geometric")
-    assert channel["applies_to"] == ["png"]
+    assert channel["applies_to"] == ["png", "jpeg"]
     assert channel["thresholds"]["status"] == "unfrozen_placeholder"
 
 
@@ -54,7 +54,7 @@ def test_geometric_finding_validates_and_verdict_is_log_only(geo_pair):
     assert "spatial_lsb" in decision.families_without_findings
 
 
-def test_analyze_all_bytes_attaches_geometric_for_png_only(geo_pair):
+def test_analyze_all_bytes_attaches_geometric_for_png(geo_pair):
     _clean, encoded = geo_pair
     result = analyze_all_bytes(encoded.data)
     assert validate_result(result) == []

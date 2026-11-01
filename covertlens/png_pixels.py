@@ -61,6 +61,12 @@ def decode_png_rgb(
                 raise PngDecodeError(f"PNG bit depth {depth} outside supported subset")
             if color not in _CHANNELS:
                 raise PngDecodeError(f"unknown PNG colour type {color}")
+            if color == 3 and depth != 8:
+                raise PngDecodeError("palette PNG depth outside supported subset")
+            if _c != 0 or _f != 0:
+                raise PngDecodeError(
+                    "PNG compression/filter method outside supported subset"
+                )
             if width <= 0 or height <= 0 or width * height > max_pixels:
                 raise PngDecodeError("PNG pixel count over limit")
             ihdr = (width, height, depth, color, interlace)
@@ -83,11 +89,12 @@ def decode_png_rgb(
     try:
         engine = zlib.decompressobj()
         raw = engine.decompress(bytes(idat), expected + 1)
-        raw += engine.flush()
     except zlib.error as exc:
         raise PngDecodeError(f"PNG inflate failed: {exc}") from exc
-    if len(raw) < expected:
-        raise PngDecodeError("truncated PNG pixel data")
+    # Do not flush an unconsumed stream: flush would bypass max_length
+    # and inflate an arbitrarily large payload beyond the pixel budget.
+    if len(raw) != expected or not engine.eof or engine.unused_data:
+        raise PngDecodeError("PNG pixel data length does not match dimensions")
 
     rows: list[bytes] = []
     prev = bytearray(stride)

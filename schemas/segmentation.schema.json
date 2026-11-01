@@ -19,10 +19,13 @@
     "tolerances": {
       "type": "object",
       "properties": {
-        "background_distance_tolerance": {"type": "number"},
-        "background_distance_floor": {"type": "number"},
-        "coherent_colour_fraction": {"type": "number"},
-        "morphology_3x3_open_close": {"type": "boolean"}
+        "background_distance_tolerance": {"type": "number", "minimum": 0},
+        "background_distance_floor": {"type": "number", "minimum": 0},
+        "coherent_colour_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "background_bucket_shift": {"type": "integer", "minimum": 0, "maximum": 7},
+        "background_step_tolerance": {"type": "number", "minimum": 0},
+        "morphology_3x3_open_close": {"type": "boolean"},
+        "preserve_thin_components": {"type": "boolean"}
       }
     },
     "elements": {

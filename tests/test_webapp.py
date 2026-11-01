@@ -39,7 +39,7 @@ def test_health_and_version(client):
     version = client.get("/api/version")
     assert version.status_code == 200
     body = version.json()
-    assert body["manifest_version"] == "1.1.0"
+    assert body["manifest_version"] == "1.2.0"
     assert any("geometric" in d for d in body["detectors"])
 
 
@@ -96,6 +96,42 @@ def test_oversized_pixels_return_explicit_status(client, geo_encoded, monkeypatc
     )
     assert response.status_code == 200
     assert response.json()["status"] == "oversized"
+
+
+def test_jpeg_upload_has_geometric_overlay_and_fidelity_limitation(client):
+    from covertlens.fixtures import _load_png, encode_dct_jpeg
+
+    clean, _ = build_geo_pair("height_position")
+    pixels, width, height = _load_png(clean.data)
+    data = encode_dct_jpeg(pixels, width, height, b"", quality=95)
+    response = client.post(
+        "/api/analyze", files={"file": ("scene.jpg", data, "image/jpeg")}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "parsed"
+    assert body["geometric"]["segmentation"]["media_kind"] == "jpeg"
+    assert body["geometric"]["segmentation"]["element_count"] >= 3
+    assert body["geometric"]["overlay"]["channels"]["height"]["values"]
+    finding = next(
+        f for f in body["analysis"]["findings"] if f["family"] == "geometric"
+    )
+    assert any("fidelity limitation" in note for note in finding["limitations"])
+    assert "candidate_decode" not in response.text
+    assert "decoded_message" not in body["geometric"]["segmentation"]
+
+
+def test_jpeg_pixel_limit_returns_explicit_status(client, monkeypatch):
+    from covertlens.fixtures import build_pair
+
+    clean, _ = build_pair("jpeg_dct", width=32, height=24, payload_bytes=8)
+    monkeypatch.setenv("COVERTLENS_MAX_PIXELS", "100")
+    response = client.post(
+        "/api/analyze", files={"file": ("scene.jpg", clean.data, "image/jpeg")}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "oversized"
+    assert response.json()["decision"] is None
 
 
 def test_upload_size_limit_before_read(client, monkeypatch):

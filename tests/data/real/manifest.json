@@ -1,0 +1,113 @@
+[
+  {
+    "file": "matplotlib-bars.png",
+    "size": [
+      640,
+      240
+    ],
+    "count": 8,
+    "centres_x": [
+      72,
+      143,
+      214,
+      285,
+      356,
+      427,
+      498,
+      569
+    ],
+    "centre_tolerance": 8,
+    "sha256": "81be8f1cadf0b935e8cee0793837bd524ba9ff5de795db37acdb12e8f05085f5"
+  },
+  {
+    "file": "diffusion-skyline.png",
+    "size": [
+      1450,
+      420
+    ],
+    "count": 17,
+    "centres_x": [
+      35,
+      112,
+      200,
+      285,
+      383,
+      476,
+      570,
+      688,
+      777,
+      861,
+      950,
+      1038,
+      1123,
+      1203,
+      1282,
+      1370,
+      1438
+    ],
+    "centre_tolerance": 12,
+    "sha256": "b98ae37ca3cbc1faaf8db6e5ccfc82cfff0c8141675834a187e17f6fa0d17763"
+  },
+  {
+    "file": "browser-screenshot.png",
+    "size": [
+      640,
+      240
+    ],
+    "count": 6,
+    "centres_x": [
+      64,
+      152,
+      240,
+      328,
+      416,
+      504
+    ],
+    "centre_tolerance": 8,
+    "sha256": "1c87b8d91637a3cdfb541f6426475ad60416abaddb37563275535f27b3bbbb3c"
+  },
+  {
+    "file": "fence-tips.jpg",
+    "size": [
+      580,
+      80
+    ],
+    "count": 12,
+    "centres_x": [
+      5,
+      40,
+      95,
+      152,
+      205,
+      251,
+      305,
+      350,
+      402,
+      449,
+      497,
+      540
+    ],
+    "centre_tolerance": 12,
+    "sha256": "ffc7d387a9fcd4c39e61a2714f53ff61ef8a258dd1ca8dbc9f9283bde6954a4e"
+  },
+  {
+    "file": "morse-dashes.jpg",
+    "size": [
+      641,
+      97
+    ],
+    "count": 8,
+    "centres_x": [
+      50,
+      122,
+      194,
+      266,
+      338,
+      410,
+      482,
+      554
+    ],
+    "centre_tolerance": 8,
+    "sha256": "3629a65306c24c74b6c194c6ad4904011819cceee041231246594114c418af1e"
+  }
+]

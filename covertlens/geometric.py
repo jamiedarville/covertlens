@@ -44,7 +44,9 @@ from .parsing import AnalysisResult, AnalysisStatus, Finding
 from .segmentation import SegmentationResult, segment_image
 
 GEO_DETECTOR_NAME = "geometric-quantization-structure"
-GEO_DETECTOR_VERSION = "2.0.0"
+# CL-52 changes raster extraction and applicable media; replay pins must
+# distinguish these findings from the earlier exact-colour segmenter.
+GEO_DETECTOR_VERSION = "2.1.0"
 GEO_FAMILY = "geometric"
 GEO_CONFIG_VERSION = "2.0.0"
 SIGNAL_STRUCTURE = "structure_claimed"
@@ -57,8 +59,8 @@ GEOMETRIC_CHANNELS = ("height", "gap", "lit", "colour", "angle")
 _LIMITATIONS = (
     "quantization alone is not encoding: legitimate charts and "
     "layouts are grid-snapped by design (GEO-05)",
-    "procedural synthetic scenes only; natural-image element "
-    "segmentation is not covered",
+    "detector calibration uses procedural synthetic scenes; five real-image "
+    "segmentation checks do not establish general natural-image detection coverage",
     "structure is claimed only under a declared code in "
     "DECLARED_CODES; unregistered mappings are never inferred",
     "thresholds are unfrozen placeholders (no geometric freeze "

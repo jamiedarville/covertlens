@@ -22,7 +22,9 @@ Method (versioned in `SegmenterConfig`):
    `background_distance_floor` (Euclidean RGB) from the modal
    colour, cleaned by a 3x3 morphological open/close pass so
    anti-aliased fringes and sensor/JPEG noise do not fuse or
-   speckle components (CL-52). A component is foreground when
+   speckle components (CL-52). Coherent components thinner than
+   the kernel are restored when `preserve_thin_components` is
+   enabled, retaining chart axes and fine dashes. A component is foreground when
    any pixel exceeds `background_distance_tolerance`, or when
    it is a coherent near-background element: at least
    `coherent_colour_fraction` of its pixels share one colour
@@ -70,7 +72,7 @@ _JPEG_MAGIC = b"\xff\xd8\xff"
 FAILURE_MODES: tuple[dict[str, str], ...] = (
     {
         "status": "no_foreground",
-        "meaning": "no pixel is farther than the background distance floor from the modal perimeter colour",
+        "meaning": "no foreground candidates remain after background-region removal and morphological cleanup",
     },
     {
         "status": "too_few_elements",
@@ -134,6 +136,9 @@ class SegmenterConfig:
     background_step_tolerance: float = 4.0
     # CL-52: 3x3 morphological open/close on the candidate mask.
     morphology: bool = True
+    # Opening erases coherent components thinner than the kernel (chart
+    # axes, rules and fine dashes). Restore those from the original mask.
+    preserve_thin_components: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         doc = asdict(self)
@@ -196,6 +201,7 @@ class SegmentationResult:
                 "background_bucket_shift": self.config.background_bucket_shift,
                 "background_step_tolerance": self.config.background_step_tolerance,
                 "morphology_3x3_open_close": self.config.morphology,
+                "preserve_thin_components": self.config.preserve_thin_components,
             },
             "failure_modes": list(FAILURE_MODES),
             "decoded_message": None,
@@ -517,7 +523,24 @@ def segment_image(
         dist_sq.append(d2)
         mask.append(d2 > floor_sq and not region[i // 3])
     if active.morphology:
-        mask = _open_close(mask, width, height)
+        cleaned = _open_close(mask, width, height)
+        if active.preserve_thin_components:
+            for points in _components(mask, width, height, active.min_component_pixels):
+                xs = [p % width for p in points]
+                ys = [p // width for p in points]
+                if min(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1) >= 3:
+                    continue
+                thin_colours: dict[bytes, int] = {}
+                for point in points:
+                    thin_colour = pixels[point * 3 : point * 3 + 3]
+                    thin_colours[thin_colour] = thin_colours.get(thin_colour, 0) + 1
+                if (
+                    max(thin_colours.values()) / len(points)
+                    >= active.coherent_colour_fraction
+                ):
+                    for point in points:
+                        cleaned[point] = True
+        mask = cleaned
     if not any(mask):
         return SegmentationResult(
             "no_foreground",
@@ -612,7 +635,8 @@ def segment_image(
     if len(elements) < active.min_elements:
         return SegmentationResult(
             "too_few_elements",
-            detail=f"{len(elements)} element(s) below min_elements={active.min_elements}",
+            detail=f"{len(elements)} element(s) below min_elements={active.min_elements}"
+            + (f"; {detail}" if detail else ""),
             width=width,
             height=height,
             elements=elements,

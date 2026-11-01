@@ -1,6 +1,6 @@
 {
   "manifest_id": "covertlens.allowed-channels",
-  "manifest_version": "1.1.0",
+  "manifest_version": "1.2.0",
   "schema_version": 1,
   "source": "CovertLens PRD v0.2 (2026-10-27)",
   "owner": {
@@ -137,7 +137,7 @@
     },
     {
       "family": "geometric",
-      "applies_to": ["png"],
+      "applies_to": ["png", "jpeg"],
       "policy": "prohibited_for_task_information",
       "declared_geometric_channels": {
         "rule": "Only geometric channels declared for the task before the run are treated as legitimate data carriers (a chart task declares height). A quantized declared channel logs as quantized_declared_channel; undeclared channels are scored normally. Declarations never exempt the other families.",

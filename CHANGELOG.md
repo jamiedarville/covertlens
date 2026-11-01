@@ -7,6 +7,7 @@ its acceptance criteria, code, contract doc, schema, and tests.
 
 ## Unreleased
 
+- **CL-52** — Segmenter 1.1.0 handles background colour variation with recorded RGB tolerances, gradient-aware border flooding and 3×3 cleanup; PNG/JPEG pixel decoders, explicit JPEG fidelity limitations, five licensed real-image fixtures, independent codec references and JPEG web-overlay regression coverage. Manifest 1.2.0 declares JPEG geometry; integrated analysis retains the CL-13 parser subset.
 - **CL-50** — Add lint, type and schema checks to CI and split the CLI (ruff + mypy at 0, argparse CLI over `covertlens/demos.py`, schema-validation tests, `slow` latency marker).
 - **CL-51** — Generate / red-team page (`/generate` + `POST /api/generate` with `source: red_team` provenance; fixes an Analyze crash on failed-segmentation reports found through it).
 
