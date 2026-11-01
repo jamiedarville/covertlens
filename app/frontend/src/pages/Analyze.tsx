@@ -4,6 +4,7 @@ import {
   ApiError,
   analyzeFile,
   fetchFixtureFile,
+  fetchGeneratedFile,
   listFixtures,
   takePreload,
 } from "../api";
@@ -89,6 +90,31 @@ export default function Analyze() {
       setBusy(false);
     }
   };
+
+  // One-click handoff from /generate (CL-51):
+  // /analyze?generated=<digest>.<ext> loads and analyzes it.
+  useEffect(() => {
+    const generated = new URLSearchParams(window.location.search).get("generated");
+    if (!generated || !/^[0-9a-f]{64}\.(png|jpg)$/.test(generated)) return;
+    let cancelled = false;
+    setStatusLine("Loading your generated image…");
+    fetchGeneratedFile(`/api/generated/${generated}`, generated)
+      .then((file) => {
+        if (!cancelled) return run(file, `Generated image ${generated.slice(0, 12)}…`);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          err instanceof ApiError ? err.message : "The generated image could not be loaded.";
+        setError(message);
+        setStatusLine(message);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Run once on arrival; `run` is stable for this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const takeFile = (file: File | undefined) => {
     if (!file) return;

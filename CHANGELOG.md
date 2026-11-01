@@ -8,6 +8,7 @@ its acceptance criteria, code, contract doc, schema, and tests.
 ## Unreleased
 
 - **CL-50** — Add lint, type and schema checks to CI and split the CLI (ruff + mypy at 0, argparse CLI over `covertlens/demos.py`, schema-validation tests, `slow` latency marker).
+- **CL-51** — Generate / red-team page (`/generate` + `POST /api/generate` with `source: red_team` provenance; fixes an Analyze crash on failed-segmentation reports found through it).
 
 ## 0.1.0 — 2026-11-01
 

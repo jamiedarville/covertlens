@@ -16,9 +16,9 @@ function SkylineSide({
   const payload = side.payload;
   const geometric = payload.geometric;
   const finding = payload.analysis?.findings.find((f) => f.family === "geometric");
-  const heightChannel = geometric?.channels.height;
+  const heightChannel = geometric?.channels?.height;
   const values =
-    geometric?.overlay?.channels.height?.values ??
+    geometric?.overlay?.channels?.height?.values ??
     (geometric?.segmentation?.sequences.height ?? []).filter(
       (v): v is number => v !== null,
     );

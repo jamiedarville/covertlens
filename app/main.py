@@ -1,4 +1,4 @@
-"""CovertLens web service (CL-47, CL-48).
+"""CovertLens web service (CL-47, CL-48, CL-51).
 
 Thin FastAPI layer over the library:
 
@@ -7,14 +7,19 @@ Thin FastAPI layer over the library:
   wall-clock deadline mapped to the library's `timeout` status;
   upload size is limited before the body is read; per-IP rate
   limit; reviewer-only fields are stripped by the worker.
+- `POST /api/generate` — red-team image generation (CL-51);
+  same pool, rate limit and deadline. Provenance is recorded
+  in a persistent artifact store plus an append-only index
+  with `source: red_team`; bytes serve from
+  `GET /api/generated/{digest}.png|.jpg`.
 - `GET /api/fixtures`, `GET /api/fixtures/{digest}.png`
 - `GET /api/benchmarks/{name}` — cached precompute output.
 - `GET /api/comparison` — cached landing-page skyline pair (CL-48).
 - `GET /api/scorecard`, `GET /api/version`, `GET /api/health`.
 - OpenAPI at `/docs`; the built React frontend is served
-  statically at `/` (landing) and `/analyze` (CL-48), with its
-  hashed assets under `/assets/`. API and docs paths are never
-  shadowed by the single-page app.
+  statically at `/` (landing), `/analyze` (CL-48) and
+  `/generate` (CL-51), with its hashed assets under `/assets/`.
+  API and docs paths are never shadowed by the single-page app.
 
 Precompute runs in a background thread at first start (health
 answers immediately); cache lives under
@@ -28,9 +33,11 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import re
 import threading
 import time
 from collections import deque
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,9 +49,17 @@ from covertlens.manifest import load_manifest
 from covertlens.pinning import default_detector_versions
 
 from .analysis_worker import analyze_bytes
+from .generation_worker import generate_image
 
 DATA_DIR = Path(os.environ.get("COVERTLENS_DATA_DIR", "/data"))
 CACHE_DIR = DATA_DIR / "cache"
+# Red-team generations (CL-51): image files, an append-only
+# provenance index, and a persistent artifact store.
+GENERATED_DIR = DATA_DIR / "generated"
+RED_TEAM_INDEX = DATA_DIR / "red-team" / "index.jsonl"
+RED_TEAM_STORE_DIR = DATA_DIR / "red-team" / "store"
+MAX_GENERATE_BODY_BYTES = 16 * 1024
+_GENERATED_NAME = re.compile(r"^[0-9a-f]{64}\.(png|jpg)$")
 # The Docker image copies the Vite build to app/static (CL-47);
 # a local `npm run build` leaves it in app/frontend/dist. Serve
 # whichever exists so both paths run the same app (CL-48).
@@ -179,7 +194,7 @@ def _startup() -> None:
 
 @app.middleware("http")
 async def _security_and_rate_limit(request: Request, call_next):
-    if request.url.path == "/api/analyze":
+    if request.url.path in ("/api/analyze", "/api/generate"):
         now = time.time()
         window = _rate_windows.setdefault(request.client.host, deque())
         while window and now - window[0] > 60:
@@ -266,6 +281,88 @@ async def analyze(request: Request, file: UploadFile = File(...)) -> JSONRespons
     return JSONResponse(payload)
 
 
+_red_team_store: Any = None
+_red_team_lock = threading.Lock()
+
+
+def _record_red_team(result: dict[str, Any]) -> str:
+    """Persist a generation's bytes + provenance (CL-51)."""
+    global _red_team_store
+    from covertlens.store import ArtifactStore
+
+    data: bytes = result["data"]
+    digest = str(result["content_hash"]).removeprefix("sha256:")
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    (GENERATED_DIR / f"{digest}.{result['ext']}").write_bytes(data)
+    with _red_team_lock:
+        if _red_team_store is None:
+            RED_TEAM_STORE_DIR.mkdir(parents=True, exist_ok=True)
+            _red_team_store = ArtifactStore(RED_TEAM_STORE_DIR)
+        version = _red_team_store.put_original(
+            data, run_id="red_team", producer_id="red-team-ui"
+        )
+        RED_TEAM_INDEX.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "source": "red_team",
+            "fixture_id": result["fixture_id"],
+            "content_hash": result["content_hash"],
+            "artifact_version_id": version.artifact_version_id,
+            "created_at": datetime.now(UTC).isoformat(),
+            "parameters": result["provenance"],
+        }
+        with RED_TEAM_INDEX.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+    return str(version.artifact_version_id)
+
+
+@app.post("/api/generate")
+async def generate(request: Request) -> JSONResponse:
+    """Generate one red-team image from JSON parameters (CL-51)."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None and int(content_length) > MAX_GENERATE_BODY_BYTES:
+        return JSONResponse({"detail": "request_too_large"}, status_code=413)
+    body = await request.body()
+    if len(body) > MAX_GENERATE_BODY_BYTES:
+        return JSONResponse({"detail": "request_too_large"}, status_code=413)
+    try:
+        params = json.loads(body or b"{}")
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    future = _executor().submit(generate_image, params)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S
+        )
+    except (TimeoutError, concurrent.futures.TimeoutError):
+        return JSONResponse({"detail": "generation_timeout"}, status_code=504)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    version_id = _record_red_team(result)
+    digest = str(result["content_hash"]).removeprefix("sha256:")
+    return JSONResponse(
+        {
+            "fixture_id": result["fixture_id"],
+            "content_hash": result["content_hash"],
+            "media_type": result["media_type"],
+            "image_url": f"/api/generated/{digest}.{result['ext']}",
+            "source": "red_team",
+            "artifact_version_id": version_id,
+            "parameters": result["parameters"],
+        }
+    )
+
+
+@app.get("/api/generated/{filename}")
+def generated_image(filename: str) -> Response:
+    """Serve one recorded red-team generation by content digest."""
+    if not _GENERATED_NAME.match(filename):
+        return JSONResponse({"detail": "generated_not_found"}, status_code=404)
+    target = (GENERATED_DIR / filename).resolve()
+    if not target.is_relative_to(GENERATED_DIR.resolve()) or not target.is_file():
+        return JSONResponse({"detail": "generated_not_found"}, status_code=404)
+    return FileResponse(target)
+
+
 @app.get("/api/benchmarks/{name}")
 def benchmark(name: str) -> JSONResponse:
     if name != "geometric":
@@ -320,6 +417,15 @@ def index() -> Response:
 @app.get("/analyze")
 def analyze_page() -> Response:
     """SPA route for the Analyze page; same shell as `/` (CL-48)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/generate")
+def generate_page() -> Response:
+    """SPA route for the Generate / red-team page (CL-51)."""
     response = _index_response()
     if response is not None:
         return response

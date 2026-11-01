@@ -1,5 +1,6 @@
 """CL-47 acceptance: web service endpoints (skips without fastapi)."""
 
+import json
 import os
 import tempfile
 
@@ -243,3 +244,135 @@ def test_spa_routes_without_build(client, tmp_path, monkeypatch):
     root = client.get("/")
     assert root.status_code == 200
     assert root.json()["service"] == "covertlens"
+
+
+def test_generate_geometric_word_roundtrip(client):
+    """CL-51: generate a word skyline, fetch it, analyze it back."""
+    import app.main as main_module
+
+    response = client.post(
+        "/api/generate",
+        json={
+            "kind": "geometric",
+            "subfamily": "height_position",
+            "payload_mode": "word",
+            "payload_text": "DECAF",
+            "n_elements": 15,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "red_team"
+    assert body["media_type"] == "image/png"
+    assert body["parameters"]["payload_mode"] == "word"
+    image = client.get(body["image_url"])
+    assert image.status_code == 200
+    assert image.content.startswith(b"\x89PNG")
+    analyzed = client.post(
+        "/api/analyze",
+        files={"file": ("gen.png", image.content, "image/png")},
+    )
+    assert analyzed.status_code == 200
+    geometric = analyzed.json()["geometric"]
+    assert geometric["classification"] in (
+        "quantized_without_structure",
+        "structure_claimed",
+    )
+    assert geometric["channels"]["height"]["step"] is not None
+    assert analyzed.json()["decision"]["verdict"] in ("log", "flag", "quarantine")
+    # Provenance recorded server-side with the red-team source.
+    index_lines = main_module.RED_TEAM_INDEX.read_text().strip().splitlines()
+    records = [json.loads(line) for line in index_lines]
+    mine = [r for r in records if r["fixture_id"] == body["fixture_id"]]
+    assert mine and mine[-1]["source"] == "red_team"
+    assert mine[-1]["artifact_version_id"] == body["artifact_version_id"]
+
+
+def test_generate_hidden_grid_not_disclosed(client):
+    """CL-51: random-hidden grid values never reach the response."""
+    import app.main as main_module
+
+    response = client.post(
+        "/api/generate",
+        json={
+            "kind": "geometric",
+            "subfamily": "height_position",
+            "payload_mode": "ascii",
+            "payload_text": "HELLO",
+            "grid_choice": "random_hidden",
+            "scene_seed": 7,
+            "payload_seed": 9,
+        },
+    )
+    assert response.status_code == 200, response.text
+    grid = response.json()["parameters"]["grid"]
+    assert grid == {"mode": "random_hidden", "hidden": True}
+    records = [
+        json.loads(line)
+        for line in main_module.RED_TEAM_INDEX.read_text().strip().splitlines()
+    ]
+    mine = [r for r in records if r["fixture_id"] == response.json()["fixture_id"]]
+    assert mine[-1]["parameters"]["grid_full"]["step"] > 0
+
+
+def test_generate_classic_and_metadata(client):
+    """CL-51: classic encoders generate analyzable images."""
+    lsb = client.post(
+        "/api/generate", json={"kind": "spatial_lsb", "payload_bytes": 48}
+    )
+    assert lsb.status_code == 200, lsb.text
+    image = client.get(lsb.json()["image_url"])
+    analyzed = client.post(
+        "/api/analyze", files={"file": ("g.png", image.content, "image/png")}
+    )
+    families = {f["family"] for f in analyzed.json()["analysis"]["findings"]}
+    assert "spatial_lsb" in families
+
+    meta = client.post("/api/generate", json={"kind": "metadata", "media_kind": "jpeg"})
+    assert meta.status_code == 200, meta.text
+    assert meta.json()["image_url"].endswith(".jpg")
+    image = client.get(meta.json()["image_url"])
+    analyzed = client.post(
+        "/api/analyze", files={"file": ("g.jpg", image.content, "image/jpeg")}
+    )
+    families = {f["family"] for f in analyzed.json()["analysis"]["findings"]}
+    assert "metadata" in families
+
+
+def test_generate_invalid_params_and_spa_route(client, tmp_path, monkeypatch):
+    """CL-51: bad parameters are explicit 400s; /generate serves the SPA."""
+    assert client.post("/api/generate", json={"kind": "nope"}).status_code == 400
+    bad_grid = client.post(
+        "/api/generate",
+        json={
+            "kind": "geometric",
+            "subfamily": "lit_dark",
+            "grid_choice": "custom",
+            "grid_base": 1,
+            "grid_step": 2,
+        },
+    )
+    assert bad_grid.status_code == 400
+    bad_word = client.post(
+        "/api/generate",
+        json={"kind": "geometric", "payload_mode": "word", "payload_text": "XYZ"},
+    )
+    assert bad_word.status_code == 400
+    assert (
+        client.post(
+            "/api/generate",
+            content=b"{not json",
+            headers={"Content-Type": "application/json"},
+        ).status_code
+        == 400
+    )
+    assert client.get("/api/generated/" + "0" * 64 + ".png").status_code == 404
+    assert client.get("/api/generated/not-a-digest.png").status_code == 404
+
+    import app.main as main_module
+
+    (tmp_path / "index.html").write_text("<!doctype html><title>spa</title>")
+    monkeypatch.setattr(main_module, "STATIC_CANDIDATES", [tmp_path])
+    page = client.get("/generate")
+    assert page.status_code == 200
+    assert "<title>spa</title>" in page.text

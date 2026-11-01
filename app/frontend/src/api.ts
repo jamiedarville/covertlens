@@ -62,6 +62,47 @@ export async function fetchComparison(): Promise<Comparison | "computing"> {
   return (await readJson(response)) as Comparison;
 }
 
+export interface GenerateResult {
+  fixture_id: string;
+  content_hash: string;
+  media_type: string;
+  image_url: string;
+  source: string;
+  artifact_version_id: string;
+  parameters: Record<string, unknown>;
+}
+
+export async function generateImage(
+  params: Record<string, unknown>,
+): Promise<GenerateResult> {
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (response.status === 400) {
+    throw new ApiError(400, String(body.detail ?? "Those parameters cannot be generated."));
+  }
+  if (response.status === 429) {
+    throw new ApiError(429, "Too many requests in the last minute. Wait a moment and try again.");
+  }
+  if (response.status === 504) {
+    throw new ApiError(504, "Generation ran past its time limit. Try simpler parameters.");
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, `Generation failed (${response.status}).`);
+  }
+  return body as unknown as GenerateResult;
+}
+
+export async function fetchGeneratedFile(imageUrl: string, name: string): Promise<File> {
+  const response = await fetch(imageUrl);
+  if (!response.ok) throw new ApiError(response.status, "Could not load the generated image.");
+  const blob = await response.blob();
+  return new File([blob], name, { type: blob.type || "image/png" });
+}
+
 export async function fetchVersionLine(): Promise<string | null> {
   try {
     const response = await fetch("/api/version");
