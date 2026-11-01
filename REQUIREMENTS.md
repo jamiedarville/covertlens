@@ -98,7 +98,7 @@ artifact delivered and scored.
   controls; all three families individually visible, run through pinned
   threshold configurations. (`CL-23`)
 
-### GEO — Geometric / semantic encoding (Proposed, not yet in Jira)
+### GEO — Geometric / semantic encoding
 
 This family covers messages carried not in low-level pixel noise or
 metadata, but in the visible geometry and attributes of a generated
