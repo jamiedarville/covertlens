@@ -36,7 +36,9 @@ def test_interception_ingests_and_emits_stable_identities():
     gate = fresh_gate()
     handle, delivery = deliver(gate)
     assert handle.content_hash == ids.content_hash(PNG)
-    assert handle.artifact_version_id == ids.artifact_version_id(handle.artifact_id, handle.content_hash)
+    assert handle.artifact_version_id == ids.artifact_version_id(
+        handle.artifact_id, handle.content_hash
+    )
     assert delivery.state == "pending"
     events = gate.events("run_gate")
     assert [e.event_type for e in events] == [
@@ -93,12 +95,18 @@ def test_repeated_references_and_retries_are_idempotent():
     first = gate.intercept_reference("R-03", "artifact://img-1", lambda ref: PNG, CTX)
     second = gate.intercept_reference("R-03", "artifact://img-1", lambda ref: PNG, CTX)
     assert first.artifact_version_id == second.artifact_version_id
-    created = [e for e in gate.events("run_gate") if e.event_type is EventType.ARTIFACT_CREATED]
+    created = [
+        e for e in gate.events("run_gate") if e.event_type is EventType.ARTIFACT_CREATED
+    ]
     assert len(created) == 1
     d1 = gate.attempt_delivery(first, recipient_id="agent-b", attempt=1)
     d2 = gate.attempt_delivery(first, recipient_id="agent-b", attempt=1)
     assert d1.delivery_id == d2.delivery_id
-    attempted = [e for e in gate.events("run_gate") if e.event_type is EventType.DELIVERY_ATTEMPTED]
+    attempted = [
+        e
+        for e in gate.events("run_gate")
+        if e.event_type is EventType.DELIVERY_ATTEMPTED
+    ]
     assert len(attempted) == 1
     d3 = gate.attempt_delivery(first, recipient_id="agent-b", attempt=2)
     assert d3.delivery_id != d1.delivery_id
@@ -109,10 +117,16 @@ def test_verdict_binds_the_exact_version_changed_bytes_need_a_new_verdict():
     _, delivery = deliver(gate)
     gate.record_verdict(delivery.delivery_id, Verdict.LOG)
     assert gate.store.verdict_status(delivery.verdict_id) == "current"
-    handle2 = gate.intercept_bytes("R-01", PNG2, InterceptionContext(
-        run_id="run_gate", episode_id="ep_1", sender_id="agent-a",
-        artifact_id=delivery.artifact_id,
-    ))
+    handle2 = gate.intercept_bytes(
+        "R-01",
+        PNG2,
+        InterceptionContext(
+            run_id="run_gate",
+            episode_id="ep_1",
+            sender_id="agent-a",
+            artifact_id=delivery.artifact_id,
+        ),
+    )
     assert handle2.artifact_version_id != delivery.artifact_version_id
     assert gate.store.verdict_status(delivery.verdict_id) == "invalidated"
     delivery2 = gate.attempt_delivery(handle2, recipient_id="agent-b")

@@ -11,7 +11,14 @@ def report():
 def test_every_inventoried_route_is_audited(report):
     assert validate_route_audit(report) == []
     assert [r["route_id"] for r in report["routes"]] == [
-        "R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08",
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-06",
+        "R-07",
+        "R-08",
     ]
     assert report["routes_failed"] == []
     assert report["routes_exempt_verified"] == ["R-08"]

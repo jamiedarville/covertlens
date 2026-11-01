@@ -21,8 +21,9 @@ average-precision summaries with bootstrap intervals (DET-04).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Iterable
+from typing import Any
 
 from .fixtures import Fixture
 from .lsb import _bootstrap_interval, _roc_auc, _score_summary, _wilson
@@ -127,9 +128,7 @@ def _coefficient_statistics(
         "statistic": "coefficient_magnitude_pairs_of_values_chi_square",
         "chi_square": round(chi_square, 6),
         "degrees_of_freedom": degrees,
-        "chi_square_per_df": (
-            round(chi_square / degrees, 6) if degrees else 0.0
-        ),
+        "chi_square_per_df": (round(chi_square / degrees, 6) if degrees else 0.0),
         "pairs_used": pairs_used,
         "carrier_lsb_one_fraction": _carrier_lsb_fraction(coefficients, config),
         "magnitude_pov_imbalance": (
@@ -305,9 +304,7 @@ def benchmark_dct(
     def band_sweep(band_rows: list[dict[str, Any]], *, positive_band: bool):
         points = []
         for threshold in sweep_thresholds:
-            hits = sum(
-                1 for r in band_rows if float(r["score"]) >= threshold
-            )
+            hits = sum(1 for r in band_rows if float(r["score"]) >= threshold)
             if positive_band:
                 points.append(
                     {
@@ -330,8 +327,12 @@ def benchmark_dct(
 
     sweep: list[dict[str, Any]] = []
     for threshold in sweep_thresholds:
-        tp = sum(1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold)
-        fp = sum(1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold)
+        tp = sum(
+            1 for r in scored if r["label"] == 1 and float(r["score"]) >= threshold
+        )
+        fp = sum(
+            1 for r in scored if r["label"] == 0 and float(r["score"]) >= threshold
+        )
         tn = sum(1 for r in scored if r["label"] == 0 and float(r["score"]) < threshold)
         fn = sum(1 for r in scored if r["label"] == 1 and float(r["score"]) < threshold)
         sweep.append(
@@ -381,12 +382,18 @@ def benchmark_dct(
         "rows": rows,
         "by_payload_band": by_band,
         "roc_auc": _bootstrap_interval(
-            positive, negative, replicates=bootstrap_replicates,
-            seed=bootstrap_seed, metric="roc_auc",
+            positive,
+            negative,
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed,
+            metric="roc_auc",
         ),
         "pr_auc": _bootstrap_interval(
-            positive, negative, replicates=bootstrap_replicates,
-            seed=bootstrap_seed, metric="average_precision",
+            positive,
+            negative,
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed,
+            metric="average_precision",
         ),
         "sweep": sweep,
         "limitations": list(_LIMITATIONS)
@@ -416,7 +423,9 @@ def validate_dct_benchmark(report: dict[str, Any]) -> list[str]:
     detector = report.get("detector") or {}
     need(detector.get("family") == FAMILY, f"detector.family must be {FAMILY}")
     need(detector.get("name") == DCT_DETECTOR_NAME, "detector.name is required")
-    need(detector.get("version") == DCT_DETECTOR_VERSION, "detector.version is required")
+    need(
+        detector.get("version") == DCT_DETECTOR_VERSION, "detector.version is required"
+    )
     need(
         (detector.get("config") or {}).get("version") == CONFIG_VERSION,
         "detector.config.version is required",
@@ -440,7 +449,9 @@ def validate_dct_benchmark(report: dict[str, Any]) -> list[str]:
         if estimate is not None:
             need(0.0 <= float(estimate) <= 1.0, f"{key}.estimate must lie in [0, 1]")
             need(
-                float(block.get("ci_low", -1)) <= float(estimate) <= float(block.get("ci_high", 2)),
+                float(block.get("ci_low", -1))
+                <= float(estimate)
+                <= float(block.get("ci_high", 2)),
                 f"{key} interval must bracket its estimate",
             )
     for i, point in enumerate(report.get("sweep") or []):

@@ -55,8 +55,8 @@ def build_comparison() -> dict[str, Any]:
     sides: dict[str, Any] = {}
     for label, role in (("clean", "clean"), ("encoded", "encoded")):
         fixture = next(
-            f for f in dataset
-            if f.role == role and f.subfamily == "height_position")
+            f for f in dataset if f.role == role and f.subfamily == "height_position"
+        )
         sides[label] = {
             "fixture_id": fixture.fixture_id,
             "content_hash": fixture.content_hash,
@@ -78,11 +78,14 @@ def precompute(cache_dir: Path) -> dict[str, Any]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = cache_key()
     (cache_dir / "geometric.json").write_text(
-        json.dumps(run_geo_benchmark(), sort_keys=True))
+        json.dumps(run_geo_benchmark(), sort_keys=True)
+    )
     (cache_dir / "scorecard.json").write_text(
-        json.dumps(load_scorecard(), sort_keys=True))
+        json.dumps(load_scorecard(), sort_keys=True)
+    )
     (cache_dir / "comparison.json").write_text(
-        json.dumps(build_comparison(), sort_keys=True))
+        json.dumps(build_comparison(), sort_keys=True)
+    )
     (cache_dir / "key.json").write_text(json.dumps(key, sort_keys=True))
     return key
 

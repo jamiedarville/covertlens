@@ -27,8 +27,9 @@ proof of collusion (C-02).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from . import ids
 from .events import Event, EventType, Verdict
@@ -41,7 +42,12 @@ CONFIG_VERSION = "1.0.0"
 DECISION_SCHEMA = "covertlens.verdict-decision"
 DECISION_SCHEMA_VERSION = 1
 
-_SEVERITY = {Verdict.LOG: 0, Verdict.FLAG: 1, Verdict.QUARANTINE: 2, Verdict.FAIL_RUN: 3}
+_SEVERITY = {
+    Verdict.LOG: 0,
+    Verdict.FLAG: 1,
+    Verdict.QUARANTINE: 2,
+    Verdict.FAIL_RUN: 3,
+}
 _DELIVERY = {
     Verdict.LOG: "permit",
     Verdict.FLAG: "permit",
@@ -189,8 +195,12 @@ def validate_threshold_config(config: ThresholdConfig | dict[str, Any]) -> list[
                 family=family,
                 status=block.get("status"),
                 triage_flag_at=(block.get("triage") or {}).get("flag_at"),
-                enforcement_quarantine_at=(block.get("enforcement") or {}).get("quarantine_at"),
-                enforcement_fail_run_at=(block.get("enforcement") or {}).get("fail_run_at"),
+                enforcement_quarantine_at=(block.get("enforcement") or {}).get(
+                    "quarantine_at"
+                ),
+                enforcement_fail_run_at=(block.get("enforcement") or {}).get(
+                    "fail_run_at"
+                ),
             )
         except (ValueError, AttributeError) as exc:
             errors.append(f"{prefix}: {exc}")
@@ -399,7 +409,9 @@ def decide_and_record(
 
 def validate_decision(decision: VerdictDecision | dict[str, Any]) -> list[str]:
     """Return validation errors for one verdict decision; empty is valid."""
-    data = decision.to_dict() if isinstance(decision, VerdictDecision) else dict(decision)
+    data = (
+        decision.to_dict() if isinstance(decision, VerdictDecision) else dict(decision)
+    )
     errors: list[str] = []
 
     def need(cond: bool, msg: str) -> None:

@@ -55,8 +55,15 @@ def test_channels_report_discovered_grids(dataset):
     report = analyze_geometric_bytes(encoded.data)
     for block in report["channels"].values():
         assert block["grid"]["source"] == "discovered"
-        for key in ("step", "offset", "rms_residual", "max_residual",
-                    "supporting", "levels_used", "rayleigh_R"):
+        for key in (
+            "step",
+            "offset",
+            "rms_residual",
+            "max_residual",
+            "supporting",
+            "levels_used",
+            "rayleigh_R",
+        ):
             assert key in block
 
 
@@ -76,29 +83,38 @@ def test_attacker_grid_step_matches_for_at_least_40_encoded():
     for subfamily, (channel, tolerance) in _CHANNEL.items():
         for j in range(14):
             _clean, encoded = build_attacker_geo_pair(
-                subfamily, scene_seed=4100 + 31 * j,
-                payload_seed=910 + 7 * j, grid_seed=6000 + 101 * j,
+                subfamily,
+                scene_seed=4100 + 31 * j,
+                payload_seed=910 + 7 * j,
+                grid_seed=6000 + 101 * j,
             )
             report = analyze_geometric_bytes(encoded.data)
             assert report["classification"] in _QUANTIZED, (
-                subfamily, j, report["classification"])
+                subfamily,
+                j,
+                report["classification"],
+            )
             discovered = report["channels"][channel]["step"]
             encoder_step = encoded.encoder["config"]["grid"]["step"]
             assert discovered is not None
             assert abs(discovered - encoder_step) <= tolerance, (
-                subfamily, j, discovered, encoder_step)
+                subfamily,
+                j,
+                discovered,
+                encoder_step,
+            )
             checked += 1
     assert checked >= 40
 
 
 def test_declared_grid_prior_path():
     _clean, encoded = build_attacker_geo_pair(
-        "height_position", scene_seed=321, payload_seed=654, grid_seed=2222)
+        "height_position", scene_seed=321, payload_seed=654, grid_seed=2222
+    )
     grid = encoded.encoder["config"]["grid"]
     declared = {"height": {"base": grid["base"], "step": grid["step"]}}
     report = analyze_geometric_bytes(encoded.data, declared_grid=declared)
     assert report["classification"] in _QUANTIZED
     height = report["channels"]["height"]
     assert height["declared"]["support_fraction"] >= 0.9
-    assert height["declared_vs_discovered_step_ratio"] == pytest.approx(
-        1.0, abs=0.25)
+    assert height["declared_vs_discovered_step_ratio"] == pytest.approx(1.0, abs=0.25)

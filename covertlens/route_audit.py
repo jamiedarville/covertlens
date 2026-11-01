@@ -28,7 +28,8 @@ remains an ungated internal call (see `gaps`).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from . import ids
 from .events import Event, EventType, ParseStatus, Verdict
@@ -57,7 +58,9 @@ def _route_checks(route: Route, data: bytes) -> dict[str, Any]:
     ctx = InterceptionContext(run_id=RUN_ID, episode_id="ep_audit", sender_id="agent-a")
     checks: dict[str, Any] = {}
     if route.route_id in ("R-02", "R-03"):
-        handle = gate.intercept_reference(route.route_id, f"ref://{route.route_id}", lambda _r: data, ctx)
+        handle = gate.intercept_reference(
+            route.route_id, f"ref://{route.route_id}", lambda _r: data, ctx
+        )
     else:
         handle = gate.intercept_bytes(route.route_id, data, ctx)
     checks["creation"] = bool(
@@ -69,7 +72,9 @@ def _route_checks(route: Route, data: bytes) -> dict[str, Any]:
         and gate.store.verify(handle.artifact_version_id)
     )
 
-    def lifecycle(verdict: Verdict | None, access: Callable[[str], bytes], delivery_id: str) -> None:
+    def lifecycle(
+        verdict: Verdict | None, access: Callable[[str], bytes], delivery_id: str
+    ) -> None:
         if verdict is not None:
             gate.record_verdict(delivery_id, verdict)
         access(delivery_id)
@@ -77,8 +82,11 @@ def _route_checks(route: Route, data: bytes) -> dict[str, Any]:
     # Pending: every route denies before a verdict.
     pending = gate.attempt_delivery(handle, recipient_id="agent-b")
     checks["gate_pending_denied"] = _denied(
-        lambda: gate.serve_via_route(route.route_id, pending.delivery_id)
-        if route.route_id != "R-05" else gate.recipient_access(pending.delivery_id)
+        lambda: (
+            gate.serve_via_route(route.route_id, pending.delivery_id)
+            if route.route_id != "R-05"
+            else gate.recipient_access(pending.delivery_id)
+        )
     )
     # Withheld: quarantine denies through the route's own path.
     withheld = gate.attempt_delivery(handle, recipient_id="agent-b", attempt=2)
@@ -131,16 +139,22 @@ def _reviewer_checks(data: bytes) -> dict[str, Any]:
         "creation": handle.content_hash == ids.content_hash(data),
         "reviewer_served": gate.reviewer_access(
             delivery.delivery_id, actor_id="researcher-1", reviewer_ids={"researcher-1"}
-        ) == data,
-        "non_reviewer_denied": _denied(lambda: gate.reviewer_access(
-            delivery.delivery_id, actor_id="agent-b", reviewer_ids={"researcher-1"}
-        )),
+        )
+        == data,
+        "non_reviewer_denied": _denied(
+            lambda: gate.reviewer_access(
+                delivery.delivery_id, actor_id="agent-b", reviewer_ids={"researcher-1"}
+            )
+        ),
         "recipient_delivery_still_denied": _denied(
             lambda: gate.recipient_access(delivery.delivery_id)
         ),
     }
     checks["unauthorized_served"] = gate.access_attempt_report()["unauthorized_served"]
-    passed = all(v for v in checks.values() if isinstance(v, bool)) and checks["unauthorized_served"] == 0
+    passed = (
+        all(v for v in checks.values() if isinstance(v, bool))
+        and checks["unauthorized_served"] == 0
+    )
     return {"checks": checks, "passed": passed, "gate": gate}
 
 
@@ -163,7 +177,8 @@ def _trace_audit(data: bytes) -> dict[str, Any]:
     gate.record_verdict(withheld.delivery_id, Verdict.QUARANTINE)
     gate.record_parse(withheld.delivery_id, ParseStatus.NOT_OBSERVED)
 
-    pending = gate.attempt_delivery(handle, recipient_id="agent-b", attempt=4)
+    # Left pending on purpose: the audit must classify its missing links.
+    gate.attempt_delivery(handle, recipient_id="agent-b", attempt=4)
 
     events = gate.events(RUN_ID)
     action = Event(
@@ -180,25 +195,31 @@ def _trace_audit(data: bytes) -> dict[str, Any]:
     reasons: list[dict[str, Any]] = []
     for row in joined["deliveries"]:
         for missing in row["missing"]:
-            reasons.append({
-                "delivery_id": row["delivery_id"],
-                "missing": missing,
-                "reason": _missing_reason(missing, row),
-            })
+            reasons.append(
+                {
+                    "delivery_id": row["delivery_id"],
+                    "missing": missing,
+                    "reason": _missing_reason(missing, row),
+                }
+            )
         if row["parse"]["parse_status"] == "not_observed":
-            reasons.append({
-                "delivery_id": row["delivery_id"],
-                "missing": "recipient_parse_outcome",
-                "reason": "withheld before delivery: recipient parse is "
-                          "not_observed by design (C-04)",
-            })
+            reasons.append(
+                {
+                    "delivery_id": row["delivery_id"],
+                    "missing": "recipient_parse_outcome",
+                    "reason": "withheld before delivery: recipient parse is "
+                    "not_observed by design (C-04)",
+                }
+            )
         if not row["delivered"]:
-            reasons.append({
-                "delivery_id": row["delivery_id"],
-                "missing": "recipient_action",
-                "reason": "not delivered (withheld or pending), so no "
-                          "recipient action can be linked",
-            })
+            reasons.append(
+                {
+                    "delivery_id": row["delivery_id"],
+                    "missing": "recipient_action",
+                    "reason": "not delivered (withheld or pending), so no "
+                    "recipient action can be linked",
+                }
+            )
     return {
         "run_id": RUN_ID,
         "deliveries": len(joined["deliveries"]),
@@ -230,14 +251,16 @@ def run_route_audit() -> dict[str, Any]:
     for route in ROUTES:
         if not route.gate_required:
             outcome = _reviewer_checks(data)
-            routes.append({
-                "route_id": route.route_id,
-                "kind": route.kind,
-                "gate_required": False,
-                "exception_reason": route.exception_reason,
-                "status": "exempt_verified" if outcome["passed"] else "failed",
-                "checks": outcome["checks"],
-            })
+            routes.append(
+                {
+                    "route_id": route.route_id,
+                    "kind": route.kind,
+                    "gate_required": False,
+                    "exception_reason": route.exception_reason,
+                    "status": "exempt_verified" if outcome["passed"] else "failed",
+                    "checks": outcome["checks"],
+                }
+            )
             continue
         outcome = _route_checks(route, data)
         covered_routes.update(outcome["gate"].coverage_report()["covered"])
@@ -252,15 +275,17 @@ def run_route_audit() -> dict[str, Any]:
                 "ungated internal call — enforcement is procedural, not "
                 "structural."
             )
-        routes.append({
-            "route_id": route.route_id,
-            "kind": route.kind,
-            "gate_required": True,
-            "exception_reason": None,
-            "status": status,
-            "checks": outcome["checks"],
-            "gaps": gaps,
-        })
+        routes.append(
+            {
+                "route_id": route.route_id,
+                "kind": route.kind,
+                "gate_required": True,
+                "exception_reason": None,
+                "status": status,
+                "checks": outcome["checks"],
+                "gaps": gaps,
+            }
+        )
     trace = _trace_audit(data)
     gaps = [g for r in routes for g in r.get("gaps", [])]
     return {
@@ -304,8 +329,10 @@ def validate_route_audit(report: dict[str, Any]) -> list[str]:
         "every inventoried route must be audited",
     )
     trace = report.get("trace") or {}
-    need(trace.get("all_missing_explained") is True,
-         "every missing trace link needs an explicit reason")
+    need(
+        trace.get("all_missing_explained") is True,
+        "every missing trace link needs an explicit reason",
+    )
     for row in report.get("routes") or []:
         for name, value in (row.get("checks") or {}).items():
             if name == "unauthorized_served":

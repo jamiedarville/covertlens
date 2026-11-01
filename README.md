@@ -447,10 +447,20 @@ criterion to code, contract doc, schema, and tests. History in
 | Real licence, citation metadata, changelog, release tag | MIT [LICENSE](LICENSE), [CITATION.cff](CITATION.cff), [CHANGELOG.md](CHANGELOG.md) keyed by CL number, tag `v0.1.0` (publishes the GHCR image the quick-start uses) |
 | No stale `planned:` detector strings; packaging metadata current | Manifest `implementation` fields name the shipped detectors (`covertlens.lsb/dct/metadata`); `pyproject.toml` description and MIT licence updated |
 
+### CL-50 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| CI runs lint, format, type and schema checks as required gates | `[tool.ruff]`/`[tool.mypy]` in [pyproject.toml](pyproject.toml); `quality` job in [.github/workflows/test.yml](.github/workflows/test.yml) (`ruff check`, `ruff format --check`, `mypy covertlens`, schema tests); `tests/test_schemas.py` validates every schema-backed demo's `--json` output against [schemas/](schemas/) with `jsonschema` (dev extra) |
+| `mypy covertlens` reports 0 errors | 174 → 0: library fixes at the source (`frozenset` principals, tuple narrowing, None guards, `StrEnum`, `datetime.UTC`) plus the typed CLI split; no blanket ignores |
+| `cli.py` under 250 lines; demos are argparse sub-commands, one function per command, with `--json` and `--out PATH` | [covertlens/cli.py](covertlens/cli.py) is a 155-line argparse dispatcher over [covertlens/demos.py](covertlens/demos.py) (36 typed handlers over the same library calls as the web service); all prior command names, positionals, summaries and exit codes preserved |
+| Wall-clock latency tests cannot flake the required check | `tests/test_latency.py` marked `slow`; required CI runs `pytest -m "not slow"` (plain local runs still include them) |
+| Schema gate catches real drift | First run caught `candidate.decode.read` (CL-46) missing from `schemas/runtime-policy.schema.json`; schema fixed, not the test |
+
 
 ## Development quickstart
 
-The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`.
+The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.
 
 ```bash
 python3 -m venv .venv

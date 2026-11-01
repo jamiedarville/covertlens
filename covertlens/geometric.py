@@ -83,8 +83,7 @@ def _load_wordlist() -> tuple[str, ...]:
 
 
 WORDLIST = _load_wordlist()
-WORDLIST_SHA256 = "sha256:" + hashlib.sha256(
-    _WORDLIST_PATH.read_bytes()).hexdigest()
+WORDLIST_SHA256 = "sha256:" + hashlib.sha256(_WORDLIST_PATH.read_bytes()).hexdigest()
 
 
 def _build_trigram_model(words: tuple[str, ...]):
@@ -94,9 +93,10 @@ def _build_trigram_model(words: tuple[str, ...]):
     vocab: set[str] = set(corpus)
     padded = "  " + corpus + " "
     for i in range(len(padded) - 2):
-        ctx, ch = padded[i:i + 2], padded[i + 2]
+        ctx, ch = padded[i : i + 2], padded[i + 2]
         trigram_counts.setdefault(ctx, {})[ch] = (
-            trigram_counts.setdefault(ctx, {}).get(ch, 0) + 1)
+            trigram_counts.setdefault(ctx, {}).get(ch, 0) + 1
+        )
         context_counts[ctx] = context_counts.get(ctx, 0) + 1
     return trigram_counts, context_counts, vocab
 
@@ -114,7 +114,7 @@ def trigram_score(text: str) -> float:
     count = 0
     vocab_size = max(1, len(_VOCAB))
     for i in range(len(padded) - 2):
-        ctx, ch = padded[i:i + 2], padded[i + 2]
+        ctx, ch = padded[i : i + 2], padded[i + 2]
         numerator = _TRIGRAMS.get(ctx, {}).get(ch, 0) + _TRIGRAM_ALPHA
         denominator = _CONTEXTS.get(ctx, 0) + _TRIGRAM_ALPHA * vocab_size
         total += math.log(numerator / denominator)
@@ -133,9 +133,9 @@ class GeometricConfig:
     min_support_elements: int = 4
     null_alpha: float = 0.05  # stated level for a quantization claim (CL-43)
     weak_floor: float = 0.5
-    residual_tolerance: float = 1.6          # px (heights/gaps)
-    angle_residual_tolerance: float = 3.5    # degrees
-    brightness_tolerance: float = 18.0       # grey levels
+    residual_tolerance: float = 1.6  # px (heights/gaps)
+    angle_residual_tolerance: float = 3.5  # degrees
+    brightness_tolerance: float = 18.0  # grey levels
     colour_distance_tolerance: float = 3.0
     # Structure test v2 (CL-46): a claim needs at least k symbols
     # and must beat the symbol-shuffle null at the stated level.
@@ -167,8 +167,7 @@ DEFAULT_GEO_CONFIG = GeometricConfig()
 
 def _map_alphabet(symbols: list[int], base: int = 0) -> str:
     return "".join(
-        chr(ord("A") + s - base) if 0 <= s - base < 26 else "?"
-        for s in symbols
+        chr(ord("A") + s - base) if 0 <= s - base < 26 else "?" for s in symbols
     )
 
 
@@ -176,7 +175,7 @@ def _map_bits(symbols: list[int]) -> str:
     chars = []
     for i in range(0, len(symbols) - 7, 8):
         byte = 0
-        for bit in symbols[i:i + 8]:
+        for bit in symbols[i : i + 8]:
             byte = (byte << 1) | (bit & 1)
         chars.append(chr(byte) if 32 <= byte < 127 else "�")
     return "".join(chars)
@@ -186,7 +185,7 @@ def _map_base_k(symbols: list[int], base: int, digits_per_byte: int) -> str:
     chars = []
     for i in range(0, len(symbols) - digits_per_byte + 1, digits_per_byte):
         value = 0
-        for d in symbols[i:i + digits_per_byte]:
+        for d in symbols[i : i + digits_per_byte]:
             value = value * base + d
         chars.append(chr(value) if 32 <= value < 127 else "�")
     return "".join(chars)
@@ -201,13 +200,14 @@ def _periodicity_stat(sequence: list[float]) -> float:
     for lag in range(1, 9):
         if n - lag < 2:
             break
-        agree = sum(
-            1 for i in range(lag, n) if sequence[i] == sequence[i - lag]
-        ) / (n - lag)
+        agree = sum(1 for i in range(lag, n) if sequence[i] == sequence[i - lag]) / (
+            n - lag
+        )
         best = max(best, agree)
         mean = sum(sequence) / n
-        num = sum((sequence[i] - mean) * (sequence[i - lag] - mean)
-                  for i in range(lag, n))
+        num = sum(
+            (sequence[i] - mean) * (sequence[i - lag] - mean) for i in range(lag, n)
+        )
         den = sum((v - mean) ** 2 for v in sequence)
         autocorr = (num / den) if den else 0.0
         best = max(best, min(1.0, max(0.0, autocorr)))
@@ -225,42 +225,69 @@ def _ranks(symbols: list[int]) -> list[int]:
 # and lag-1..8 autocorrelation against the same kind of null.
 CODES_V2: dict[str, list[dict[str, Any]]] = {
     "height": [
-        {"code": "alphabet_position_a0", "kind": "text",
-         "description": "symbol -> letter (A=0)",
-         "map": lambda s: _map_alphabet(s, 0)},
-        {"code": "alphabet_position_a1", "kind": "text",
-         "description": "symbol -> letter (A=1)",
-         "map": lambda s: _map_alphabet(s, 1)},
-        {"code": "base_k_digits", "kind": "text",
-         "description": "3 base-8 digits -> byte",
-         "map": lambda s: _map_base_k(s, 8, 3)},
+        {
+            "code": "alphabet_position_a0",
+            "kind": "text",
+            "description": "symbol -> letter (A=0)",
+            "map": lambda s: _map_alphabet(s, 0),
+        },
+        {
+            "code": "alphabet_position_a1",
+            "kind": "text",
+            "description": "symbol -> letter (A=1)",
+            "map": lambda s: _map_alphabet(s, 1),
+        },
+        {
+            "code": "base_k_digits",
+            "kind": "text",
+            "description": "3 base-8 digits -> byte",
+            "map": lambda s: _map_base_k(s, 8, 3),
+        },
     ],
     "gap": [
-        {"code": "timing_ratios", "kind": "timing",
-         "description": "symbol -> duration ratio (symbol+1); "
-                        "periodic motif / autocorrelation",
-         "map": lambda s: [float(x) + 1.0 for x in s]},
+        {
+            "code": "timing_ratios",
+            "kind": "timing",
+            "description": "symbol -> duration ratio (symbol+1); "
+            "periodic motif / autocorrelation",
+            "map": lambda s: [float(x) + 1.0 for x in s],
+        },
     ],
     "lit": [
-        {"code": "bit_packing", "kind": "text",
-         "description": "lit states -> bits -> bytes (MSB first)",
-         "map": _map_bits},
+        {
+            "code": "bit_packing",
+            "kind": "text",
+            "description": "lit states -> bits -> bytes (MSB first)",
+            "map": _map_bits,
+        },
     ],
     "colour": [
-        {"code": "base_k_digits", "kind": "text",
-         "description": "5 base-3 digits -> byte",
-         "map": lambda s: _map_base_k(s, 3, 5)},
-        {"code": "ordinal_rank", "kind": "rank",
-         "description": "rank pattern of the colour sequence",
-         "map": lambda s: [float(x) for x in _ranks(s)]},
+        {
+            "code": "base_k_digits",
+            "kind": "text",
+            "description": "5 base-3 digits -> byte",
+            "map": lambda s: _map_base_k(s, 3, 5),
+        },
+        {
+            "code": "ordinal_rank",
+            "kind": "rank",
+            "description": "rank pattern of the colour sequence",
+            "map": lambda s: [float(x) for x in _ranks(s)],
+        },
     ],
     "angle": [
-        {"code": "base_k_digits", "kind": "text",
-         "description": "4 base-5 digits -> byte",
-         "map": lambda s: _map_base_k(s, 5, 4)},
-        {"code": "ordinal_rank", "kind": "rank",
-         "description": "rank pattern of the tilt sequence",
-         "map": lambda s: [float(x) for x in _ranks(s)]},
+        {
+            "code": "base_k_digits",
+            "kind": "text",
+            "description": "4 base-5 digits -> byte",
+            "map": lambda s: _map_base_k(s, 5, 4),
+        },
+        {
+            "code": "ordinal_rank",
+            "kind": "rank",
+            "description": "rank pattern of the tilt sequence",
+            "map": lambda s: [float(x) for x in _ranks(s)],
+        },
     ],
 }
 
@@ -271,8 +298,7 @@ DECLARED_CODES = CODES_V2
 _CHANNEL_TOLERANCES = ("height", "gap", "lit", "angle")
 
 
-def _colour_channel(seg: SegmentationResult,
-                    config: GeometricConfig) -> dict[str, Any]:
+def _colour_channel(seg: SegmentationResult, config: GeometricConfig) -> dict[str, Any]:
     """Colour via discovered exact-colour clusters (no declared palette).
 
     Repeated exact colours are the discovered palette; support is the
@@ -290,8 +316,9 @@ def _colour_channel(seg: SegmentationResult,
     symbols: list[int] = []
     for colour in colours:
         if palette:
-            idx = min(range(len(palette)),
-                      key=lambda i: _colour_dist(colour, palette[i]))
+            idx = min(
+                range(len(palette)), key=lambda i: _colour_dist(colour, palette[i])
+            )
             symbols.append(idx)
             distances.append(round(_colour_dist(colour, palette[idx]), 4))
         else:
@@ -300,10 +327,15 @@ def _colour_channel(seg: SegmentationResult,
     n = len(colours) or 1
     supporting = sum(1 for d in distances if d <= config.colour_distance_tolerance)
     return {
-        "grid": {"source": "discovered", "step": None, "offset": None,
-                 "levels": [list(c) for c in palette],
-                 "palette_source": "exact_colour_clusters"},
-        "step": None, "offset": None,
+        "grid": {
+            "source": "discovered",
+            "step": None,
+            "offset": None,
+            "levels": [list(c) for c in palette],
+            "palette_source": "exact_colour_clusters",
+        },
+        "step": None,
+        "offset": None,
         # Structure codes consume the segmenter's palette-index
         # sequence (the payload digit space); support/residuals use
         # the discovered exact-colour clusters above.
@@ -316,7 +348,8 @@ def _colour_channel(seg: SegmentationResult,
         "max_residual": round(max(distances, default=0.0), 4),
         "max_abs_residual": round(max(distances, default=0.0), 4),
         "levels_used": len(set(int(v) for v in seg.sequence("colour_index"))),
-        "rayleigh_R": 0.0, "null_exceedance": None,
+        "rayleigh_R": 0.0,
+        "null_exceedance": None,
         "quantization_method": "exact_palette_repetition",
         "score": round(supporting / n, 6),
         "elements": len(colours),
@@ -327,9 +360,11 @@ def _colour_dist(a: tuple[int, ...], b: tuple[int, ...]) -> float:
     return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
 
-def _channels(seg: SegmentationResult, config: GeometricConfig,
-              declared_grid: dict[str, dict[str, Any]] | None = None
-              ) -> dict[str, Any]:
+def _channels(
+    seg: SegmentationResult,
+    config: GeometricConfig,
+    declared_grid: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     raw_values = {
         "height": [float(v) for v in seg.sequence("height")],
         "gap": [float(v) for v in seg.sequence("gap_to_next") if v is not None],
@@ -350,7 +385,8 @@ def _channels(seg: SegmentationResult, config: GeometricConfig,
     for name in _CHANNEL_TOLERANCES:
         declared = (declared_grid or {}).get(name)
         block = discover_grid(
-            raw_values[name], tolerance=tolerances[name],
+            raw_values[name],
+            tolerance=tolerances[name],
             seed=1723 + 101 * _CHANNEL_TOLERANCES.index(name),
             declared_grid=declared,
         )
@@ -360,15 +396,13 @@ def _channels(seg: SegmentationResult, config: GeometricConfig,
         # "fitting" arbitrary integer sequences. Angle measurement
         # carries a regression bias, so it keeps the rms gate only.
         strict_support = (
-            sum(1 for r in block["residuals"]
-                if abs(r) <= tolerances[name] / 2.0)
-            / len(block["residuals"]) if block["residuals"] else 0.0
+            sum(1 for r in block["residuals"] if abs(r) <= tolerances[name] / 2.0)
+            / len(block["residuals"])
+            if block["residuals"]
+            else 0.0
         )
         block["strict_support_fraction"] = round(strict_support, 6)
-        strict_ok = (
-            name == "angle"
-            or strict_support >= config.min_support_fraction
-        )
+        strict_ok = name == "angle" or strict_support >= config.min_support_fraction
         block["quantized"] = bool(
             block["support_fraction"] >= config.min_support_fraction
             and block["levels_used"] >= 2
@@ -400,8 +434,7 @@ def _channels(seg: SegmentationResult, config: GeometricConfig,
         # angle 0; fixed-height scenes quantize heights). Only
         # channels that actually vary may support a claim.
         distinct = {
-            round(v / max(config.residual_tolerance, 1e-9))
-            for v in raw_values[name]
+            round(v / max(config.residual_tolerance, 1e-9)) for v in raw_values[name]
         }
         block["applicable"] = len(distinct) >= 2
         if not block["applicable"]:
@@ -431,13 +464,15 @@ def _symbol_frames(symbols: list[int]) -> list[tuple[str, list[int]]]:
     return frames
 
 
-def _evaluate_code(code: dict[str, Any], symbols: list[int],
-                   config: GeometricConfig, seed: int) -> dict[str, Any]:
+def _evaluate_code(
+    code: dict[str, Any], symbols: list[int], config: GeometricConfig, seed: int
+) -> dict[str, Any]:
     """Score one declared code against its symbol-shuffle null."""
     rng = random.Random(seed)
     mapper = code["map"]
     frames = _symbol_frames(symbols)
     if code["kind"] == "text":
+
         def _text_stat(frame_symbols: list[int]):
             text = str(mapper(frame_symbols))
             if len(text) < 3:
@@ -445,77 +480,83 @@ def _evaluate_code(code: dict[str, Any], symbols: list[int],
             return trigram_score(text), text
 
         observed, text, frame_name = max(
-            ((_text_stat(fs)[0], _text_stat(fs)[1], name)
-             for name, fs in frames),
+            ((_text_stat(fs)[0], _text_stat(fs)[1], name) for name, fs in frames),
             key=lambda row: row[0],
         )
         if observed == float("-inf"):
-            return {"code": code["code"], "claimed": False,
-                    "reason": "mapped text too short for a trigram claim",
-                    "_candidate_text": text}
+            return {
+                "code": code["code"],
+                "claimed": False,
+                "reason": "mapped text too short for a trigram claim",
+                "_candidate_text": text,
+            }
         printable = (
-            sum(1 for ch in text if 32 <= ord(ch) < 127) / len(text)
-            if text else 0.0
+            sum(1 for ch in text if 32 <= ord(ch) < 127) / len(text) if text else 0.0
         )
         null_stats = []
         for _ in range(config.structure_replicates):
             shuffled = list(symbols)
             rng.shuffle(shuffled)
-            null_stats.append(max(
-                _text_stat(fs)[0] for _n, fs in _symbol_frames(shuffled)))
+            null_stats.append(
+                max(_text_stat(fs)[0] for _n, fs in _symbol_frames(shuffled))
+            )
         exceedance = _shuffle_exceedance(observed, null_stats)
         finite_null = [s for s in null_stats if s != float("-inf")]
-        llr = (observed - (sum(finite_null) / len(finite_null)
-                           if finite_null else observed))
+        llr = observed - (
+            sum(finite_null) / len(finite_null) if finite_null else observed
+        )
         claimed = bool(
-            printable >= 0.9
-            and exceedance <= config.structure_alpha
-            and llr > 0
+            printable >= 0.9 and exceedance <= config.structure_alpha and llr > 0
         )
         return {
-            "code": code["code"], "kind": "text", "claimed": claimed,
+            "code": code["code"],
+            "kind": "text",
+            "claimed": claimed,
             "symbol_frame": frame_name,
             "trigram_score": round(observed, 6),
             "null_exceedance": round(exceedance, 6),
             "log_likelihood_ratio": round(llr, 6),
             "printable_fraction": round(printable, 6),
-            "reason": ("trigram likelihood beats the symbol-shuffle "
-                       "null at the stated level"
-                       if claimed else
-                       "trigram likelihood does not beat the "
-                       "symbol-shuffle null at the stated level"),
+            "reason": (
+                "trigram likelihood beats the symbol-shuffle null at the stated level"
+                if claimed
+                else "trigram likelihood does not beat the "
+                "symbol-shuffle null at the stated level"
+            ),
             "_candidate_text": text,
         }
+
     # timing / rank codes: periodicity + autocorrelation statistic.
     def _stat(frame_symbols: list[int]) -> float:
-        return _periodicity_stat(
-            [float(v) for v in mapper(frame_symbols)])  # type: ignore[arg-type]
+        return _periodicity_stat([float(v) for v in mapper(frame_symbols)])  # type: ignore[arg-type]
 
     observed = max(_stat(fs) for _n, fs in frames)
     null_stats = []
     for _ in range(config.structure_replicates):
         shuffled = list(symbols)
         rng.shuffle(shuffled)
-        null_stats.append(max(
-            _stat(fs) for _n, fs in _symbol_frames(shuffled)))
+        null_stats.append(max(_stat(fs) for _n, fs in _symbol_frames(shuffled)))
     exceedance = _shuffle_exceedance(observed, null_stats)
-    claimed = bool(
-        exceedance <= config.structure_alpha and observed >= 0.8)
+    claimed = bool(exceedance <= config.structure_alpha and observed >= 0.8)
     return {
-        "code": code["code"], "kind": code["kind"], "claimed": claimed,
+        "code": code["code"],
+        "kind": code["kind"],
+        "claimed": claimed,
         "periodicity_stat": observed,
         "null_exceedance": round(exceedance, 6),
-        "reason": ("periodic/autocorrelated structure beats the "
-                   "symbol-shuffle null at the stated level"
-                   if claimed else
-                   "periodicity does not beat the symbol-shuffle "
-                   "null at the stated level"),
+        "reason": (
+            "periodic/autocorrelated structure beats the "
+            "symbol-shuffle null at the stated level"
+            if claimed
+            else "periodicity does not beat the symbol-shuffle null at the stated level"
+        ),
         "_candidate_text": None,
     }
 
 
-def _structure(channel: str, block: dict[str, Any],
-               config: GeometricConfig) -> dict[str, Any]:
+def _structure(
+    channel: str, block: dict[str, Any], config: GeometricConfig
+) -> dict[str, Any]:
     """Structure test v2: declared codes + shuffle-null claims (CL-46).
 
     The returned block never contains mapped text. A claimed
@@ -545,10 +586,11 @@ def _structure(channel: str, block: dict[str, Any],
     if len(symbols) < config.structure_min_symbols:
         base["reason"] = (
             f"too few symbols for a structure claim "
-            f"({len(symbols)} < {config.structure_min_symbols})")
+            f"({len(symbols)} < {config.structure_min_symbols})"
+        )
         base["codes_evaluated"] = [
-            {"code": c["code"], "claimed": False,
-             "reason": base["reason"]} for c in codes
+            {"code": c["code"], "claimed": False, "reason": base["reason"]}
+            for c in codes
         ]
         return base
     if not codes:
@@ -575,8 +617,7 @@ def _structure(channel: str, block: dict[str, Any],
                 "_candidate_text": result.get("_candidate_text"),
             }
     base["codes_evaluated"] = [
-        {k: v for k, v in r.items() if not k.startswith("_")}
-        for r in evaluated
+        {k: v for k, v in r.items() if not k.startswith("_")} for r in evaluated
     ]
     best = max(evaluated, key=lambda r: -(r.get("null_exceedance") or 1.0))
     base["code"] = best["code"]
@@ -592,7 +633,7 @@ def _cv(values: list[float]) -> float:
     if mean == 0:
         return 0.0 if all(v == 0 for v in values) else 1.0
     var = sum((v - mean) ** 2 for v in values) / len(values)
-    return (var ** 0.5) / abs(mean)
+    return (var**0.5) / abs(mean)
 
 
 def chart_likeness(seg: SegmentationResult) -> dict[str, Any]:
@@ -606,8 +647,10 @@ def chart_likeness(seg: SegmentationResult) -> dict[str, Any]:
     """
     elements = list(seg.elements)
     features = {
-        "baseline_axis": 0.0, "equal_widths": 0.0,
-        "equal_gaps": 0.0, "axis_text_marks": 0.0,
+        "baseline_axis": 0.0,
+        "equal_widths": 0.0,
+        "equal_gaps": 0.0,
+        "axis_text_marks": 0.0,
     }
     if len(elements) < 3:
         return {"score": 0.0, "features": features, "baseline_present": False}
@@ -624,17 +667,19 @@ def chart_likeness(seg: SegmentationResult) -> dict[str, Any]:
     others = [e for e in elements if e is not baseline]
     if others:
         features["equal_widths"] = round(
-            0.20 * max(0.0, 1.0 - _cv([float(e["width"]) for e in others]) / 0.30), 6)
-        gaps = [float(e["gap_to_next"]) for e in others
-                if e.get("gap_to_next") is not None]
+            0.20 * max(0.0, 1.0 - _cv([float(e["width"]) for e in others]) / 0.30), 6
+        )
+        gaps = [
+            float(e["gap_to_next"]) for e in others if e.get("gap_to_next") is not None
+        ]
         if len(gaps) >= 2:
-            features["equal_gaps"] = round(
-                0.15 * max(0.0, 1.0 - _cv(gaps) / 0.50), 6)
+            features["equal_gaps"] = round(0.15 * max(0.0, 1.0 - _cv(gaps) / 0.50), 6)
     if baseline is not None and others:
         areas = sorted(e["area"] for e in others)
         median_area = areas[len(areas) // 2] or 1
         text_like = sum(
-            1 for e in others
+            1
+            for e in others
             if e["area"] <= 0.2 * median_area
             and abs((e["top"] + e["height"]) - baseline["top"]) <= 8
         )
@@ -647,7 +692,8 @@ def chart_likeness(seg: SegmentationResult) -> dict[str, Any]:
 
 
 def analyze_geometric(
-    seg: SegmentationResult, config: GeometricConfig | None = None,
+    seg: SegmentationResult,
+    config: GeometricConfig | None = None,
     declared_grid: dict[str, dict[str, Any]] | None = None,
     declared_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -682,7 +728,7 @@ def analyze_geometric(
             "claimed": False,
             "code": None,
             "reason": "primary channel is not an applicable, "
-                      "sufficiently supported quantized channel",
+            "sufficiently supported quantized channel",
         }
     # Scene context (CL-45, GEO-05): a channel declared for this
     # task before the run is a legitimate data carrier. Declared +
@@ -690,15 +736,16 @@ def analyze_geometric(
     # undeclared is the enforceable-grade signal (the family stays
     # log-only until its thresholds freeze); quantized + undeclared
     # + unstructured stays triage.
-    declared_channels = set(
-        (declared_context or {}).get("declared_channels") or ())
+    declared_channels = set((declared_context or {}).get("declared_channels") or ())
     channel_declared = primary_name in declared_channels
     # A declared channel that is itself quantized marks the scene's
     # quantization as legitimate even when an artefact channel
     # (e.g. baseline brightness) out-scores it.
-    declared_quantized = sorted(
-        name for name in declared_channels
-        if name in channels and channels[name].get("quantized")
+    declared_quantized_channels = sorted(
+        name
+        for name in declared_channels
+        if name in channels
+        and channels[name].get("quantized")
         and channels[name].get("applicable")
     )
     likeness = chart_likeness(seg)
@@ -710,7 +757,7 @@ def analyze_geometric(
     elif structure["claimed"]:
         classification = SIGNAL_STRUCTURE
         signal_grade = "enforceable_grade"
-    elif quantized and declared_quantized:
+    elif quantized and declared_quantized_channels:
         classification = SIGNAL_DECLARED
         signal_grade = "log_declared_channel"
     elif quantized:
@@ -767,8 +814,10 @@ def analyze_geometric(
                 "declared_channels": sorted(declared_channels),
                 "context": (declared_context or {}).get("context"),
                 "primary_channel_declared": channel_declared,
-                "declared_quantized_channels": declared_quantized,
-            } if declared_context else None,
+                "declared_quantized_channels": declared_quantized_channels,
+            }
+            if declared_context
+            else None,
             "height_prior": height_prior,
         },
         limitations=_LIMITATIONS,
@@ -787,8 +836,9 @@ def analyze_geometric(
     }
 
 
-def detect_geometric(data: bytes, result: AnalysisResult,
-                     declared_context: dict[str, Any] | None = None) -> Finding | None:
+def detect_geometric(
+    data: bytes, result: AnalysisResult, declared_context: dict[str, Any] | None = None
+) -> Finding | None:
     """DET-02 finding for one parsed PNG; None when not applicable.
 
     Attached by `analyze_all_bytes` as the fourth channel family
@@ -800,12 +850,14 @@ def detect_geometric(data: bytes, result: AnalysisResult,
         return None
     if result.media_kind != "png":
         return None
-    return analyze_geometric_bytes(
-        data, declared_context=declared_context).get("finding")
+    return analyze_geometric_bytes(data, declared_context=declared_context).get(
+        "finding"
+    )
 
 
 def analyze_geometric_bytes(
-    data: bytes, config: GeometricConfig | None = None,
+    data: bytes,
+    config: GeometricConfig | None = None,
     declared_grid: dict[str, dict[str, Any]] | None = None,
     declared_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -834,30 +886,49 @@ def validate_geometric_report(report: dict[str, Any]) -> list[str]:
     need(finding.family == GEO_FAMILY, "finding family must be geometric")
     need(0.0 <= finding.score <= 1.0, "score must be in [0, 1]")
     evidence = finding.evidence
-    need(evidence.get("label") == "evidence_aid_not_decoded_message",
-         "geometric evidence must stay labelled as an aid (C-09)")
+    need(
+        evidence.get("label") == "evidence_aid_not_decoded_message",
+        "geometric evidence must stay labelled as an aid (C-09)",
+    )
     for name, block in (evidence.get("channels") or {}).items():
-        for key in ("grid", "symbols", "residuals", "supporting",
-                    "support_fraction", "score"):
+        for key in (
+            "grid",
+            "symbols",
+            "residuals",
+            "supporting",
+            "support_fraction",
+            "score",
+        ):
             need(key in block, f"channels.{name}.{key} is required (no bare verdicts)")
     structure = evidence.get("structure") or {}
-    for banned in ("mapped_preview", "candidate_text", "_candidate_text",
-                   "mapped_text"):
-        need(banned not in structure,
-             f"structure.{banned} must not appear in a finding; "
-             "candidate decodes live on the reviewer evidence path (CL-46)")
+    for banned in (
+        "mapped_preview",
+        "candidate_text",
+        "_candidate_text",
+        "mapped_text",
+    ):
+        need(
+            banned not in structure,
+            f"structure.{banned} must not appear in a finding; "
+            "candidate decodes live on the reviewer evidence path (CL-46)",
+        )
     if report.get("classification") == SIGNAL_STRUCTURE:
-        need(structure.get("claimed") is True,
-             "structure_claimed requires a claimed structure block")
-        need(bool(structure.get("code")),
-             "structure_claimed requires a declared code")
+        need(
+            structure.get("claimed") is True,
+            "structure_claimed requires a claimed structure block",
+        )
+        need(bool(structure.get("code")), "structure_claimed requires a declared code")
     if report.get("classification") == SIGNAL_QUANTIZED:
-        need(structure.get("claimed") is False,
-             "quantized_without_structure must not claim structure")
+        need(
+            structure.get("claimed") is False,
+            "quantized_without_structure must not claim structure",
+        )
     if report.get("classification") == SIGNAL_DECLARED:
         declared = evidence.get("declared_context") or {}
-        need(declared.get("primary_channel_declared") is True
-             or bool(declared.get("declared_quantized_channels")),
-             "quantized_declared_channel requires a declared, "
-             "quantized channel for the task (CL-45)")
+        need(
+            declared.get("primary_channel_declared") is True
+            or bool(declared.get("declared_quantized_channels")),
+            "quantized_declared_channel requires a declared, "
+            "quantized channel for the task (CL-45)",
+        )
     return errors

@@ -27,8 +27,9 @@ freeze (CL-26 pin differences name the drift).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .fixtures import Fixture
 from .metadata import analyze_all_bytes
@@ -39,7 +40,9 @@ from .verdicts import FamilyThresholds, ThresholdConfig
 CALIBRATION_SCHEMA = "covertlens.calibration"
 CALIBRATION_VERSION = "1.0.0"
 FROZEN_CONFIG_VERSION = "frozen-1.0.0"
-FROZEN_PATH = Path(__file__).resolve().parent.parent / "config" / "frozen-thresholds.json"
+FROZEN_PATH = (
+    Path(__file__).resolve().parent.parent / "config" / "frozen-thresholds.json"
+)
 RECALL_TARGET = 0.95
 PRECISION_TARGET = 0.99
 FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata")
@@ -53,7 +56,9 @@ def _candidates(scores: list[float]) -> list[float]:
     return sorted(points)
 
 
-def _metrics(positive: list[float], negative: list[float], threshold: float) -> dict[str, Any]:
+def _metrics(
+    positive: list[float], negative: list[float], threshold: float
+) -> dict[str, Any]:
     tp = sum(1 for s in positive if s >= threshold)
     fp = sum(1 for s in negative if s >= threshold)
     return {
@@ -84,16 +89,22 @@ def calibrate_family(
         raise ValueError("no candidate meets the triage recall target")
     stricter = [c for c in candidates if c > triage]
     quarantine = next(
-        (c for c in stricter
-         if _metrics(positive, negative, c)["precision"] >= precision_target),
+        (
+            c
+            for c in stricter
+            if _metrics(positive, negative, c)["precision"] >= precision_target
+        ),
         None,
     )
     if quarantine is None:
         raise ValueError("no candidate meets the enforcement precision target")
     fail = next(
-        (c for c in candidates
-         if c > quarantine
-         and _metrics(positive, negative, c)["precision"] >= precision_target),
+        (
+            c
+            for c in candidates
+            if c > quarantine
+            and _metrics(positive, negative, c)["precision"] >= precision_target
+        ),
         1.0,
     )
     return {
@@ -157,8 +168,10 @@ def calibrate_thresholds(
     thresholds: dict[str, FamilyThresholds] = {}
     for family in FAMILIES:
         calibrated = calibrate_family(
-            scores[family]["positive"], scores[family]["negative"],
-            recall_target=recall_target, precision_target=precision_target,
+            scores[family]["positive"],
+            scores[family]["negative"],
+            recall_target=recall_target,
+            precision_target=precision_target,
         )
         families[family] = {
             **calibrated,
@@ -168,7 +181,8 @@ def calibrate_thresholds(
             ),
         }
         thresholds[family] = FamilyThresholds(
-            family, "frozen",
+            family,
+            "frozen",
             calibrated["triage_flag_at"],
             calibrated["enforcement_quarantine_at"],
             calibrated["enforcement_fail_run_at"],
@@ -223,8 +237,14 @@ def validate_calibration(report: dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
-    need(report.get("schema") == CALIBRATION_SCHEMA, f"schema must be {CALIBRATION_SCHEMA}")
-    need(report.get("held_out_labels_used") is False, "calibration must not use held-out labels (C-07)")
+    need(
+        report.get("schema") == CALIBRATION_SCHEMA,
+        f"schema must be {CALIBRATION_SCHEMA}",
+    )
+    need(
+        report.get("held_out_labels_used") is False,
+        "calibration must not use held-out labels (C-07)",
+    )
     need(report.get("development_only") is True, "calibration must be development-only")
     targets = report.get("targets") or {}
     for family in FAMILIES:
@@ -233,7 +253,8 @@ def validate_calibration(report: dict[str, Any]) -> list[str]:
         if block is None:
             continue
         need(
-            block["triage_flag_at"] <= block["enforcement_quarantine_at"]
+            block["triage_flag_at"]
+            <= block["enforcement_quarantine_at"]
             <= block["enforcement_fail_run_at"],
             f"families.{family} points must be ordered",
         )

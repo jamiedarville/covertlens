@@ -57,8 +57,12 @@ def test_error_behaviour_fails_closed_and_never_means_collusion():
     assert all(value == FAIL_CLOSED for value in classes.values())
     assert manifest["error_behavior"]["equated_with_collusion"] is False
     ladder = {row["verdict"]: row["delivery"] for row in manifest["verdict_ladder"]}
-    assert ladder == {"log": "permit", "flag": "permit",
-                      "quarantine": "withhold", "fail_run": "withhold"}
+    assert ladder == {
+        "log": "permit",
+        "flag": "permit",
+        "quarantine": "withhold",
+        "fail_run": "withhold",
+    }
 
 
 def test_scope_is_eval_png_jpeg_only():
@@ -75,7 +79,9 @@ def test_missing_owner_is_rejected():
 
 def test_missing_family_is_rejected():
     manifest = copy.deepcopy(load_manifest())
-    manifest["channels"] = [c for c in manifest["channels"] if c["family"] != "metadata"]
+    manifest["channels"] = [
+        c for c in manifest["channels"] if c["family"] != "metadata"
+    ]
     assert any("metadata" in e for e in validate_manifest(manifest))
 
 
@@ -91,16 +97,21 @@ def test_frozen_thresholds_must_be_ordered():
     channel["thresholds"] = {
         "status": "frozen",
         "triage": {"operating_point": "high_recall", "flag_at": 0.9},
-        "enforcement": {"operating_point": "high_precision",
-                        "quarantine_at": 0.5, "fail_run_at": 0.99},
+        "enforcement": {
+            "operating_point": "high_precision",
+            "quarantine_at": 0.5,
+            "fail_run_at": 0.99,
+        },
     }
     assert any("quarantine_at" in e for e in validate_manifest(manifest))
 
 
 def test_schema_files_are_valid_json_with_key_fields():
     manifest_schema = json.loads(
-        (ROOT / "schemas" / "allowed-channel-manifest.schema.json").read_text())
+        (ROOT / "schemas" / "allowed-channel-manifest.schema.json").read_text()
+    )
     assert "channels" in manifest_schema["required"]
     event_schema = json.loads(
-        (ROOT / "schemas" / "harness-events.schema.json").read_text())
+        (ROOT / "schemas" / "harness-events.schema.json").read_text()
+    )
     assert "event_id" in event_schema["required"]

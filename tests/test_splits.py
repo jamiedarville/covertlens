@@ -38,7 +38,9 @@ def assignment(dataset):
 def test_each_original_and_derivatives_remain_in_one_split(dataset, assignment):
     by_group: dict[str, set[str]] = {}
     for fixture in dataset:
-        by_group.setdefault(group_key(fixture), set()).add(assignment[fixture.fixture_id])
+        by_group.setdefault(group_key(fixture), set()).add(
+            assignment[fixture.fixture_id]
+        )
     assert all(len(splits) == 1 for splits in by_group.values())
     # A pair never straddles a split boundary.
     for pair_id in {f.pair_id for f in dataset if f.role in ("clean", "encoded")}:
@@ -76,7 +78,8 @@ def test_detectors_cannot_access_held_out_labels(dataset, assignment):
         scorer_ground_truth(dataset, assignment, role="detector")
     truth = scorer_ground_truth(dataset, assignment, role="scorer")
     encoded_held = {
-        f.fixture_id for f in dataset
+        f.fixture_id
+        for f in dataset
         if assignment[f.fixture_id] == "held_out" and f.role == "encoded"
     }
     assert set(truth) == encoded_held
@@ -106,15 +109,21 @@ def test_leakage_validator_catches_planted_leaks(dataset, assignment):
 
 def test_identical_bytes_in_two_splits_are_leakage(dataset, assignment):
     source = dataset[0]
-    clone = dataclasses.replace(source, fixture_id="clone-of-source", pair_id="clone-pair")
+    clone = dataclasses.replace(
+        source, fixture_id="clone-of-source", pair_id="clone-pair"
+    )
     fixtures = list(dataset) + [clone]
     broken = dict(assignment)
-    broken[clone.fixture_id] = "held_out" if assignment[source.fixture_id] != "held_out" else "train"
+    broken[clone.fixture_id] = (
+        "held_out" if assignment[source.fixture_id] != "held_out" else "train"
+    )
     errors = validate_no_leakage(fixtures, broken)
     assert any("content_hash" in e for e in errors)
 
 
-def test_write_split_dataset_separates_detector_and_scorer_outputs(tmp_path, dataset, assignment):
+def test_write_split_dataset_separates_detector_and_scorer_outputs(
+    tmp_path, dataset, assignment
+):
     out = write_split_dataset(tmp_path / "split", dataset, assignment)
     detector_doc = json.loads((out / "detector" / "manifest.json").read_text())
     scorer_doc = json.loads((out / "scorer" / "ground-truth.json").read_text())

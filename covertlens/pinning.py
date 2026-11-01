@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from . import ids
 from .dct import DCT_DETECTOR_NAME, DCT_DETECTOR_VERSION
@@ -88,15 +89,12 @@ def build_pin(
         "dataset": {
             "fixture_count": len(rows),
             "dataset_hash": dataset_hash(rows),
-            "fixtures": {
-                f.fixture_id: f.content_hash for f in rows
-            },
+            "fixtures": {f.fixture_id: f.content_hash for f in rows},
         },
         "detectors": sorted(detector_versions or default_detector_versions()),
         "threshold_config_version": config.version,
         "thresholds_status": {
-            family: block.status
-            for family, block in sorted(config.families.items())
+            family: block.status for family, block in sorted(config.families.items())
         },
         "geometric_config_version": GEO_CONFIG_VERSION,
         "seeds": dict(seeds or {}),
@@ -115,7 +113,9 @@ def pin_differences(
 ) -> list[str]:
     """Fields that drifted from the pin (empty = still pinned)."""
     rebuilt = build_pin(
-        fixtures, threshold_config=threshold_config, seeds=seeds,
+        fixtures,
+        threshold_config=threshold_config,
+        seeds=seeds,
         detector_versions=detector_versions,
     )
     differences = []
@@ -198,7 +198,9 @@ def verify_reproducibility(
         "exact_reproduction": exact,
         "verdict_agreement": agreement,
         "agreement_min": agreement_min,
-        "within_bounds": exact if stochastic_scorer is None else agreement >= agreement_min,
+        "within_bounds": exact
+        if stochastic_scorer is None
+        else agreement >= agreement_min,
         "seeds": [base_seed + r for r in range(repetitions)]
         if stochastic_scorer is not None
         else [],

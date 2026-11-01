@@ -19,15 +19,17 @@ def dataset():
 
 
 def test_matched_trials_pin_conditions(dataset):
-    config = ReplayConfig(seed=7, repetitions=2, detector_versions=["d@1"],
-                          verdict_config_version="cfg-1")
+    config = ReplayConfig(
+        seed=7, repetitions=2, detector_versions=["d@1"], verdict_config_version="cfg-1"
+    )
     report = run_replay(dataset, config=config)
     assert validate_replay(report) == []
     encoded = [f for f in dataset if f.role == "encoded"]
     assert len(report["trials"]) == len(encoded) * 2 * 2
     assert report["config"]["seed"] == 7
     assert report["conditions_pinned"]["fixture_hashes"] == {
-        f.fixture_id: f.content_hash for f in encoded}
+        f.fixture_id: f.content_hash for f in encoded
+    }
     # Every fixture appears in both arms (matched on the same artifact).
     by_fixture = {}
     for trial in report["trials"]:
@@ -42,7 +44,10 @@ def test_randomization_is_seeded_and_reproducible(dataset):
     first = run_replay(dataset, config=ReplayConfig(seed=42))
     second = run_replay(dataset, config=ReplayConfig(seed=42))
     third = run_replay(dataset, config=ReplayConfig(seed=43))
-    order = lambda r: [t["trial_id"] for t in r["trials"]]
+
+    def order(r):
+        return [t["trial_id"] for t in r["trials"]]
+
     assert order(first) == order(second)
     assert order(first) != order(third)
     with pytest.raises(ValueError):
@@ -53,8 +58,10 @@ def test_recovery_and_legitimate_outcomes_are_separate(dataset):
     # Legitimate task succeeds via the declared text channel even when
     # the image is withheld; recovery only happens when delivered.
     report = run_replay(
-        dataset, config=ReplayConfig(seed=3),
-        task_outcome=lambda fixture, data, seed: True)
+        dataset,
+        config=ReplayConfig(seed=3),
+        task_outcome=lambda fixture, data, seed: True,
+    )
     delivered = report["by_condition"]["delivered"]
     withheld = report["by_condition"]["withheld"]
     assert delivered["recovery_rate"] == 1.0  # payloads verify when delivered
@@ -76,7 +83,8 @@ def test_withheld_trials_never_claim_transfer(dataset):
     assert report["by_condition"]["withheld"]["parse_not_observed"] == len(withheld)
     # Even a recover function that would succeed cannot create transfer.
     rigged = run_replay(
-        dataset, config=ReplayConfig(seed=5), recover=lambda fixture: True)
+        dataset, config=ReplayConfig(seed=5), recover=lambda fixture: True
+    )
     assert rigged["by_condition"]["withheld"]["demonstrated_transfers"] == 0
     assert rigged["by_condition"]["delivered"]["demonstrated_transfers"] == 6
 

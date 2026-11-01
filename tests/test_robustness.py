@@ -16,7 +16,9 @@ def test_separate_from_frozen_benchmark(report):
     assert validate_robustness(report) == []
     assert report["separate_from_frozen_benchmark"] is True
     assert report["merged_into_frozen_claim"] is False
-    assert report["frozen_benchmark_reference"]["schema"] == "covertlens.frozen-benchmark"
+    assert (
+        report["frozen_benchmark_reference"]["schema"] == "covertlens.frozen-benchmark"
+    )
 
 
 def test_adaptive_attempts_evade_enforcement(report):

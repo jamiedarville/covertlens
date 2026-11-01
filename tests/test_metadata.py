@@ -27,11 +27,14 @@ from covertlens.metadata_fixtures import (
 from covertlens.parsing import analyze_bytes, validate_finding, validate_result
 from covertlens.verdicts import FamilyThresholds, ThresholdConfig
 
-FROZEN_ALL = ThresholdConfig(version="test-pinned-1", families={
-    "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9),
-    "jpeg_dct": FamilyThresholds("jpeg_dct", "frozen", 0.25, 0.6, 0.9),
-    "metadata": FamilyThresholds("metadata", "frozen", 0.5, 0.85, 0.95),
-})
+FROZEN_ALL = ThresholdConfig(
+    version="test-pinned-1",
+    families={
+        "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9),
+        "jpeg_dct": FamilyThresholds("jpeg_dct", "frozen", 0.25, 0.6, 0.9),
+        "metadata": FamilyThresholds("metadata", "frozen", 0.5, 0.85, 0.95),
+    },
+)
 
 
 @pytest.fixture(scope="module")
@@ -48,8 +51,11 @@ def test_scores_distinguish_encoding_from_benign_controls(meta_dataset):
         assert finding.detector_name == METADATA_DETECTOR_NAME
         assert validate_finding(finding) == []
         # Payload values never leak into the finding record.
-        assert fixture.payload.decode("latin-1", "ignore") not in json.dumps(
-            finding.to_dict(), default=str) or not fixture.payload
+        assert (
+            fixture.payload.decode("latin-1", "ignore")
+            not in json.dumps(finding.to_dict(), default=str)
+            or not fixture.payload
+        )
         scores.setdefault(fixture.role, []).append(finding.score)
     assert min(scores["encoded"]) >= 0.9
     assert max(scores["clean"] + scores["negative"]) == 0.0

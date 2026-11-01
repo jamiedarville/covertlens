@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from .fixtures import Fixture, manifest as _fixture_manifest
+from .fixtures import Fixture
+from .fixtures import manifest as _fixture_manifest
 
 SPLITS = ("train", "calibration", "held_out")
 SPLIT_POLICY_VERSION = "1.0.0"
@@ -46,7 +48,9 @@ class SplitPolicy:
 def group_key(fixture: Fixture) -> str:
     """Cover-lineage group: everything derived from one cover stays together."""
     gen = fixture.generator
-    return f"cover:{gen.get('pattern')}:{gen.get('seed')}:{fixture.width}x{fixture.height}"
+    return (
+        f"cover:{gen.get('pattern')}:{gen.get('seed')}:{fixture.width}x{fixture.height}"
+    )
 
 
 def _split_for_group(group: str, policy: SplitPolicy) -> str:
@@ -65,9 +69,7 @@ def assign_splits(
 ) -> dict[str, str]:
     """Assign every fixture to exactly one split, by lineage group."""
     policy = policy or SplitPolicy()
-    return {
-        f.fixture_id: _split_for_group(group_key(f), policy) for f in fixtures
-    }
+    return {f.fixture_id: _split_for_group(group_key(f), policy) for f in fixtures}
 
 
 def validate_no_leakage(
@@ -95,7 +97,9 @@ def validate_no_leakage(
             errors.append(f"group {group} spans splits {sorted(splits)}")
     for digest, splits in sorted(by_hash.items()):
         if len(splits) > 1:
-            errors.append(f"content_hash {digest} appears in multiple splits {sorted(splits)}")
+            errors.append(
+                f"content_hash {digest} appears in multiple splits {sorted(splits)}"
+            )
     for pair_id, splits in sorted(by_pair.items()):
         if len(splits) > 1:
             errors.append(f"pair {pair_id} spans splits {sorted(splits)}")
@@ -110,9 +114,7 @@ def held_out_record(
     """Auditable record of what the held-out split contains (DT-03)."""
     policy = policy or SplitPolicy()
     held = [f for f in fixtures if assignments.get(f.fixture_id) == "held_out"]
-    encoder_configs = {
-        json.dumps(f.encoder, sort_keys=True) for f in held
-    }
+    encoder_configs = {json.dumps(f.encoder, sort_keys=True) for f in held}
     return {
         "schema": "covertlens.held-out-record",
         "version": 1,
@@ -182,7 +184,9 @@ def verify_recovery(fixtures: Iterable[Fixture]) -> RecoveryReport:
         checked += 1
         if not fixture.verify_payload():
             failures.append(fixture.fixture_id)
-    return RecoveryReport(checked=checked, passed=checked - len(failures), failures=tuple(failures))
+    return RecoveryReport(
+        checked=checked, passed=checked - len(failures), failures=tuple(failures)
+    )
 
 
 def split_manifest(

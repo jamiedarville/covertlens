@@ -25,12 +25,13 @@ equated with collusion (C-02); withheld parse stays `not_observed`
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from .calibration import load_frozen_thresholds
 from .events import ParseStatus
-from .fixtures import Fixture, build_dataset, build_pair, generate_cover, _save_png
+from .fixtures import Fixture, _save_png, build_dataset, build_pair, generate_cover
 from .gate import InterceptionContext, InterceptionGate
 from .metadata import analyze_all_bytes
 from .metadata_fixtures import build_metadata_dataset, encode_metadata_png
@@ -67,51 +68,65 @@ def build_seeded_traces() -> tuple[list[PilotTrace], list[Fixture]]:
     for dataset in (build_dataset(), build_metadata_dataset()):
         for fixture in dataset:
             fixtures.append(fixture)
-            traces.append(PilotTrace(
-                trace_id=fixture.fixture_id,
-                data=fixture.data,
-                sender_id=f"sender-{fixture.family}",
-                seeded=True,
-                truth_role=fixture.role,
-                truth_family=fixture.family,
-                truth_band=fixture.payload_band,
-            ))
+            traces.append(
+                PilotTrace(
+                    trace_id=fixture.fixture_id,
+                    data=fixture.data,
+                    sender_id=f"sender-{fixture.family}",
+                    seeded=True,
+                    truth_role=fixture.role,
+                    truth_family=fixture.family,
+                    truth_band=fixture.payload_band,
+                )
+            )
     # One sender with repeated low-band attempts: the weak-signal case.
     for i in range(3):
         _clean, encoded = build_pair(
-            "spatial_lsb", payload_bytes=12,
-            cover_seed=700 + i, payload_seed=800 + i,
+            "spatial_lsb",
+            payload_bytes=12,
+            cover_seed=700 + i,
+            payload_seed=800 + i,
         )
         fixtures.append(encoded)
-        traces.append(PilotTrace(
-            trace_id=encoded.fixture_id,
-            data=encoded.data,
-            sender_id="sender-repeat",
-            seeded=True,
-            truth_role="encoded",
-            truth_family="spatial_lsb",
-            truth_band=encoded.payload_band,
-        ))
+        traces.append(
+            PilotTrace(
+                trace_id=encoded.fixture_id,
+                data=encoded.data,
+                sender_id="sender-repeat",
+                seeded=True,
+                truth_role="encoded",
+                truth_family="spatial_lsb",
+                truth_band=encoded.payload_band,
+            )
+        )
     return traces, fixtures
 
 
 def build_unseeded_traces() -> list[PilotTrace]:
     """Fresh artifacts with no recorded ground truth (adjudication-only)."""
     traces: list[PilotTrace] = []
-    _c, encoded = build_pair("jpeg_dct", payload_bytes=64,
-                             cover_seed=4242, payload_seed=4343)
+    _c, encoded = build_pair(
+        "jpeg_dct", payload_bytes=64, cover_seed=4242, payload_seed=4343
+    )
     traces.append(PilotTrace("uns-1", encoded.data, "sender-uns-a", False))
     clean_png = _save_png(generate_cover(64, 48, seed=5151), 64, 48)
-    traces.append(PilotTrace(
-        "uns-2", encode_metadata_png(clean_png, b"pilot unseeded payload"),
-        "sender-uns-a", False))
+    traces.append(
+        PilotTrace(
+            "uns-2",
+            encode_metadata_png(clean_png, b"pilot unseeded payload"),
+            "sender-uns-a",
+            False,
+        )
+    )
     smooth = _save_png(generate_cover(64, 48, pattern="smooth", seed=6161), 64, 48)
     traces.append(PilotTrace("uns-3", smooth, "sender-uns-b", False))
-    _c2, encoded2 = build_pair("spatial_lsb", payload_bytes=12,
-                               cover_seed=7171, payload_seed=7272)
+    _c2, encoded2 = build_pair(
+        "spatial_lsb", payload_bytes=12, cover_seed=7171, payload_seed=7272
+    )
     traces.append(PilotTrace("uns-4", encoded2.data, "sender-uns-b", False))
-    clean2, _e = build_pair("spatial_lsb", payload_bytes=12,
-                            cover_seed=8181, payload_seed=8282)
+    clean2, _e = build_pair(
+        "spatial_lsb", payload_bytes=12, cover_seed=8181, payload_seed=8282
+    )
     traces.append(PilotTrace("uns-5", clean2.data, "sender-uns-c", False))
     return traces
 
@@ -128,7 +143,8 @@ def _run_mode(
     results: dict[str, Any] = {}
     for trace in traces:
         ctx = InterceptionContext(
-            run_id=run_id, episode_id=f"ep-{trace.sender_id}",
+            run_id=run_id,
+            episode_id=f"ep-{trace.sender_id}",
             sender_id=trace.sender_id,
         )
         handle = gate.intercept_bytes("R-01", trace.data, ctx)
@@ -136,7 +152,10 @@ def _run_mode(
         result = analyze_all_bytes(trace.data)
         results[trace.trace_id] = result
         decision = decide_and_record(
-            gate, delivery.delivery_id, result.findings, config,
+            gate,
+            delivery.delivery_id,
+            result.findings,
+            config,
         )
         try:
             gate.recipient_access(delivery.delivery_id)
@@ -147,42 +166,54 @@ def _run_mode(
             delivery.delivery_id,
             ParseStatus.PARSED if delivered else ParseStatus.NOT_OBSERVED,
         )
-        rows.append({
-            "trace_id": trace.trace_id,
-            "delivery_id": delivery.delivery_id,
-            "sender_id": trace.sender_id,
-            "seeded": trace.seeded,
-            "truth_role": trace.truth_role,
-            "truth_family": trace.truth_family,
-            "truth_band": trace.truth_band,
-            "verdict": decision.verdict.value,
-            "delivery": decision.delivery,
-            "delivered": delivered,
-            "enforceable": decision.enforceable,
-            "max_scores": {
-                row["family"]: row["max_score"] for row in decision.per_family
-            },
-        })
+        rows.append(
+            {
+                "trace_id": trace.trace_id,
+                "delivery_id": delivery.delivery_id,
+                "sender_id": trace.sender_id,
+                "seeded": trace.seeded,
+                "truth_role": trace.truth_role,
+                "truth_family": trace.truth_family,
+                "truth_band": trace.truth_band,
+                "verdict": decision.verdict.value,
+                "delivery": decision.delivery,
+                "delivered": delivered,
+                "enforceable": decision.enforceable,
+                "max_scores": {
+                    row["family"]: row["max_score"] for row in decision.per_family
+                },
+            }
+        )
     return rows, gate, results
 
 
-def _weak_signals(rows: list[dict[str, Any]], config: ThresholdConfig) -> list[dict[str, Any]]:
+def _weak_signals(
+    rows: list[dict[str, Any]], config: ThresholdConfig
+) -> list[dict[str, Any]]:
     """Repeated sub-enforcement signals per sender/family."""
     counts: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         for family, score in row["max_scores"].items():
             thresholds = config.for_family(family)
-            if thresholds.triage_flag_at is None:
+            if (
+                thresholds.triage_flag_at is None
+                or thresholds.enforcement_quarantine_at is None
+            ):
                 continue
             weak = (
                 float(thresholds.triage_flag_at) * WEAK_FLOOR_FRACTION
-                <= score < float(thresholds.enforcement_quarantine_at)
+                <= score
+                < float(thresholds.enforcement_quarantine_at)
             )
             if weak:
                 entry = counts.setdefault(
                     (row["sender_id"], family),
-                    {"sender_id": row["sender_id"], "family": family,
-                     "count": 0, "trace_ids": []},
+                    {
+                        "sender_id": row["sender_id"],
+                        "family": family,
+                        "count": 0,
+                        "trace_ids": [],
+                    },
                 )
                 entry["count"] += 1
                 entry["trace_ids"].append(row["trace_id"])
@@ -230,18 +261,21 @@ def run_pilot(
 
     log_by_id = {r["trace_id"]: r for r in log_rows}
     missed = [
-        r["trace_id"] for r in enf_rows
+        r["trace_id"]
+        for r in enf_rows
         if r["truth_role"] == "encoded" and r["delivered"]
     ]
     false_withholds = [
-        r["trace_id"] for r in enf_rows
+        r["trace_id"]
+        for r in enf_rows
         if r["truth_role"] in ("clean", "negative") and not r["delivered"]
     ]
     mode_changes = sum(
         1 for r in enf_rows if log_by_id[r["trace_id"]]["verdict"] != r["verdict"]
     )
     unresolved = [
-        row["delivery_id"] for row in report["triage_queue"]
+        row["delivery_id"]
+        for row in report["triage_queue"]
         if row["disposition"] == "unresolved"
     ]
     return {
@@ -282,7 +316,8 @@ def run_pilot(
         "review_volume": {
             "unseeded_triage_queue": len(report["triage_queue"]),
             "unseeded_reviewed": sum(
-                1 for row in report["triage_queue"]
+                1
+                for row in report["triage_queue"]
                 if row["disposition"] != "unresolved"
             ),
             "unseeded_unresolved": len(unresolved),
@@ -331,7 +366,5 @@ def validate_pilot(report: dict[str, Any]) -> list[str]:
         "pilot must not claim causation (researcher call only)",
     )
     unseeded = report.get("unseeded") or {}
-    need(
-        unseeded.get("traces", 0) > 0, "unseeded traces are required"
-    )
+    need(unseeded.get("traces", 0) > 0, "unseeded traces are required")
     return errors

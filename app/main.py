@@ -53,7 +53,9 @@ FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
 STATIC_CANDIDATES = [STATIC_DIR, FRONTEND_DIST_DIR]
 GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 ANALYZE_TIMEOUT_S = float(os.environ.get("COVERTLENS_ANALYZE_TIMEOUT_S", "30"))
-MAX_UPLOAD_BYTES = int(os.environ.get("COVERTLENS_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))
+MAX_UPLOAD_BYTES = int(
+    os.environ.get("COVERTLENS_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))
+)
 RATE_LIMIT_PER_MIN = int(os.environ.get("COVERTLENS_RATE_LIMIT_PER_MIN", "30"))
 
 app = FastAPI(title="CovertLens", version=covertlens.__version__)
@@ -78,23 +80,27 @@ def _fixtures() -> list[dict[str, Any]]:
 
     entries: list[dict[str, Any]] = []
     for fixture in build_geo_dataset():
-        entries.append({
-            "fixture_id": fixture.fixture_id,
-            "kind": fixture.role,
-            "subfamily": fixture.subfamily,
-            "content_hash": fixture.content_hash,
-            "media_type": "image/png",
-            "_data": fixture.data,
-        })
+        entries.append(
+            {
+                "fixture_id": fixture.fixture_id,
+                "kind": fixture.role,
+                "subfamily": fixture.subfamily,
+                "content_hash": fixture.content_hash,
+                "media_type": "image/png",
+                "_data": fixture.data,
+            }
+        )
     for control in benign_controls():
-        entries.append({
-            "fixture_id": control["control_id"],
-            "kind": f"benign_control:{control['kind']}",
-            "subfamily": None,
-            "content_hash": control["content_hash"],
-            "media_type": "image/png",
-            "_data": control["data"],
-        })
+        entries.append(
+            {
+                "fixture_id": control["control_id"],
+                "kind": f"benign_control:{control['kind']}",
+                "subfamily": None,
+                "content_hash": control["content_hash"],
+                "media_type": "image/png",
+                "_data": control["data"],
+            }
+        )
     return entries
 
 
@@ -127,8 +133,9 @@ def _precompute() -> None:
 
 
 def _cache_ready() -> bool:
-    return ((CACHE_DIR / "geometric.json").exists()
-            and (CACHE_DIR / "comparison.json").exists())
+    return (CACHE_DIR / "geometric.json").exists() and (
+        CACHE_DIR / "comparison.json"
+    ).exists()
 
 
 def _start_precompute() -> None:
@@ -146,8 +153,9 @@ def _start_precompute() -> None:
         current = None
     if current == _cache_key() and _cache_ready():
         return
-    threading.Thread(target=_precompute, daemon=True,
-                     name="covertlens-precompute").start()
+    threading.Thread(
+        target=_precompute, daemon=True, name="covertlens-precompute"
+    ).start()
 
 
 def _static_root() -> Path | None:
@@ -237,21 +245,24 @@ async def analyze(request: Request, file: UploadFile = File(...)) -> JSONRespons
     if len(data) > MAX_UPLOAD_BYTES:
         return JSONResponse({"detail": "upload_too_large"}, status_code=413)
     try:
-        max_pixels = int(os.environ.get(
-            "COVERTLENS_MAX_PIXELS", str(20_000_000)))
+        max_pixels = int(os.environ.get("COVERTLENS_MAX_PIXELS", str(20_000_000)))
     except ValueError:
         max_pixels = 20_000_000
-    loop = asyncio.get_running_loop()
     future = _executor().submit(analyze_bytes, data, max_pixels)
     try:
         payload = await asyncio.wait_for(
-            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S)
-    except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
-        return JSONResponse({
-            "status": "timeout",
-            "detail": f"analysis exceeded {ANALYZE_TIMEOUT_S}s deadline",
-            "analysis": None, "geometric": None, "decision": None,
-        })
+            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S
+        )
+    except (TimeoutError, concurrent.futures.TimeoutError):
+        return JSONResponse(
+            {
+                "status": "timeout",
+                "detail": f"analysis exceeded {ANALYZE_TIMEOUT_S}s deadline",
+                "analysis": None,
+                "geometric": None,
+                "decision": None,
+            }
+        )
     return JSONResponse(payload)
 
 
@@ -263,8 +274,7 @@ def benchmark(name: str) -> JSONResponse:
     if cache_file.exists():
         return JSONResponse(json.loads(cache_file.read_text()))
     _start_precompute()
-    return JSONResponse(
-        {"status": "computing", "benchmark": name}, status_code=202)
+    return JSONResponse({"status": "computing", "benchmark": name}, status_code=202)
 
 
 @app.get("/api/scorecard")
@@ -282,8 +292,8 @@ def comparison() -> JSONResponse:
         return JSONResponse(json.loads(cache_file.read_text()))
     _start_precompute()
     return JSONResponse(
-        {"status": "computing", "comparison": "height_position"},
-        status_code=202)
+        {"status": "computing", "comparison": "height_position"}, status_code=202
+    )
 
 
 def _index_response() -> Response | None:
@@ -298,11 +308,13 @@ def index() -> Response:
     response = _index_response()
     if response is not None:
         return response
-    return JSONResponse({
-        "service": "covertlens",
-        "docs": "/docs",
-        "health": "/api/health",
-    })
+    return JSONResponse(
+        {
+            "service": "covertlens",
+            "docs": "/docs",
+            "health": "/api/health",
+        }
+    )
 
 
 @app.get("/analyze")

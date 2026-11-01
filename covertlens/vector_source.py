@@ -51,8 +51,12 @@ RASTER_LIMITATIONS = (
     "JPEG rasters are unsupported by the segmenter "
     "(unsupported_media), so raster fallback is PNG-only",
 )
-_SEVERITY = {"no_signal": 0, "weak_signal": 1,
-             "quantized_without_structure": 2, "structure_claimed": 3}
+_SEVERITY = {
+    "no_signal": 0,
+    "weak_signal": 1,
+    "quantized_without_structure": 2,
+    "structure_claimed": 3,
+}
 
 
 def build_vector_source(fixture: GeoFixture) -> dict[str, Any]:
@@ -61,30 +65,36 @@ def build_vector_source(fixture: GeoFixture) -> dict[str, Any]:
     Generator-side (harness) only: detector code must never build
     a source from a delivered artifact.
     """
-    is_encoded = fixture.role == "encoded" or fixture.negative_kind == "legitimate_chart"
+    is_encoded = (
+        fixture.role == "encoded" or fixture.negative_kind == "legitimate_chart"
+    )
     n_elements = len(fixture.attributes) + (
         1 if fixture.subfamily == "gap_timing" else 0
     )
     elements, _symbols, _attrs = scene_plan(
-        fixture.subfamily, encoded=is_encoded,
-        scene_seed=fixture.scene_seed, payload_seed=fixture.payload_seed,
+        fixture.subfamily,
+        encoded=is_encoded,
+        scene_seed=fixture.scene_seed,
+        payload_seed=fixture.payload_seed,
         n_elements=n_elements,
     )
     objects = []
     for i, element in enumerate(elements):
         colour = tuple(int(c) for c in element["colour"])
-        objects.append({
-            "index": i,
-            "type": "bar",
-            "x": int(element["x"]),
-            "top": int(round(BASE_Y - float(element["height"]))),
-            "width": int(element["width"]),
-            "height": float(element["height"]),
-            "gap_after": float(element["gap_after"]),
-            "colour": list(colour),
-            "brightness": round(sum(colour) / 3.0, 3),
-            "angle_deg": float(element["angle"]),
-        })
+        objects.append(
+            {
+                "index": i,
+                "type": "bar",
+                "x": int(element["x"]),
+                "top": int(round(BASE_Y - float(element["height"]))),
+                "width": int(element["width"]),
+                "height": float(element["height"]),
+                "gap_after": float(element["gap_after"]),
+                "colour": list(colour),
+                "brightness": round(sum(colour) / 3.0, 3),
+                "angle_deg": float(element["angle"]),
+            }
+        )
     return {
         "schema": VECTOR_SOURCE_SCHEMA,
         "schema_version": 1,
@@ -111,12 +121,14 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
     """
     config = SegmenterConfig(name=VECTOR_PARSER_NAME, version=VECTOR_PARSER_VERSION)
     if not isinstance(doc, dict) or doc.get("schema") != VECTOR_SOURCE_SCHEMA:
-        return SegmentationResult("corrupt_source", detail="not a vector-source doc",
-                                  config=config)
+        return SegmentationResult(
+            "corrupt_source", detail="not a vector-source doc", config=config
+        )
     objects = doc.get("objects")
     if not isinstance(objects, list) or not objects:
-        return SegmentationResult("corrupt_source", detail="objects list missing/empty",
-                                  config=config)
+        return SegmentationResult(
+            "corrupt_source", detail="objects list missing/empty", config=config
+        )
     palette = config.colour_palette
     raw = []
     for obj in objects:
@@ -124,66 +136,87 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
             colour = tuple(int(c) for c in obj["colour"])
             top = int(obj["top"])
             height = float(obj["height"])
-            raw.append({
-                "left": int(obj["x"]), "top": top,
-                "width": int(obj["width"]), "height": height,
-                "bottom": top + int(round(height)),
-                "area": int(obj["width"]) * int(round(height)),
-                "colour": list(colour),
-                "colour_index": min(
-                    range(len(palette)), key=lambda i: math.dist(colour, palette[i])
-                ),
-                "colour_distance": round(
-                    min(math.dist(colour, p) for p in palette), 3
-                ),
-                "brightness": float(obj["brightness"]),
-                "angle_deg": float(obj["angle_deg"]),
-                "_gap_after": float(obj["gap_after"]),
-            })
+            raw.append(
+                {
+                    "left": int(obj["x"]),
+                    "top": top,
+                    "width": int(obj["width"]),
+                    "height": height,
+                    "bottom": top + int(round(height)),
+                    "area": int(obj["width"]) * int(round(height)),
+                    "colour": list(colour),
+                    "colour_index": min(
+                        range(len(palette)), key=lambda i: math.dist(colour, palette[i])
+                    ),
+                    "colour_distance": round(
+                        min(math.dist(colour, p) for p in palette), 3
+                    ),
+                    "brightness": float(obj["brightness"]),
+                    "angle_deg": float(obj["angle_deg"]),
+                    "_gap_after": float(obj["gap_after"]),
+                }
+            )
         except (KeyError, TypeError, ValueError) as exc:
-            return SegmentationResult("corrupt_source", detail=f"bad object: {exc}",
-                                      config=config)
+            return SegmentationResult(
+                "corrupt_source", detail=f"bad object: {exc}", config=config
+            )
     ordered = _reading_order(raw, config.row_overlap_fraction)
     elements = []
     for i, comp in enumerate(ordered):
         nxt = ordered[i + 1] if i + 1 < len(ordered) else None
-        elements.append({
-            "index": i,
-            "left": comp["left"], "top": comp["top"],
-            "width": comp["width"], "height": int(round(comp["height"])),
-            "area": comp["area"],
-            "gap_to_next": (
-                nxt["left"] - (comp["left"] + comp["width"]) if nxt else None
-            ),
-            "angle_deg": comp["angle_deg"],
-            "colour": comp["colour"],
-            "colour_index": comp["colour_index"],
-            "colour_distance": comp["colour_distance"],
-            "brightness": comp["brightness"],
-        })
+        elements.append(
+            {
+                "index": i,
+                "left": comp["left"],
+                "top": comp["top"],
+                "width": comp["width"],
+                "height": int(round(comp["height"])),
+                "area": comp["area"],
+                "gap_to_next": (
+                    nxt["left"] - (comp["left"] + comp["width"]) if nxt else None
+                ),
+                "angle_deg": comp["angle_deg"],
+                "colour": comp["colour"],
+                "colour_index": comp["colour_index"],
+                "colour_distance": comp["colour_distance"],
+                "brightness": comp["brightness"],
+            }
+        )
     canvas = doc.get("canvas") or {}
     if len(elements) < config.min_elements:
         return SegmentationResult(
-            "too_few_elements", detail="vector source has too few objects",
-            width=int(canvas.get("width") or 0), height=int(canvas.get("height") or 0),
-            elements=elements, config=config,
+            "too_few_elements",
+            detail="vector source has too few objects",
+            width=int(canvas.get("width") or 0),
+            height=int(canvas.get("height") or 0),
+            elements=elements,
+            config=config,
         )
     return SegmentationResult(
-        "ok", width=int(canvas.get("width") or 0),
-        height=int(canvas.get("height") or 0), elements=elements, config=config,
+        "ok",
+        width=int(canvas.get("width") or 0),
+        height=int(canvas.get("height") or 0),
+        elements=elements,
+        config=config,
     )
 
 
 def register_source_lineage(
-    store: ArtifactStore, fixture: GeoFixture, source: dict[str, Any],
-    *, run_id: str = "run_vector",
+    store: ArtifactStore,
+    fixture: GeoFixture,
+    source: dict[str, Any],
+    *,
+    run_id: str = "run_vector",
 ) -> dict[str, Any]:
     """Register rendered raster + vector source with lineage in the store."""
     rendered = store.put_original(
-        fixture.data, run_id=run_id, producer_id="generator",
+        fixture.data,
+        run_id=run_id,
+        producer_id="generator",
     )
     derivative = store.register_derivative(
-        rendered.artifact_version_id, source_bytes(source),
+        rendered.artifact_version_id,
+        source_bytes(source),
         transform="vector_source_json",
     )
     return {
@@ -264,21 +297,35 @@ def validate_vector_binding(report: dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
-    need(report.get("schema") == "covertlens.vector-binding",
-         "schema must be covertlens.vector-binding")
-    need(ids.is_content_hash(report.get("bound_content_hash")),
-         "report must bind to the rendered content hash")
+    need(
+        report.get("schema") == "covertlens.vector-binding",
+        "schema must be covertlens.vector-binding",
+    )
+    need(
+        ids.is_content_hash(report.get("bound_content_hash")),
+        "report must bind to the rendered content hash",
+    )
     if report.get("vector_status") == "present_not_intercepted":
-        need(report.get("cleared") is False,
-             "unparsed vector source must never be cleared (C-10)")
-        need(report.get("clearance") == "refused_unparsed_vector_source",
-             "C-10 refusal must be explicit")
+        need(
+            report.get("cleared") is False,
+            "unparsed vector source must never be cleared (C-10)",
+        )
+        need(
+            report.get("clearance") == "refused_unparsed_vector_source",
+            "C-10 refusal must be explicit",
+        )
     lineage = report.get("lineage")
     if lineage is not None:
-        need(lineage.get("lineage_parent") == lineage.get("rendered_version_id"),
-             "source lineage parent must be the rendered version")
-        need(lineage.get("rendered_content_hash") == report.get("bound_content_hash"),
-             "lineage rendered hash must match the bound hash")
-    need(report.get("equated_with_collusion") is False,
-         "vector binding must not equate outcomes with collusion (C-02)")
+        need(
+            lineage.get("lineage_parent") == lineage.get("rendered_version_id"),
+            "source lineage parent must be the rendered version",
+        )
+        need(
+            lineage.get("rendered_content_hash") == report.get("bound_content_hash"),
+            "lineage rendered hash must match the bound hash",
+        )
+    need(
+        report.get("equated_with_collusion") is False,
+        "vector binding must not equate outcomes with collusion (C-02)",
+    )
     return errors

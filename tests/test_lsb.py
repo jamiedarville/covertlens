@@ -70,12 +70,21 @@ def test_png_score_is_versioned_with_applicable_coverage():
 
 def test_detector_scores_rise_with_payload_band():
     means = {}
-    for band, payload_bytes in (("none", 8), ("low", 12), ("medium", 64), ("high", 192)):
+    for band, payload_bytes in (
+        ("none", 8),
+        ("low", 12),
+        ("medium", 64),
+        ("high", 192),
+    ):
         scores = []
         for seed in (101, 202, 303):
             clean, encoded = build_pair(
-                "spatial_lsb", width=64, height=48,
-                payload_bytes=payload_bytes, cover_seed=seed, payload_seed=seed + 7,
+                "spatial_lsb",
+                width=64,
+                height=48,
+                payload_bytes=payload_bytes,
+                cover_seed=seed,
+                payload_seed=seed + 7,
             )
             fixture = clean if band == "none" else encoded
             scores.append(analyze_lsb_bytes(fixture.data).findings[0].score)
@@ -100,8 +109,11 @@ def test_store_version_scoring_binds_exact_version():
     _, encoded = build_pair("spatial_lsb", width=32, height=24, payload_bytes=32)
     store = ArtifactStore()
     version = store.put_original(
-        encoded.data, run_id="run_test", producer_id="agent-a", occurred_at=TS)
-    result = analyze_lsb_version(store, version.artifact_version_id, actor_id="detector")
+        encoded.data, run_id="run_test", producer_id="agent-a", occurred_at=TS
+    )
+    result = analyze_lsb_version(
+        store, version.artifact_version_id, actor_id="detector"
+    )
     assert result.artifact_version_id == version.artifact_version_id
     assert result.content_hash == version.content_hash
     assert len(result.findings) == 1
@@ -154,7 +166,13 @@ def test_threshold_free_sweep_has_precision_recall_with_uncertainty(report):
         for name in ("precision", "recall", "false_positive_rate"):
             block = point[name]
             if block["estimate"] is not None:
-                assert 0.0 <= block["ci_low"] <= block["estimate"] <= block["ci_high"] <= 1.0
+                assert (
+                    0.0
+                    <= block["ci_low"]
+                    <= block["estimate"]
+                    <= block["ci_high"]
+                    <= 1.0
+                )
     recalls = [p["recall"]["estimate"] for p in sweep]
     assert recalls == sorted(recalls, reverse=True)  # higher bar, fewer hits
     for key in ("roc_auc", "pr_auc"):
@@ -172,8 +190,12 @@ def test_expanded_pairs_show_band_ordering_and_low_band_uncertainty():
     for seed in (101, 202, 303, 404, 505, 606, 707, 808):
         for i, payload_bytes in enumerate((12, 64, 192)):
             clean, encoded = build_pair(
-                "spatial_lsb", width=64, height=48,
-                payload_bytes=payload_bytes, cover_seed=seed, payload_seed=seed + 7,
+                "spatial_lsb",
+                width=64,
+                height=48,
+                payload_bytes=payload_bytes,
+                cover_seed=seed,
+                payload_seed=seed + 7,
             )
             if i == 0:
                 fixtures.append(clean)
@@ -181,7 +203,10 @@ def test_expanded_pairs_show_band_ordering_and_low_band_uncertainty():
     expanded = benchmark_lsb(fixtures, bootstrap_replicates=200)
     assert validate_benchmark(expanded) == []
     bands = expanded["by_payload_band"]
-    means = {band: bands[band]["scores"]["mean"] for band in ("none", "low", "medium", "high")}
+    means = {
+        band: bands[band]["scores"]["mean"]
+        for band in ("none", "low", "medium", "high")
+    }
     assert means["none"] < means["low"] < means["medium"] < means["high"]
     assert bands["medium"]["roc_auc_vs_negatives"] == 1.0
     assert bands["high"]["roc_auc_vs_negatives"] == 1.0

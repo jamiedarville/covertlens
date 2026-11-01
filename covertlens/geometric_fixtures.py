@@ -34,8 +34,9 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from . import ids
 from .fixtures import _load_png, _save_png
@@ -55,7 +56,12 @@ MARGIN_X = 16
 
 # Declared grids: symbol -> attribute value (the payload units).
 GRIDS: dict[str, dict[str, Any]] = {
-    "height_position": {"unit": "height_level", "base": 16.0, "step": 10.0, "alphabet": 8},
+    "height_position": {
+        "unit": "height_level",
+        "base": 16.0,
+        "step": 10.0,
+        "alphabet": 8,
+    },
     "gap_timing": {"unit": "gap_level", "base": 6.0, "step": 6.0, "alphabet": 4},
     "lit_dark": {"unit": "lit_state", "levels": (45.0, 235.0), "alphabet": 2},
     "colour_code": {
@@ -80,12 +86,12 @@ class GeoFixture:
     width: int
     height: int
     data: bytes = field(repr=False)
-    symbols: tuple[int, ...] = ()          # scorer-side ground truth (encoded)
-    attributes: tuple[float, ...] = ()     # scorer-side ground truth (all roles)
+    symbols: tuple[int, ...] = ()  # scorer-side ground truth (encoded)
+    attributes: tuple[float, ...] = ()  # scorer-side ground truth (all roles)
     scene_seed: int = 0
     payload_seed: int = 0
     negative_kind: str | None = None
-    context: str = "scene"                 # scene | chart (GEO-05)
+    context: str = "scene"  # scene | chart (GEO-05)
     generator: dict[str, Any] = field(default_factory=dict)
     encoder: dict[str, Any] = field(default_factory=dict)
 
@@ -104,20 +110,49 @@ class GeoFixture:
 
 # ---------------------------------------------------------------- scenes ---
 
+
 def _symbols(payload_seed: int, count: int, alphabet: int) -> tuple[int, ...]:
     rng = random.Random(payload_seed)
     return tuple(rng.randrange(alphabet) for _ in range(count))
 
 
 _MORSE = {
-    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".",
-    "F": "..-.", "G": "--.", "H": "....", "I": "..", "J": ".---",
-    "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---",
-    "P": ".--.", "Q": "--.-", "R": ".-.", "S": "...", "T": "-",
-    "U": "..-", "V": "...-", "W": ".--", "X": "-..-", "Y": "-.--",
-    "Z": "--..", "0": "-----", "1": ".----", "2": "..---",
-    "3": "...--", "4": "....-", "5": ".....", "6": "-....",
-    "7": "--...", "8": "---..", "9": "----.",
+    "A": ".-",
+    "B": "-...",
+    "C": "-.-.",
+    "D": "-..",
+    "E": ".",
+    "F": "..-.",
+    "G": "--.",
+    "H": "....",
+    "I": "..",
+    "J": ".---",
+    "K": "-.-",
+    "L": ".-..",
+    "M": "--",
+    "N": "-.",
+    "O": "---",
+    "P": ".--.",
+    "Q": "--.-",
+    "R": ".-.",
+    "S": "...",
+    "T": "-",
+    "U": "..-",
+    "V": "...-",
+    "W": ".--",
+    "X": "-..-",
+    "Y": "-.--",
+    "Z": "--..",
+    "0": "-----",
+    "1": ".----",
+    "2": "..---",
+    "3": "...--",
+    "4": "....-",
+    "5": ".....",
+    "6": "-....",
+    "7": "--...",
+    "8": "---..",
+    "9": "----.",
 }
 
 PAYLOAD_MODES = ("random", "word", "morse", "ascii")
@@ -150,8 +185,9 @@ def _byte_digits(data: bytes, base: int, digits: int) -> list[int]:
     return stream
 
 
-def _encode_payload(subfamily: str, mode: str, text: str, count: int,
-                    payload_seed: int, alphabet: int) -> tuple[int, ...]:
+def _encode_payload(
+    subfamily: str, mode: str, text: str, count: int, payload_seed: int, alphabet: int
+) -> tuple[int, ...]:
     """Symbol stream for one payload mode (generator-side, CL-46)."""
     if mode == "random":
         return _symbols(payload_seed, count, alphabet)
@@ -180,8 +216,13 @@ def _encode_payload(subfamily: str, mode: str, text: str, count: int,
     return tuple(stream[i % len(stream)] for i in range(count))
 
 
-def _off_grid(rng: random.Random, low: float, high: float, grid_values: list[float],
-              clearance: float) -> float:
+def _off_grid(
+    rng: random.Random,
+    low: float,
+    high: float,
+    grid_values: list[float],
+    clearance: float,
+) -> float:
     """Continuous value kept at least `clearance` from every grid point."""
     for _ in range(64):
         value = low + rng.random() * (high - low)
@@ -191,9 +232,15 @@ def _off_grid(rng: random.Random, low: float, high: float, grid_values: list[flo
 
 
 def _scene_elements(
-    subfamily: str, *, encoded: bool, scene_seed: int, payload_seed: int,
-    n_elements: int, grid: dict[str, Any] | None = None,
-    payload_mode: str = "random", payload_text: str = "DECAF",
+    subfamily: str,
+    *,
+    encoded: bool,
+    scene_seed: int,
+    payload_seed: int,
+    n_elements: int,
+    grid: dict[str, Any] | None = None,
+    payload_mode: str = "random",
+    payload_text: str = "DECAF",
 ) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
     """Element attribute plan for one scene (renderer-side only)."""
     grid = {**GRIDS[subfamily], **(grid or {})}
@@ -205,8 +252,13 @@ def _scene_elements(
         count = n_elements
     if encoded:
         symbols = _encode_payload(
-            subfamily, payload_mode, payload_text, count,
-            payload_seed, int(grid["alphabet"]))
+            subfamily,
+            payload_mode,
+            payload_text,
+            count,
+            payload_seed,
+            int(grid["alphabet"]),
+        )
         if grid.get("attacker") and payload_mode == "random" and len(symbols) >= 3:
             # Attacker fixtures exist to prove step *recovery*: if a
             # payload used only every-other level, the fundamental
@@ -215,16 +267,23 @@ def _scene_elements(
             distinct = sorted(set(symbols))
             if all(b - a != 1 for a, b in zip(distinct, distinct[1:])):
                 shaped = list(symbols)
-                shaped[1] = (shaped[0] + 1 if shaped[0] + 1 < int(grid["alphabet"])
-                             else shaped[0] - 1)
+                shaped[1] = (
+                    shaped[0] + 1
+                    if shaped[0] + 1 < int(grid["alphabet"])
+                    else shaped[0] - 1
+                )
                 symbols = tuple(shaped)
     elements: list[dict[str, Any]] = []
     attributes: list[float] = []
     x = MARGIN_X
     for i in range(n_elements):
         element: dict[str, Any] = {
-            "x": x, "width": BAR_WIDTH, "height": 56.0,
-            "colour": _BAR_COLOUR, "angle": 0.0, "gap_after": 10.0,
+            "x": x,
+            "width": BAR_WIDTH,
+            "height": 56.0,
+            "colour": _BAR_COLOUR,
+            "angle": 0.0,
+            "gap_after": 10.0,
         }
         if subfamily == "height_position":
             if encoded:
@@ -234,9 +293,12 @@ def _scene_elements(
                 # a wider exclusion arc would make clean residues
                 # periodically anti-aligned, itself a false pattern.
                 value = _off_grid(
-                    rng, grid["base"], grid["base"] + grid["step"] * 7,
+                    rng,
+                    grid["base"],
+                    grid["base"] + grid["step"] * 7,
                     [grid["base"] + s * grid["step"] for s in range(8)],
-                    min(1.2, grid["step"] * 0.12))
+                    min(1.2, grid["step"] * 0.12),
+                )
             element["height"] = value
             attributes.append(value)
         elif subfamily == "gap_timing" and i < n_elements - 1:
@@ -244,9 +306,12 @@ def _scene_elements(
                 value = grid["base"] + symbols[i] * grid["step"]
             else:
                 value = _off_grid(
-                    rng, grid["base"], grid["base"] + grid["step"] * 3,
+                    rng,
+                    grid["base"],
+                    grid["base"] + grid["step"] * 3,
                     [grid["base"] + s * grid["step"] for s in range(4)],
-                    min(1.8, grid["step"] * 0.22))
+                    min(1.8, grid["step"] * 0.22),
+                )
             element["gap_after"] = value
             attributes.append(value)
         elif subfamily == "lit_dark":
@@ -263,12 +328,8 @@ def _scene_elements(
                 attributes.append(float(symbols[i]))
             else:
                 base = grid["palette"][rng.randrange(3)]
-                colour = tuple(
-                    max(0, min(255, c + rng.randint(-70, 70))) for c in base
-                )
-                if min(
-                    math.dist(colour, p) for p in grid["palette"]
-                ) < 30.0:
+                colour = tuple(max(0, min(255, c + rng.randint(-70, 70))) for c in base)
+                if min(math.dist(colour, p) for p in grid["palette"]) < 30.0:
                     colour = (120, 120, 40)
                 element["colour"] = colour
                 attributes.append(float(_nearest_colour(colour, grid["palette"])))
@@ -277,9 +338,12 @@ def _scene_elements(
                 value = grid["base"] + symbols[i] * grid["step"]
             else:
                 value = _off_grid(
-                    rng, grid["base"], grid["base"] + grid["step"] * 4,
+                    rng,
+                    grid["base"],
+                    grid["base"] + grid["step"] * 4,
                     [grid["base"] + s * grid["step"] for s in range(5)],
-                    min(2.0, grid["step"] * 0.13))
+                    min(2.0, grid["step"] * 0.13),
+                )
             element["angle"] = value
             element["height"] = 44.0
             element["width"] = 10
@@ -290,14 +354,18 @@ def _scene_elements(
     return elements, symbols, tuple(attributes)
 
 
-def _render(elements: list[dict[str, Any]], width: int, height: int,
-            background: tuple[int, int, int] = _BACKGROUND) -> bytes:
+def _render(
+    elements: list[dict[str, Any]],
+    width: int,
+    height: int,
+    background: tuple[int, int, int] = _BACKGROUND,
+) -> bytes:
     pixels = bytearray(bytes(background) * (width * height))
 
     def put(px: int, py: int, colour: tuple[int, int, int]) -> None:
         if 0 <= px < width and 0 <= py < height:
             i = (py * width + px) * 3
-            pixels[i:i + 3] = bytes(colour)
+            pixels[i : i + 3] = bytes(colour)
 
     for element in elements:
         colour = element["colour"]
@@ -307,7 +375,9 @@ def _render(elements: list[dict[str, Any]], width: int, height: int,
         if abs(angle) < 0.01:
             top = int(round(BASE_Y - length))
             for py in range(top, BASE_Y):
-                for px in range(int(element["x"]), int(element["x"] + element["width"])):
+                for px in range(
+                    int(element["x"]), int(element["x"] + element["width"])
+                ):
                     put(px, py, colour)
         else:
             rad = math.radians(angle)
@@ -326,13 +396,15 @@ def _render(elements: list[dict[str, Any]], width: int, height: int,
 
 # --------------------------------------------------------- re-measurement ---
 
+
 def _border_background(pixels: bytes, width: int, height: int) -> tuple[int, int, int]:
     counts: dict[tuple[int, int, int], int] = {}
     for x in range(width):
         for y in (0, height - 1):
-            c = tuple(pixels[(y * width + x) * 3:(y * width + x) * 3 + 3])
+            base = (y * width + x) * 3
+            c = (pixels[base], pixels[base + 1], pixels[base + 2])
             counts[c] = counts.get(c, 0) + 1
-    return max(counts, key=counts.get)
+    return max(counts, key=lambda c: counts[c])
 
 
 def segment_elements(pixels: bytes, width: int, height: int) -> list[dict[str, Any]]:
@@ -341,11 +413,9 @@ def segment_elements(pixels: bytes, width: int, height: int) -> list[dict[str, A
 
     def foreground(px: int, py: int) -> bool:
         i = (py * width + px) * 3
-        return tuple(pixels[i:i + 3]) != background
+        return tuple(pixels[i : i + 3]) != background
 
-    columns = [
-        any(foreground(x, y) for y in range(height)) for x in range(width)
-    ]
+    columns = [any(foreground(x, y) for y in range(height)) for x in range(width)]
     groups: list[tuple[int, int]] = []
     start: int | None = None
     for x, filled in enumerate(columns):
@@ -359,36 +429,40 @@ def segment_elements(pixels: bytes, width: int, height: int) -> list[dict[str, A
     elements = []
     for left, right in groups:
         pts = [
-            (x, y) for x in range(left, right + 1) for y in range(height)
+            (x, y)
+            for x in range(left, right + 1)
+            for y in range(height)
             if foreground(x, y)
         ]
         if len(pts) < 8:
             continue
         colours: dict[tuple[int, int, int], int] = {}
         for x, y in pts:
-            c = tuple(pixels[(y * width + x) * 3:(y * width + x) * 3 + 3])
+            base = (y * width + x) * 3
+            c = (pixels[base], pixels[base + 1], pixels[base + 2])
             colours[c] = colours.get(c, 0) + 1
-        colour = max(colours, key=colours.get)
+        colour = max(colours, key=lambda c: colours[c])
         rows: dict[int, list[int]] = {}
         for x, y in pts:
             rows.setdefault(y, []).append(x)
         ys = sorted(rows)
         slope_num = sum(
-            (y - sum(ys) / len(ys)) * (sum(rows[y]) / len(rows[y]))
-            for y in ys
+            (y - sum(ys) / len(ys)) * (sum(rows[y]) / len(rows[y])) for y in ys
         )
         slope_den = sum((y - sum(ys) / len(ys)) ** 2 for y in ys) or 1.0
         slope = slope_num / slope_den
-        elements.append({
-            "left": left,
-            "right": right,
-            "top": min(ys),
-            "bottom": max(ys),
-            "height": max(ys) - min(ys) + 1,
-            "colour": colour,
-            "brightness": sum(colour) / 3.0,
-            "angle_deg": round(math.degrees(math.atan(-slope)), 3),
-        })
+        elements.append(
+            {
+                "left": left,
+                "right": right,
+                "top": min(ys),
+                "bottom": max(ys),
+                "height": max(ys) - min(ys) + 1,
+                "colour": colour,
+                "brightness": sum(colour) / 3.0,
+                "angle_deg": round(math.degrees(math.atan(-slope)), 3),
+            }
+        )
     return elements
 
 
@@ -396,9 +470,13 @@ def _nearest_colour(colour: tuple[int, int, int], palette) -> int:
     return min(range(len(palette)), key=lambda i: math.dist(colour, palette[i]))
 
 
-def measure_attributes(pixels: bytes, width: int, height: int,
-                       subfamily: str,
-                       grid: dict[str, Any] | None = None) -> tuple[list[float], list[int]]:
+def measure_attributes(
+    pixels: bytes,
+    width: int,
+    height: int,
+    subfamily: str,
+    grid: dict[str, Any] | None = None,
+) -> tuple[list[float], list[int]]:
     """Re-measure (attributes, recovered symbols) from raster pixels only."""
     elements = segment_elements(pixels, width, height)
     grid = {**GRIDS[subfamily], **(grid or {})}
@@ -417,7 +495,9 @@ def measure_attributes(pixels: bytes, width: int, height: int,
         low, high = grid["levels"]
         for e in elements:
             attributes.append(float(e["brightness"]))
-            symbols.append(0 if abs(e["brightness"] - low) < abs(e["brightness"] - high) else 1)
+            symbols.append(
+                0 if abs(e["brightness"] - low) < abs(e["brightness"] - high) else 1
+            )
     elif subfamily == "colour_code":
         for e in elements:
             idx = _nearest_colour(e["colour"], grid["palette"])
@@ -435,7 +515,8 @@ def verify_geo_fixture(fixture: GeoFixture) -> bool:
     pixels, width, height = _load_png(fixture.data)
     recorded = (fixture.encoder.get("config") or {}).get("grid") or {}
     attributes, symbols = measure_attributes(
-        pixels, width, height, fixture.subfamily, grid=recorded)
+        pixels, width, height, fixture.subfamily, grid=recorded
+    )
     if fixture.role == "encoded":
         return tuple(symbols) == fixture.symbols
     if len(attributes) != len(fixture.attributes):
@@ -452,18 +533,34 @@ def verify_geo_fixture(fixture: GeoFixture) -> bool:
 
 # ---------------------------------------------------------------- builders ---
 
-def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
-             symbols: tuple[int, ...], attributes: tuple[float, ...],
-             *, scene_seed: int, payload_seed: int, width: int, height: int,
-             context: str = "scene", negative_kind: str | None = None,
-             grid: dict[str, Any] | None = None,
-             payload_mode: str = "random") -> GeoFixture:
+
+def _fixture(
+    subfamily: str,
+    role: str,
+    pair_id: str,
+    data: bytes,
+    symbols: tuple[int, ...],
+    attributes: tuple[float, ...],
+    *,
+    scene_seed: int,
+    payload_seed: int,
+    width: int,
+    height: int,
+    context: str = "scene",
+    negative_kind: str | None = None,
+    grid: dict[str, Any] | None = None,
+    payload_mode: str = "random",
+) -> GeoFixture:
     effective_grid = {**GRIDS[subfamily], **(grid or {})}
     digest = ids.content_hash(data)
     generator = {
-        "name": GEO_GENERATOR_NAME, "version": GEO_GENERATOR_VERSION,
-        "seed": scene_seed, "pattern": f"bars_{subfamily}",
-        "width": width, "height": height, "context": context,
+        "name": GEO_GENERATOR_NAME,
+        "version": GEO_GENERATOR_VERSION,
+        "seed": scene_seed,
+        "pattern": f"bars_{subfamily}",
+        "width": width,
+        "height": height,
+        "context": context,
     }
     encoder = {
         "name": GEO_ENCODER_NAME if role == "encoded" else "none",
@@ -474,18 +571,29 @@ def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
             "unit": effective_grid["unit"],
             "alphabet": effective_grid["alphabet"],
             "payload_mode": payload_mode if role == "encoded" else "none",
-            "grid": {k: v for k, v in effective_grid.items()
-                     if k in ("base", "step", "levels", "attacker")},
+            "grid": {
+                k: v
+                for k, v in effective_grid.items()
+                if k in ("base", "step", "levels", "attacker")
+            },
         },
     }
     return GeoFixture(
         fixture_id=f"geometric-{subfamily}-{role}-{digest.split(':', 1)[1][:12]}",
-        pair_id=pair_id, subfamily=subfamily, role=role,
-        width=width, height=height, data=data,
-        symbols=symbols, attributes=attributes,
-        scene_seed=scene_seed, payload_seed=payload_seed,
-        negative_kind=negative_kind, context=context,
-        generator=generator, encoder=encoder,
+        pair_id=pair_id,
+        subfamily=subfamily,
+        role=role,
+        width=width,
+        height=height,
+        data=data,
+        symbols=symbols,
+        attributes=attributes,
+        scene_seed=scene_seed,
+        payload_seed=payload_seed,
+        negative_kind=negative_kind,
+        context=context,
+        generator=generator,
+        encoder=encoder,
     )
 
 
@@ -509,8 +617,12 @@ def scene_plan(
     if subfamily == "angle_tilt":
         n_elements = min(n_elements, 7)
     return _scene_elements(
-        subfamily, encoded=encoded, scene_seed=scene_seed,
-        payload_seed=payload_seed, n_elements=n_elements, grid=grid,
+        subfamily,
+        encoded=encoded,
+        scene_seed=scene_seed,
+        payload_seed=payload_seed,
+        n_elements=n_elements,
+        grid=grid,
     )
 
 
@@ -537,7 +649,8 @@ def attacker_grid(subfamily: str, seed: int) -> dict[str, Any]:
                 break
     else:
         raise ValueError(
-            f"attacker grids are defined for height/gap/angle, not {subfamily}")
+            f"attacker grids are defined for height/gap/angle, not {subfamily}"
+        )
     return {"base": round(base, 3), "step": round(step, 3), "attacker": True}
 
 
@@ -552,8 +665,11 @@ def build_attacker_geo_pair(
     """Clean/encoded pair on a random attacker grid (CL-43)."""
     grid = attacker_grid(subfamily, grid_seed)
     return build_geo_pair(
-        subfamily, scene_seed=scene_seed, payload_seed=payload_seed,
-        n_elements=n_elements, grid=grid,
+        subfamily,
+        scene_seed=scene_seed,
+        payload_seed=payload_seed,
+        n_elements=n_elements,
+        grid=grid,
     )
 
 
@@ -575,32 +691,48 @@ def build_geo_pair(
     if subfamily == "gap_timing":
         n_elements = min(
             n_elements,
-            10 if width <= DEFAULT_WIDTH else max(10, (width - MARGIN_X) // 30))
+            10 if width <= DEFAULT_WIDTH else max(10, (width - MARGIN_X) // 30),
+        )
     if subfamily == "angle_tilt":
         n_elements = min(
             n_elements,
-            7 if width <= DEFAULT_WIDTH else max(7, (width - MARGIN_X) // 56))
+            7 if width <= DEFAULT_WIDTH else max(7, (width - MARGIN_X) // 56),
+        )
     pair_id = f"pair-geometric-{subfamily}-{scene_seed}"
     if grid and grid.get("attacker"):
         pair_id += f"-attacker-{grid['step']}"
     built = []
     for role, encoded in (("clean", False), ("encoded", True)):
         elements, symbols, attributes = _scene_elements(
-            subfamily, encoded=encoded, scene_seed=scene_seed + (0 if not encoded else 500_000),
-            payload_seed=payload_seed, n_elements=n_elements, grid=grid,
-            payload_mode=payload_mode, payload_text=payload_text,
+            subfamily,
+            encoded=encoded,
+            scene_seed=scene_seed + (0 if not encoded else 500_000),
+            payload_seed=payload_seed,
+            n_elements=n_elements,
+            grid=grid,
+            payload_mode=payload_mode,
+            payload_text=payload_text,
         )
         # Clean and encoded share the scene seed family but must not
         # share jitter: encoded uses grid values; clean was sampled
         # with its own seed stream in _scene_elements via scene_seed.
         data = _render(elements, width, height)
-        built.append(_fixture(
-            subfamily, role, pair_id, data,
-            symbols if encoded else (), attributes,
-            scene_seed=scene_seed, payload_seed=payload_seed,
-            width=width, height=height, grid=grid,
-            payload_mode=payload_mode,
-        ))
+        built.append(
+            _fixture(
+                subfamily,
+                role,
+                pair_id,
+                data,
+                symbols if encoded else (),
+                attributes,
+                scene_seed=scene_seed,
+                payload_seed=payload_seed,
+                width=width,
+                height=height,
+                grid=grid,
+                payload_mode=payload_mode,
+            )
+        )
     clean, encoded_fx = built
     if not verify_geo_fixture(encoded_fx):
         raise ValueError(f"encoded {subfamily} fixture failed re-measurement")
@@ -609,12 +741,21 @@ def build_geo_pair(
     return clean, encoded_fx
 
 
-def _negative(subfamily: str, *, kind: str, scene_seed: int,
-              width: int = DEFAULT_WIDTH, height: int = DEFAULT_HEIGHT) -> GeoFixture:
+def _negative(
+    subfamily: str,
+    *,
+    kind: str,
+    scene_seed: int,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
+) -> GeoFixture:
     n_elements = 9 if kind == "generator_variation" else 12
     elements, _s, attributes = _scene_elements(
-        subfamily, encoded=(kind == "legitimate_chart"),
-        scene_seed=scene_seed, payload_seed=1, n_elements=n_elements,
+        subfamily,
+        encoded=(kind == "legitimate_chart"),
+        scene_seed=scene_seed,
+        payload_seed=1,
+        n_elements=n_elements,
     )
     if kind == "legitimate_chart":
         # A legitimate chart's bar heights carry data by design and
@@ -637,9 +778,18 @@ def _negative(subfamily: str, *, kind: str, scene_seed: int,
         data = _render(elements, width, height)
         context = "scene"
     return _fixture(
-        subfamily, "negative", f"neg-geometric-{kind}-{scene_seed}", data,
-        (), attributes, scene_seed=scene_seed, payload_seed=0,
-        width=width, height=height, context=context, negative_kind=kind,
+        subfamily,
+        "negative",
+        f"neg-geometric-{kind}-{scene_seed}",
+        data,
+        (),
+        attributes,
+        scene_seed=scene_seed,
+        payload_seed=0,
+        width=width,
+        height=height,
+        context=context,
+        negative_kind=kind,
     )
 
 
@@ -648,18 +798,28 @@ def build_geo_dataset() -> list[GeoFixture]:
     fixtures: list[GeoFixture] = []
     for i, subfamily in enumerate(SUBFAMILIES):
         for j, scene_seed in enumerate((101 + i * 31, 733 + i * 47)):
-            fixtures.extend(build_geo_pair(
-                subfamily, scene_seed=scene_seed,
-                payload_seed=202 + i * 13 + j * 7,
-            ))
-    fixtures.append(_negative("height_position", kind="legitimate_chart", scene_seed=4242))
-    fixtures.append(_negative("height_position", kind="unencoded_scene", scene_seed=4343))
+            fixtures.extend(
+                build_geo_pair(
+                    subfamily,
+                    scene_seed=scene_seed,
+                    payload_seed=202 + i * 13 + j * 7,
+                )
+            )
+    fixtures.append(
+        _negative("height_position", kind="legitimate_chart", scene_seed=4242)
+    )
+    fixtures.append(
+        _negative("height_position", kind="unencoded_scene", scene_seed=4343)
+    )
     fixtures.append(_negative("height_position", kind="benign_edit", scene_seed=4444))
-    fixtures.append(_negative("colour_code", kind="generator_variation", scene_seed=4545))
+    fixtures.append(
+        _negative("colour_code", kind="generator_variation", scene_seed=4545)
+    )
     return fixtures
 
 
 # ------------------------------------------------------------- exports ---
+
 
 def geo_manifest(fixtures: Iterable[GeoFixture]) -> dict[str, Any]:
     """Detector-facing manifest: provenance and hashes, never ground truth."""
@@ -722,9 +882,7 @@ def assign_geo_splits(
 ) -> dict[str, str]:
     """CL-10 lineage-group split assignment for geometric fixtures."""
     active = policy or SplitPolicy()
-    return {
-        f.fixture_id: _split_for_group(geo_group_key(f), active) for f in fixtures
-    }
+    return {f.fixture_id: _split_for_group(geo_group_key(f), active) for f in fixtures}
 
 
 def validate_geo_splits(

@@ -50,7 +50,9 @@ def test_jpeg_coefficient_domain_is_scored_on_original_bytes():
         finding = result.findings[0]
         assert finding.coverage["domain"] == "quantized_coefficients"
         assert finding.coverage["blocks_examined"] == len(result.coefficients)
-        assert finding.coverage["coefficients_examined"] == len(result.coefficients) * 64
+        assert (
+            finding.coverage["coefficients_examined"] == len(result.coefficients) * 64
+        )
         assert finding.coverage["carriers_examined"] > 0
         assert validate_result(result) == []
     assert (
@@ -70,7 +72,8 @@ def test_scores_configuration_and_limitations_are_recorded():
     assert finding.coverage["applicable"] is True
     assert finding.evidence["detector_config_version"] == CONFIG_VERSION
     assert finding.evidence["statistic"] == (
-        "coefficient_magnitude_pairs_of_values_chi_square")
+        "coefficient_magnitude_pairs_of_values_chi_square"
+    )
     assert finding.limitations  # limitations are always recorded
     assert any("coefficient" in text for text in finding.limitations)
     assert any("CL-27" in text for text in finding.limitations)
@@ -99,8 +102,11 @@ def test_store_version_scoring_binds_exact_version():
     _, encoded = build_pair("jpeg_dct", width=32, height=24, payload_bytes=32)
     store = ArtifactStore()
     version = store.put_original(
-        encoded.data, run_id="run_test", producer_id="agent-a", occurred_at=TS)
-    result = analyze_dct_version(store, version.artifact_version_id, actor_id="detector")
+        encoded.data, run_id="run_test", producer_id="agent-a", occurred_at=TS
+    )
+    result = analyze_dct_version(
+        store, version.artifact_version_id, actor_id="detector"
+    )
     assert result.artifact_version_id == version.artifact_version_id
     assert result.content_hash == version.content_hash
     assert len(result.findings) == 1
@@ -154,8 +160,12 @@ def test_expanded_pairs_show_band_ordering_and_weak_low_band():
     for seed in (101, 202, 303, 404, 505, 606, 707, 808):
         for i, payload_bytes in enumerate((12, 64, 192)):
             clean, encoded = build_pair(
-                "jpeg_dct", width=64, height=48,
-                payload_bytes=payload_bytes, cover_seed=seed, payload_seed=seed + 7,
+                "jpeg_dct",
+                width=64,
+                height=48,
+                payload_bytes=payload_bytes,
+                cover_seed=seed,
+                payload_seed=seed + 7,
             )
             if i == 0:
                 fixtures.append(clean)

@@ -20,9 +20,10 @@ import json
 import math
 import struct
 import zlib
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from . import ids
 
@@ -74,19 +75,25 @@ def generate_cover(
                 g = y * 255 // max(height - 1, 1)
                 b = (x + y) * 255 // max(width + height - 2, 1)
                 noise = rng.signed(2)
-                pixels[i : i + 3] = bytes((_clamp(r + noise), _clamp(g + noise), _clamp(b + noise)))
+                pixels[i : i + 3] = bytes(
+                    (_clamp(r + noise), _clamp(g + noise), _clamp(b + noise))
+                )
                 continue
             else:  # gradient_noise (per-channel noise keeps chroma textured)
                 r = x * 255 // max(width - 1, 1)
                 g = y * 255 // max(height - 1, 1)
                 b = (x + y) * 255 // max(width + height - 2, 1)
-                pixels[i : i + 3] = bytes((
-                    _clamp(r + rng.signed(36)),
-                    _clamp(g + rng.signed(36)),
-                    _clamp(b + rng.signed(36)),
-                ))
+                pixels[i : i + 3] = bytes(
+                    (
+                        _clamp(r + rng.signed(36)),
+                        _clamp(g + rng.signed(36)),
+                        _clamp(b + rng.signed(36)),
+                    )
+                )
                 continue
-            pixels[i : i + 3] = bytes((_clamp(r + noise), _clamp(g + noise), _clamp(b + noise)))
+            pixels[i : i + 3] = bytes(
+                (_clamp(r + noise), _clamp(g + noise), _clamp(b + noise))
+            )
     return bytes(pixels)
 
 
@@ -96,7 +103,9 @@ def _benign_edit(pixels: bytes, width: int, height: int, edit: str, seed: int) -
         return bytes(_clamp(v + 24) for v in out)
     if edit == "flip_horizontal":
         for y in range(height):
-            row = [out[(y * width + x) * 3 : (y * width + x) * 3 + 3] for x in range(width)]
+            row = [
+                out[(y * width + x) * 3 : (y * width + x) * 3 + 3] for x in range(width)
+            ]
             for x, px in enumerate(reversed(row)):
                 out[(y * width + x) * 3 : (y * width + x) * 3 + 3] = px
         return bytes(out)
@@ -107,6 +116,7 @@ def _benign_edit(pixels: bytes, width: int, height: int, edit: str, seed: int) -
 
 
 # ---------------------------------------------------------------- PNG ---
+
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
     crc = binascii.crc32(kind + data) & 0xFFFFFFFF
@@ -186,20 +196,170 @@ def decode_lsb_png(data: bytes, n_bits: int) -> bytes:
 # --------------------------------------------------------------- JPEG ---
 
 _ZIGZAG = (
-    0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5,
-    12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28,
-    35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
-    58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+    0,
+    1,
+    8,
+    16,
+    9,
+    2,
+    3,
+    10,
+    17,
+    24,
+    32,
+    25,
+    18,
+    11,
+    4,
+    5,
+    12,
+    19,
+    26,
+    33,
+    40,
+    48,
+    41,
+    34,
+    27,
+    20,
+    13,
+    6,
+    7,
+    14,
+    21,
+    28,
+    35,
+    42,
+    49,
+    56,
+    57,
+    50,
+    43,
+    36,
+    29,
+    22,
+    15,
+    23,
+    30,
+    37,
+    44,
+    51,
+    58,
+    59,
+    52,
+    45,
+    38,
+    31,
+    39,
+    46,
+    53,
+    60,
+    61,
+    54,
+    47,
+    55,
+    62,
+    63,
 )
 _Q_LUMA = (
-    16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55,
-    14, 13, 16, 24, 40, 57, 69, 56, 14, 17, 22, 29, 51, 87, 80, 62,
-    18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92,
-    49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99,
+    16,
+    11,
+    10,
+    16,
+    24,
+    40,
+    51,
+    61,
+    12,
+    12,
+    14,
+    19,
+    26,
+    58,
+    60,
+    55,
+    14,
+    13,
+    16,
+    24,
+    40,
+    57,
+    69,
+    56,
+    14,
+    17,
+    22,
+    29,
+    51,
+    87,
+    80,
+    62,
+    18,
+    22,
+    37,
+    56,
+    68,
+    109,
+    103,
+    77,
+    24,
+    35,
+    55,
+    64,
+    81,
+    104,
+    113,
+    92,
+    49,
+    64,
+    78,
+    87,
+    103,
+    121,
+    120,
+    101,
+    72,
+    92,
+    95,
+    98,
+    112,
+    100,
+    103,
+    99,
 )
 _Q_CHROMA = (
-    17, 18, 24, 47, 99, 99, 99, 99, 18, 21, 26, 66, 99, 99, 99, 99,
-    24, 26, 56, 99, 99, 99, 99, 99, 47, 66, 99, 99, 99, 99, 99, 99,
+    17,
+    18,
+    24,
+    47,
+    99,
+    99,
+    99,
+    99,
+    18,
+    21,
+    26,
+    66,
+    99,
+    99,
+    99,
+    99,
+    24,
+    26,
+    56,
+    99,
+    99,
+    99,
+    99,
+    99,
+    47,
+    66,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
 ) + (99,) * 32
 
 # Custom canonical Huffman tables (legal JPEG; carried in DHT segments).
@@ -262,7 +422,11 @@ def _fdct_quant(block: list[int], quant: list[int]) -> list[int]:
             for y in range(8):
                 for x in range(8):
                     total += block[y * 8 + x] * _COS[u][x] * _COS[v][y]
-            factor = 0.25 * (1 / math.sqrt(2) if u == 0 else 1) * (1 / math.sqrt(2) if v == 0 else 1)
+            factor = (
+                0.25
+                * (1 / math.sqrt(2) if u == 0 else 1)
+                * (1 / math.sqrt(2) if v == 0 else 1)
+            )
             out[v * 8 + u] = round(factor * total / quant[v * 8 + u])
     return out
 
@@ -363,11 +527,16 @@ def encode_dct_jpeg(
     pixels: bytes, width: int, height: int, payload: bytes, *, quality: int = 90
 ) -> bytes:
     """Encode a baseline JPEG (4:4:4), embedding payload in Y AC coefficient LSBs."""
-    q_luma, q_chroma = _scaled_quant(_Q_LUMA, quality), _scaled_quant(_Q_CHROMA, quality)
+    q_luma, q_chroma = (
+        _scaled_quant(_Q_LUMA, quality),
+        _scaled_quant(_Q_CHROMA, quality),
+    )
     planes = _to_ycbcr(pixels)
     coeff_planes: list[list[list[int]]] = []
     for plane, quant in zip(planes, (q_luma, q_chroma, q_chroma)):
-        coeff_planes.append([_fdct_quant(b, quant) for b in _blocks(plane, width, height)])
+        coeff_planes.append(
+            [_fdct_quant(b, quant) for b in _blocks(plane, width, height)]
+        )
     if payload:
         _embed_dct(coeff_planes, payload)
     writer = _BitWriter()
@@ -381,8 +550,10 @@ def encode_dct_jpeg(
     out += _segment(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
     out += _segment(0xDB, bytes([0]) + bytes(q_luma))
     out += _segment(0xDB, bytes([1]) + bytes(q_chroma))
-    sof_body = b"\x08" + struct.pack(">HHB", height, width, 3) + bytes(
-        [1, 0x11, 0, 2, 0x11, 1, 3, 0x11, 1]
+    sof_body = (
+        b"\x08"
+        + struct.pack(">HHB", height, width, 3)
+        + bytes([1, 0x11, 0, 2, 0x11, 1, 3, 0x11, 1])
     )
     out += _segment(0xC0, sof_body)
     out += _segment(0xC4, _dht(0x00, _DC_LENGTHS))
@@ -505,6 +676,7 @@ def decode_dct_jpeg(data: bytes, n_bits: int) -> bytes:
 
 # -------------------------------------------------------------- factory ---
 
+
 def _payload_band(bits_per_pixel: float) -> str:
     if bits_per_pixel == 0:
         return "none"
@@ -623,7 +795,11 @@ def build_pair(
             "name": "lsb-png",
             "version": ENCODER_VERSION,
             "seed": payload_seed,
-            "config": {"lsb_depth": 1, "order": "raster_rgb_msb_first", "channels": "RGB"},
+            "config": {
+                "lsb_depth": 1,
+                "order": "raster_rgb_msb_first",
+                "channels": "RGB",
+            },
         }
     else:
         clean_data = encode_dct_jpeg(cover, width, height, b"", quality=quality)
@@ -640,8 +816,30 @@ def build_pair(
                 "subsampling": "4:4:4",
             },
         }
-    clean = _fixture(family, "clean", pair_id, width, height, clean_data, b"", payload_seed, generator, encoder)
-    encoded = _fixture(family, "encoded", pair_id, width, height, encoded_data, payload, payload_seed, generator, encoder)
+    clean = _fixture(
+        family,
+        "clean",
+        pair_id,
+        width,
+        height,
+        clean_data,
+        b"",
+        payload_seed,
+        generator,
+        encoder,
+    )
+    encoded = _fixture(
+        family,
+        "encoded",
+        pair_id,
+        width,
+        height,
+        encoded_data,
+        payload,
+        payload_seed,
+        generator,
+        encoder,
+    )
     if not encoded.verify_payload():
         raise ValueError("encoded fixture failed payload verification")
     return clean, encoded
@@ -669,17 +867,42 @@ def _negative(
     }
     if family == "spatial_lsb":
         data = _save_png(pixels, width, height)
-        encoder = {"name": "lsb-png", "version": ENCODER_VERSION, "seed": 0,
-                   "config": {"lsb_depth": 1, "order": "raster_rgb_msb_first", "channels": "RGB"}}
+        encoder = {
+            "name": "lsb-png",
+            "version": ENCODER_VERSION,
+            "seed": 0,
+            "config": {
+                "lsb_depth": 1,
+                "order": "raster_rgb_msb_first",
+                "channels": "RGB",
+            },
+        }
     else:
         data = encode_dct_jpeg(pixels, width, height, b"", quality=quality)
-        encoder = {"name": "dct-jpeg", "version": ENCODER_VERSION, "seed": 0,
-                   "config": {"quality": quality, "component": "Y+Cb+Cr",
-                              "coefficient_rule": "ac_magnitude>=2_lsb",
-                              "quantization": "jpeg_standard_scaled", "subsampling": "4:4:4"}}
+        encoder = {
+            "name": "dct-jpeg",
+            "version": ENCODER_VERSION,
+            "seed": 0,
+            "config": {
+                "quality": quality,
+                "component": "Y+Cb+Cr",
+                "coefficient_rule": "ac_magnitude>=2_lsb",
+                "quantization": "jpeg_standard_scaled",
+                "subsampling": "4:4:4",
+            },
+        }
     return _fixture(
-        family, "negative", f"neg-{label}-{seed}", width, height, data, b"", 0,
-        generator, encoder, negative_kind=kind,
+        family,
+        "negative",
+        f"neg-{label}-{seed}",
+        width,
+        height,
+        data,
+        b"",
+        0,
+        generator,
+        encoder,
+        negative_kind=kind,
     )
 
 
@@ -699,26 +922,54 @@ def build_dataset(width: int = 64, height: int = 48) -> list[Fixture]:
                 )
             )
     base = generate_cover(width, height, seed=101)
-    fixtures.append(_negative(
-        "spatial_lsb", _benign_edit(base, width, height, "brightness", 1),
-        width, height, seed=101, pattern="gradient_noise",
-        kind="benign_edit", label="brightness",
-    ))
-    fixtures.append(_negative(
-        "jpeg_dct", _benign_edit(base, width, height, "flip_horizontal", 1),
-        width, height, seed=101, pattern="gradient_noise",
-        kind="benign_edit", label="flip",
-    ))
-    fixtures.append(_negative(
-        "spatial_lsb", generate_cover(width, height, pattern="blocks", seed=999),
-        width, height, seed=999, pattern="blocks",
-        kind="generator_variation", label="blocks",
-    ))
-    fixtures.append(_negative(
-        "jpeg_dct", generate_cover(width, height, pattern="smooth", seed=555),
-        width, height, seed=555, pattern="smooth",
-        kind="generator_variation", label="smooth",
-    ))
+    fixtures.append(
+        _negative(
+            "spatial_lsb",
+            _benign_edit(base, width, height, "brightness", 1),
+            width,
+            height,
+            seed=101,
+            pattern="gradient_noise",
+            kind="benign_edit",
+            label="brightness",
+        )
+    )
+    fixtures.append(
+        _negative(
+            "jpeg_dct",
+            _benign_edit(base, width, height, "flip_horizontal", 1),
+            width,
+            height,
+            seed=101,
+            pattern="gradient_noise",
+            kind="benign_edit",
+            label="flip",
+        )
+    )
+    fixtures.append(
+        _negative(
+            "spatial_lsb",
+            generate_cover(width, height, pattern="blocks", seed=999),
+            width,
+            height,
+            seed=999,
+            pattern="blocks",
+            kind="generator_variation",
+            label="blocks",
+        )
+    )
+    fixtures.append(
+        _negative(
+            "jpeg_dct",
+            generate_cover(width, height, pattern="smooth", seed=555),
+            width,
+            height,
+            seed=555,
+            pattern="smooth",
+            kind="generator_variation",
+            label="smooth",
+        )
+    )
     return fixtures
 
 
@@ -726,25 +977,27 @@ def manifest(fixtures: Iterable[Fixture]) -> dict[str, Any]:
     """JSON-ready fixture manifest; raw payloads are never included."""
     rows = []
     for f in fixtures:
-        rows.append({
-            "fixture_id": f.fixture_id,
-            "pair_id": f.pair_id,
-            "family": f.family,
-            "role": f.role,
-            "negative_kind": f.negative_kind,
-            "media_kind": f.media_kind,
-            "content_hash": f.content_hash,
-            "size_bytes": len(f.data),
-            "width": f.width,
-            "height": f.height,
-            "payload_bits": f.payload_bits,
-            "payload_bytes": f.payload_bytes,
-            "bits_per_pixel": round(f.bits_per_pixel, 6),
-            "payload_band": f.payload_band,
-            "payload_sha256": ids.content_hash(f.payload),
-            "generator": f.generator,
-            "encoder": f.encoder,
-        })
+        rows.append(
+            {
+                "fixture_id": f.fixture_id,
+                "pair_id": f.pair_id,
+                "family": f.family,
+                "role": f.role,
+                "negative_kind": f.negative_kind,
+                "media_kind": f.media_kind,
+                "content_hash": f.content_hash,
+                "size_bytes": len(f.data),
+                "width": f.width,
+                "height": f.height,
+                "payload_bits": f.payload_bits,
+                "payload_bytes": f.payload_bytes,
+                "bits_per_pixel": round(f.bits_per_pixel, 6),
+                "payload_band": f.payload_band,
+                "payload_sha256": ids.content_hash(f.payload),
+                "generator": f.generator,
+                "encoder": f.encoder,
+            }
+        )
     return {
         "schema": "covertlens.fixture-manifest",
         "version": 1,
@@ -767,7 +1020,9 @@ def ground_truth(fixtures: Iterable[Fixture]) -> dict[str, Any]:
     }
 
 
-def write_dataset(out_dir: str | Path, fixtures: Iterable[Fixture] | None = None) -> Path:
+def write_dataset(
+    out_dir: str | Path, fixtures: Iterable[Fixture] | None = None
+) -> Path:
     """Write fixture files plus ``manifest.json`` (and scorer ground truth)."""
     rows = list(fixtures) if fixtures is not None else build_dataset()
     target = Path(out_dir)

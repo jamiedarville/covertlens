@@ -129,17 +129,23 @@ def create_review_export(
     active_policy = policy if policy is not None else load_runtime_policy()
     if not can(active_policy, principal, dataset_id, "export.create"):
         audit.append(
-            actor_id=principal.actor_id, action="export.create",
-            dataset_id=dataset_id, outcome="denied",
+            actor_id=principal.actor_id,
+            action="export.create",
+            dataset_id=dataset_id,
+            outcome="denied",
             detail={"permission": "export.create"},
         )
         raise PermissionError(
-            f"{principal.actor_id} lacks export.create on {dataset_id}"
+            f"{principal.actor_id} lacks export.create on frozenset({dataset_id})"
         )
-    package = build_review_package(report, pin, dataset_id=dataset_id, policy=active_policy)
+    package = build_review_package(
+        report, pin, dataset_id=dataset_id, policy=active_policy
+    )
     audit.append(
-        actor_id=principal.actor_id, action="export.create",
-        dataset_id=dataset_id, outcome="allowed",
+        actor_id=principal.actor_id,
+        action="export.create",
+        dataset_id=dataset_id,
+        outcome="allowed",
         detail={"package_hash": package["package_hash"], "run_id": package["run_id"]},
     )
     return package
@@ -157,13 +163,11 @@ def verify_evidence_access(
         "audit_chain_valid": audit.verify_chain(),
         "audit_entries": len(entries),
         "evidence_reads_logged": sum(
-            1 for e in entries
-            if e.action == "evidence.read" and e.outcome == "allowed"
+            1 for e in entries if e.action == "evidence.read" and e.outcome == "allowed"
         ),
         "denied_attempts_logged": sum(1 for e in entries if e.outcome == "denied"),
         "exports_logged": sum(
-            1 for e in entries
-            if e.action == "export.create" and e.outcome == "allowed"
+            1 for e in entries if e.action == "export.create" and e.outcome == "allowed"
         ),
         "store_access_records": len(store.access_history(artifact_version_id)),
         "store_hash_verified": bool(store.verify(artifact_version_id)),
@@ -191,13 +195,16 @@ def run_export_verification() -> dict[str, Any]:
     deliveries = {}
     for fixture in fixtures:
         ctx = InterceptionContext(
-            run_id="run_export", episode_id="ep_1", sender_id="agent-a",
+            run_id="run_export",
+            episode_id="ep_1",
+            sender_id="agent-a",
         )
         handle = gate.intercept_bytes("R-01", fixture.data, ctx)
         delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
         deliveries[fixture.fixture_id] = delivery.delivery_id
         result = analyze_all_bytes(
-            fixture.data, artifact_version_id=handle.artifact_version_id,
+            fixture.data,
+            artifact_version_id=handle.artifact_version_id,
         )
         results.append(result)
         verdict = Verdict.QUARANTINE if fixture.role == "encoded" else Verdict.FLAG
@@ -207,23 +214,53 @@ def run_export_verification() -> dict[str, Any]:
             gate.record_parse(delivery.delivery_id, ParseStatus.PARSED)
         except Exception:
             gate.record_parse(delivery.delivery_id, ParseStatus.NOT_OBSERVED)
-    report = build_run_report(gate.events("run_export"), results, report_id="rpt_export")
+    report = build_run_report(
+        gate.events("run_export"), results, report_id="rpt_export"
+    )
     first_delivery = deliveries[fixtures[0].fixture_id]
-    report = apply_review(report, first_delivery, reviewer="researcher-1",
-                          disposition="suspected", note="export verification")
+    report = apply_review(
+        report,
+        first_delivery,
+        reviewer="researcher-1",
+        disposition="suspected",
+        note="export verification",
+    )
     pin = build_pin(fixtures, seeds={"export": 20261033})
-    researcher = Principal("researcher-1", {"researcher"}, {dataset_id})
-    agent = Principal("agent-b", {"agent"}, {dataset_id})
-    outsider = Principal("researcher-2", {"researcher"}, {"ds-other"})
+    researcher = Principal(
+        "researcher-1", frozenset({"researcher"}), frozenset({dataset_id})
+    )
+    agent = Principal("agent-b", frozenset({"agent"}), frozenset({dataset_id}))
+    outsider = Principal(
+        "researcher-2", frozenset({"researcher"}), frozenset({"ds-other"})
+    )
 
     version_id = gate.events("run_export")[0].artifact_version_id
-    read_ok = gateway.read_original(researcher, dataset_id, version_id) == fixtures[0].data
+    assert version_id is not None  # creation event carries the version id
+    read_ok = (
+        gateway.read_original(researcher, dataset_id, version_id) == fixtures[0].data
+    )
     denials = {}
     for name, principal, fn in (
-        ("agent_read", agent, lambda p: gateway.read_original(p, dataset_id, version_id)),
-        ("agent_export", agent, lambda p: create_review_export(p, dataset_id, report, pin, audit)),
-        ("wrong_dataset_read", outsider, lambda p: gateway.read_original(p, dataset_id, version_id)),
-        ("wrong_dataset_export", outsider, lambda p: create_review_export(p, dataset_id, report, pin, audit)),
+        (
+            "agent_read",
+            agent,
+            lambda p: gateway.read_original(p, dataset_id, version_id),
+        ),
+        (
+            "agent_export",
+            agent,
+            lambda p: create_review_export(p, dataset_id, report, pin, audit),
+        ),
+        (
+            "wrong_dataset_read",
+            outsider,
+            lambda p: gateway.read_original(p, dataset_id, version_id),
+        ),
+        (
+            "wrong_dataset_export",
+            outsider,
+            lambda p: create_review_export(p, dataset_id, report, pin, audit),
+        ),
     ):
         try:
             fn(principal)
@@ -249,29 +286,45 @@ def validate_review_package(package: dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
-    need(package.get("schema") == EXPORT_PACKAGE_SCHEMA,
-         f"schema must be {EXPORT_PACKAGE_SCHEMA}")
+    need(
+        package.get("schema") == EXPORT_PACKAGE_SCHEMA,
+        f"schema must be {EXPORT_PACKAGE_SCHEMA}",
+    )
     sealed = {k: v for k, v in package.items() if k != "package_hash"}
-    need(package.get("package_hash") == _hash(sealed),
-         "package seal mismatch: contents were tampered with")
-    need(package.get("contains_raw_bytes") is False,
-         "review packages must not contain raw bytes")
-    need(not _contains_raw_bytes(package),
-         "review package contains raw-byte material")
+    need(
+        package.get("package_hash") == _hash(sealed),
+        "package seal mismatch: contents were tampered with",
+    )
+    need(
+        package.get("contains_raw_bytes") is False,
+        "review packages must not contain raw bytes",
+    )
+    need(not _contains_raw_bytes(package), "review package contains raw-byte material")
     policy = package.get("policy") or {}
-    for key in ("runtime_policy_id", "runtime_policy_version",
-                "threshold_config_version", "pin_hash", "dataset_hash"):
+    for key in (
+        "runtime_policy_id",
+        "runtime_policy_version",
+        "threshold_config_version",
+        "pin_hash",
+        "dataset_hash",
+    ):
         need(bool(policy.get(key)), f"policy.{key} is required")
     for original in package.get("originals") or []:
         need(
             ids.is_content_hash(original.get("content_hash")),
             "every original needs a sha256 content hash",
         )
-        need(bool(original.get("artifact_version_id")),
-             "every original needs an artifact version id")
+        need(
+            bool(original.get("artifact_version_id")),
+            "every original needs an artifact version id",
+        )
     for decision in package.get("decisions") or []:
-        need(bool(decision.get("disposition")),
-             "every decision needs a disposition (unresolved is explicit)")
-    need(package.get("equated_with_collusion") is False,
-         "exports must not equate outcomes with collusion (C-02)")
+        need(
+            bool(decision.get("disposition")),
+            "every decision needs a disposition (unresolved is explicit)",
+        )
+    need(
+        package.get("equated_with_collusion") is False,
+        "exports must not equate outcomes with collusion (C-02)",
+    )
     return errors

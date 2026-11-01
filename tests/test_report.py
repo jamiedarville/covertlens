@@ -32,17 +32,28 @@ def sample_report():
     results, deliveries = [], []
     for fixture in (clean, encoded):
         handle = gate.intercept_bytes("R-01", fixture.data, ctx)
-        results.append(analyze_lsb_version(
-            gate.store, handle.artifact_version_id, actor_id="detector"))
+        results.append(
+            analyze_lsb_version(
+                gate.store, handle.artifact_version_id, actor_id="detector"
+            )
+        )
         delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
         gate.record_verdict(delivery.delivery_id, Verdict.FLAG)
         gate.recipient_access(delivery.delivery_id)
         gate.record_parse(delivery.delivery_id, ParseStatus.PARSED)
         deliveries.append(delivery)
     events = gate.events(RUN)
-    events.append(Event(EventType.RECIPIENT_ACTION, RUN, len(events), TS,
-                        delivery_id=deliveries[1].delivery_id,
-                        recipient_id="agent-b", payload={"action": "answer"}))
+    events.append(
+        Event(
+            EventType.RECIPIENT_ACTION,
+            RUN,
+            len(events),
+            TS,
+            delivery_id=deliveries[1].delivery_id,
+            recipient_id="agent-b",
+            payload={"action": "answer"},
+        )
+    )
     return build_run_report(events, results, report_id="rpt_1"), deliveries
 
 
@@ -61,7 +72,9 @@ def test_report_includes_originals_findings_context_and_timeline():
     assert report["prior_context"]["participants"]["agent-b"]["actions"]
     assert report["prior_context"]["episodes"]["ep_1"]["deliveries"]
     assert len(report["triage_queue"]) == 2
-    assert report["triage_queue"][0]["max_score"] >= report["triage_queue"][1]["max_score"]
+    assert (
+        report["triage_queue"][0]["max_score"] >= report["triage_queue"][1]["max_score"]
+    )
     assert all(r["disposition"] == "unresolved" for r in report["triage_queue"])
     json.dumps(report)
 
@@ -71,12 +84,20 @@ def test_review_supports_all_five_dispositions():
     target = deliveries[0].delivery_id
     for disposition in DISPOSITIONS:
         kwargs = (
-            {"demonstrated_basis": "independent decode matched the recipient action payload"}
-            if disposition == "demonstrated_transfer" else {}
+            {
+                "demonstrated_basis": "independent decode matched the recipient action payload"
+            }
+            if disposition == "demonstrated_transfer"
+            else {}
         )
         updated = apply_review(
-            report, target, reviewer="researcher-1",
-            disposition=disposition, note="checked", **kwargs)
+            report,
+            target,
+            reviewer="researcher-1",
+            disposition=disposition,
+            note="checked",
+            **kwargs,
+        )
         assert updated["reviews"][target]["disposition"] == disposition
         assert updated["disposition_counts"][disposition] >= 1
         assert validate_run_report(updated) == []
@@ -91,12 +112,19 @@ def test_review_supports_all_five_dispositions():
 def test_demonstrated_transfer_requires_independent_basis():
     report, deliveries = sample_report()
     with pytest.raises(ValueError, match="demonstrated_basis|recorded basis"):
-        apply_review(report, deliveries[0].delivery_id,
-                     reviewer="r", disposition="demonstrated_transfer")
+        apply_review(
+            report,
+            deliveries[0].delivery_id,
+            reviewer="r",
+            disposition="demonstrated_transfer",
+        )
     updated = apply_review(
-        report, deliveries[0].delivery_id, reviewer="r",
+        report,
+        deliveries[0].delivery_id,
+        reviewer="r",
         disposition="demonstrated_transfer",
-        demonstrated_basis="payload independently recovered and quoted in the action")
+        demonstrated_basis="payload independently recovered and quoted in the action",
+    )
     assert updated["reviews"][deliveries[0].delivery_id]["demonstrated_basis"]
 
 

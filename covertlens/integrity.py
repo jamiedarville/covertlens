@@ -28,8 +28,9 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from .parsing import AnalysisResult, Finding
 from .verdicts import ThresholdConfig, VerdictDecision, decide_verdict

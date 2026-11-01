@@ -2,12 +2,12 @@
 
 import pytest
 
-from covertlens.geometric_fixtures import SUBFAMILIES
 from covertlens.geo_benchmark import (
     benign_controls,
     run_geo_benchmark,
     validate_geo_benchmark,
 )
+from covertlens.geometric_fixtures import SUBFAMILIES
 
 
 @pytest.fixture(scope="module")
@@ -23,8 +23,10 @@ def test_all_five_subfamilies_reported_separately(report):
     for block in report["subfamilies"].values():
         assert block["encoded"]["recall_any_signal"]["n"] >= 5
         assert block["benign"]["false_structure_claims"]["n"] >= 5
-        for metric in (block["encoded"]["recall_any_signal"],
-                       block["benign"]["false_structure_claims"]):
+        for metric in (
+            block["encoded"]["recall_any_signal"],
+            block["benign"]["false_structure_claims"],
+        ):
             assert metric["wilson_95"]["low"] is not None
 
 
@@ -37,8 +39,12 @@ def test_benign_controls_distinguished(report):
         assert block["context"]
     # Legitimate charts quantize (data values) but claim no structure:
     # distinguished by scene context plus the structure test (GEO-05).
-    assert report["benign_controls"]["chart"]["classifications"].get(
-        "structure_claimed", 0) == 0
+    assert (
+        report["benign_controls"]["chart"]["classifications"].get(
+            "structure_claimed", 0
+        )
+        == 0
+    )
 
 
 def test_benchmark_separates_recall_from_false_claims(report):
@@ -64,4 +70,8 @@ def test_controls_are_deterministic_and_benign_labelled():
     assert [c["content_hash"] for c in first] == [c["content_hash"] for c in second]
     assert all(c["expected"] == "benign" for c in first)
     assert {c["kind"] for c in first} == {
-        "skyline", "chart", "abstract", "benign_scene"}
+        "skyline",
+        "chart",
+        "abstract",
+        "benign_scene",
+    }

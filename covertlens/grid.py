@@ -102,16 +102,15 @@ def _fold(values: list[float], offset: float, step: float):
     return symbols, residuals
 
 
-def _null_best_r(rng: random.Random, values: list[float],
-                 candidates: list[float], fractional: bool) -> float:
+def _null_best_r(
+    rng: random.Random, values: list[float], candidates: list[float], fractional: bool
+) -> float:
     n = len(values)
     low, high = min(values), max(values)
     if fractional:
         fracs = [abs(v - math.floor(v)) for v in values]
         lo_i, hi_i = math.floor(low), math.floor(high)
-        draw = [
-            rng.randint(lo_i, hi_i) + rng.choice(fracs) for _ in range(n)
-        ]
+        draw = [rng.randint(lo_i, hi_i) + rng.choice(fracs) for _ in range(n)]
     else:
         draw = [rng.uniform(low, high) for _ in range(n)]
     _, best_r = _best_step(draw, candidates)
@@ -137,14 +136,21 @@ def discover_grid(
     n = len(vals)
     base_block: dict[str, Any] = {
         "grid": {"source": "discovered", "step": None, "offset": None},
-        "step": None, "offset": None,
-        "symbols": [0] * n, "residuals": [0.0] * n,
-        "supporting": 0, "support_fraction": 0.0,
-        "mean_abs_residual": 0.0, "rms_residual": 0.0,
-        "max_residual": 0.0, "max_abs_residual": 0.0,
+        "step": None,
+        "offset": None,
+        "symbols": [0] * n,
+        "residuals": [0.0] * n,
+        "supporting": 0,
+        "support_fraction": 0.0,
+        "mean_abs_residual": 0.0,
+        "rms_residual": 0.0,
+        "max_residual": 0.0,
+        "max_abs_residual": 0.0,
         "levels_used": len(set(vals)),
-        "rayleigh_R": 0.0, "null_exceedance": 1.0,
-        "score": 0.0, "elements": n,
+        "rayleigh_R": 0.0,
+        "null_exceedance": 1.0,
+        "score": 0.0,
+        "elements": n,
     }
     if n < 3 or max(vals) == min(vals):
         base_block["detail"] = "constant or too-short sequence; no grid to discover"
@@ -179,8 +185,7 @@ def discover_grid(
         var = sum((s - mean_s) ** 2 for s in kept_symbols)
         if var == 0:
             break
-        cov = sum((s - mean_s) * (v - mean_v)
-                  for s, v in zip(kept_symbols, kept_vals))
+        cov = sum((s - mean_s) * (v - mean_v) for s, v in zip(kept_symbols, kept_vals))
         slope = cov / var
         if slope <= 0:
             break
@@ -206,39 +211,51 @@ def discover_grid(
     null_exceedance = round(exceed / total, 6) if total else 1.0
 
     block = dict(base_block)
-    block.update({
-        "grid": {"source": "discovered", "step": round(step, 4),
-                 "offset": round(offset, 4), "base": round(offset, 4)},
-        "step": round(step, 4), "offset": round(offset, 4),
-        "symbols": symbols, "residuals": residuals,
-        "supporting": supporting,
-        "support_fraction": round(support_fraction, 6),
-        "mean_abs_residual": round(sum(abs(r) for r in residuals) / n, 4),
-        "rms_residual": round(rms, 4),
-        "max_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
-        "max_abs_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
-        "levels_used": len(set(symbols)),
-        "rayleigh_R": round(best_r, 6),
-        "null_exceedance": null_exceedance,
-        "null": {"replicates_per_null": replicates,
-                 "exceedance_by_null": per_null,
-                 "seed": seed},
-        # Significance-adjusted fit score: how well values sit on
-        # the discovered grid, tapered to zero as the null
-        # exceedance approaches the 0.05 level. Phase concentration
-        # alone (a high R with scattered residues) scores low.
-        "score": round(
-            support_fraction
-            * max(0.0, 1.0 - rms / max(tolerance, 1e-9))
-            * max(0.0, 1.0 - null_exceedance / 0.05),
-            6),
-    })
+    block.update(
+        {
+            "grid": {
+                "source": "discovered",
+                "step": round(step, 4),
+                "offset": round(offset, 4),
+                "base": round(offset, 4),
+            },
+            "step": round(step, 4),
+            "offset": round(offset, 4),
+            "symbols": symbols,
+            "residuals": residuals,
+            "supporting": supporting,
+            "support_fraction": round(support_fraction, 6),
+            "mean_abs_residual": round(sum(abs(r) for r in residuals) / n, 4),
+            "rms_residual": round(rms, 4),
+            "max_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
+            "max_abs_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
+            "levels_used": len(set(symbols)),
+            "rayleigh_R": round(best_r, 6),
+            "null_exceedance": null_exceedance,
+            "null": {
+                "replicates_per_null": replicates,
+                "exceedance_by_null": per_null,
+                "seed": seed,
+            },
+            # Significance-adjusted fit score: how well values sit on
+            # the discovered grid, tapered to zero as the null
+            # exceedance approaches the 0.05 level. Phase concentration
+            # alone (a high R with scattered residues) scores low.
+            "score": round(
+                support_fraction
+                * max(0.0, 1.0 - rms / max(tolerance, 1e-9))
+                * max(0.0, 1.0 - null_exceedance / 0.05),
+                6,
+            ),
+        }
+    )
     _attach_declared(block, vals, tolerance, declared_grid)
     return block
 
 
-def fit_declared_grid(values: list[float], declared: dict[str, Any],
-                      tolerance: float) -> dict[str, Any]:
+def fit_declared_grid(
+    values: list[float], declared: dict[str, Any], tolerance: float
+) -> dict[str, Any]:
     """Fit a declared prior grid (base/step or levels) to a sequence."""
     vals = [float(v) for v in values]
     if declared.get("step"):
@@ -259,18 +276,24 @@ def fit_declared_grid(values: list[float], declared: dict[str, Any],
     supporting = sum(1 for r in residuals if abs(r) <= tolerance)
     n = len(vals) or 1
     return {
-        "grid": grid, "symbols": symbols, "residuals": residuals,
+        "grid": grid,
+        "symbols": symbols,
+        "residuals": residuals,
         "supporting": supporting,
         "support_fraction": round(supporting / n, 6),
         "rms_residual": round(math.sqrt(sum(r * r for r in residuals) / n), 4),
         "max_residual": round(max((abs(r) for r in residuals), default=0.0), 4),
-        "base": base, "step": step,
+        "base": base,
+        "step": step,
     }
 
 
-def _attach_declared(block: dict[str, Any], vals: list[float],
-                     tolerance: float,
-                     declared_grid: dict[str, Any] | None) -> None:
+def _attach_declared(
+    block: dict[str, Any],
+    vals: list[float],
+    tolerance: float,
+    declared_grid: dict[str, Any] | None,
+) -> None:
     if not declared_grid:
         return
     declared = fit_declared_grid(vals, declared_grid, tolerance)
@@ -279,6 +302,7 @@ def _attach_declared(block: dict[str, Any], vals: list[float],
     declared_step = declared.get("step")
     if discovered_step and declared_step:
         block["declared_vs_discovered_step_ratio"] = round(
-            declared_step / discovered_step, 6)
+            declared_step / discovered_step, 6
+        )
     else:
         block["declared_vs_discovered_step_ratio"] = None

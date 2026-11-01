@@ -48,19 +48,28 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _JPEG_MAGIC = b"\xff\xd8\xff"
 
 FAILURE_MODES: tuple[dict[str, str], ...] = (
-    {"status": "no_foreground",
-     "meaning": "no pixel differs from the border background"},
-    {"status": "too_few_elements",
-     "meaning": "fewer than min_elements repeated components found"},
-    {"status": "unsupported_media",
-     "meaning": "not a PNG raster (JPEG would blur measured attributes)"},
-    {"status": "limit_exceeded",
-     "meaning": "input exceeds byte or pixel limits for this segmenter"},
-    {"status": "corrupt_input",
-     "meaning": "bytes claim to be PNG but do not decode"},
-    {"status": "corrupt_source",
-     "meaning": "a vector source was intercepted but could not be parsed "
-                "(CL-41); clearance is refused, never inferred from the raster"},
+    {
+        "status": "no_foreground",
+        "meaning": "no pixel differs from the border background",
+    },
+    {
+        "status": "too_few_elements",
+        "meaning": "fewer than min_elements repeated components found",
+    },
+    {
+        "status": "unsupported_media",
+        "meaning": "not a PNG raster (JPEG would blur measured attributes)",
+    },
+    {
+        "status": "limit_exceeded",
+        "meaning": "input exceeds byte or pixel limits for this segmenter",
+    },
+    {"status": "corrupt_input", "meaning": "bytes claim to be PNG but do not decode"},
+    {
+        "status": "corrupt_source",
+        "meaning": "a vector source was intercepted but could not be parsed "
+        "(CL-41); clearance is refused, never inferred from the raster",
+    },
 )
 
 
@@ -107,8 +116,15 @@ class SegmentationResult:
         return [e[attribute] for e in self.elements]
 
     def sequences(self) -> dict[str, list[Any]]:
-        keys = ("height", "top", "width", "gap_to_next", "angle_deg",
-                "colour_index", "brightness")
+        keys = (
+            "height",
+            "top",
+            "width",
+            "gap_to_next",
+            "angle_deg",
+            "colour_index",
+            "brightness",
+        )
         return {k: self.sequence(k) for k in keys}
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,8 +149,9 @@ class SegmentationResult:
         }
 
 
-def _components(mask: list[bool], width: int, height: int,
-                min_pixels: int) -> list[list[int]]:
+def _components(
+    mask: list[bool], width: int, height: int, min_pixels: int
+) -> list[list[int]]:
     """4-connected foreground components (iterative flood fill)."""
     seen = bytearray(len(mask))
     components: list[list[int]] = []
@@ -148,9 +165,12 @@ def _components(mask: list[bool], width: int, height: int,
             idx = stack.pop()
             points.append(idx)
             x, y = idx % width, idx // width
-            for nidx in (idx - 1 if x else -1, idx + 1 if x < width - 1 else -1,
-                         idx - width if y else -1,
-                         idx + width if y < height - 1 else -1):
+            for nidx in (
+                idx - 1 if x else -1,
+                idx + 1 if x < width - 1 else -1,
+                idx - width if y else -1,
+                idx + width if y < height - 1 else -1,
+            ):
                 if nidx >= 0 and mask[nidx] and not seen[nidx]:
                     seen[nidx] = 1
                     stack.append(nidx)
@@ -159,8 +179,9 @@ def _components(mask: list[bool], width: int, height: int,
     return components
 
 
-def _reading_order(components: list[dict[str, Any]],
-                   overlap: float) -> list[dict[str, Any]]:
+def _reading_order(
+    components: list[dict[str, Any]], overlap: float
+) -> list[dict[str, Any]]:
     """Group into rows by vertical overlap; rows top-down, items L-to-R."""
     rows: list[dict[str, Any]] = []
     for comp in sorted(components, key=lambda c: (c["top"], c["left"])):
@@ -181,12 +202,15 @@ def _reading_order(components: list[dict[str, Any]],
     return ordered
 
 
-def segment_image(data: bytes, config: SegmenterConfig | None = None) -> SegmentationResult:
+def segment_image(
+    data: bytes, config: SegmenterConfig | None = None
+) -> SegmentationResult:
     """Segment repeated elements in original PNG bytes (reading order)."""
     active = config or SegmenterConfig()
     if len(data) > active.max_input_bytes:
-        return SegmentationResult("limit_exceeded", detail="input bytes over limit",
-                                  config=active)
+        return SegmentationResult(
+            "limit_exceeded", detail="input bytes over limit", config=active
+        )
     if data.startswith(_JPEG_MAGIC):
         return SegmentationResult(
             "unsupported_media",
@@ -194,29 +218,36 @@ def segment_image(data: bytes, config: SegmenterConfig | None = None) -> Segment
             config=active,
         )
     if not data.startswith(_PNG_MAGIC):
-        return SegmentationResult("unsupported_media", detail="not a PNG raster",
-                                  config=active)
+        return SegmentationResult(
+            "unsupported_media", detail="not a PNG raster", config=active
+        )
     try:
         pixels, width, height = _load_png(data)
     except Exception as exc:  # corrupt or non-RGB PNG
         return SegmentationResult("corrupt_input", detail=str(exc), config=active)
     if width * height > active.max_pixels:
-        return SegmentationResult("limit_exceeded", detail="pixel count over limit",
-                                  width=width, height=height, config=active)
+        return SegmentationResult(
+            "limit_exceeded",
+            detail="pixel count over limit",
+            width=width,
+            height=height,
+            config=active,
+        )
 
     border: dict[tuple[int, int, int], int] = {}
     for x in range(width):
         for y in (0, height - 1):
-            c = tuple(pixels[(y * width + x) * 3:(y * width + x) * 3 + 3])
+            base = (y * width + x) * 3
+            c = (pixels[base], pixels[base + 1], pixels[base + 2])
             border[c] = border.get(c, 0) + 1
-    background = max(border, key=border.get)
+    background = max(border, key=lambda c: border[c])
     mask = [
-        tuple(pixels[i:i + 3]) != background
-        for i in range(0, width * height * 3, 3)
+        tuple(pixels[i : i + 3]) != background for i in range(0, width * height * 3, 3)
     ]
     if not any(mask):
-        return SegmentationResult("no_foreground", width=width, height=height,
-                                  config=active)
+        return SegmentationResult(
+            "no_foreground", width=width, height=height, config=active
+        )
 
     raw = []
     for points in _components(mask, width, height, active.min_component_pixels):
@@ -224,9 +255,9 @@ def segment_image(data: bytes, config: SegmenterConfig | None = None) -> Segment
         ys = [p // width for p in points]
         colours: dict[tuple[int, int, int], int] = {}
         for p in points:
-            c = tuple(pixels[p * 3:p * 3 + 3])
+            c = (pixels[p * 3], pixels[p * 3 + 1], pixels[p * 3 + 2])
             colours[c] = colours.get(c, 0) + 1
-        colour = max(colours, key=colours.get)
+        colour = max(colours, key=lambda c: colours[c])
         rows: dict[int, list[int]] = {}
         for p in points:
             rows.setdefault(p // width, []).append(p % width)
@@ -238,18 +269,23 @@ def segment_image(data: bytes, config: SegmenterConfig | None = None) -> Segment
             range(len(active.colour_palette)),
             key=lambda i: math.dist(colour, active.colour_palette[i]),
         )
-        raw.append({
-            "left": min(xs), "top": min(ys),
-            "width": max(xs) - min(xs) + 1,
-            "height": max(ys) - min(ys) + 1,
-            "bottom": max(ys),
-            "area": len(points),
-            "colour": list(colour),
-            "colour_index": palette_index,
-            "colour_distance": round(math.dist(colour, active.colour_palette[palette_index]), 3),
-            "brightness": round(sum(colour) / 3.0, 3),
-            "angle_deg": round(math.degrees(math.atan(-(num / den))), 3),
-        })
+        raw.append(
+            {
+                "left": min(xs),
+                "top": min(ys),
+                "width": max(xs) - min(xs) + 1,
+                "height": max(ys) - min(ys) + 1,
+                "bottom": max(ys),
+                "area": len(points),
+                "colour": list(colour),
+                "colour_index": palette_index,
+                "colour_distance": round(
+                    math.dist(colour, active.colour_palette[palette_index]), 3
+                ),
+                "brightness": round(sum(colour) / 3.0, 3),
+                "angle_deg": round(math.degrees(math.atan(-(num / den))), 3),
+            }
+        )
     ordered = _reading_order(raw, active.row_overlap_fraction)
     elements: list[dict[str, Any]] = []
     for i, comp in enumerate(ordered):
@@ -259,26 +295,34 @@ def segment_image(data: bytes, config: SegmenterConfig | None = None) -> Segment
             shared = min(comp["bottom"], nxt["bottom"]) - max(comp["top"], nxt["top"])
             if shared >= 0.5 * min(comp["height"], nxt["height"]):
                 gap = nxt["left"] - (comp["left"] + comp["width"])
-        elements.append({
-            "index": i,
-            "left": comp["left"], "top": comp["top"],
-            "width": comp["width"], "height": comp["height"],
-            "area": comp["area"],
-            "gap_to_next": gap,
-            "angle_deg": comp["angle_deg"],
-            "colour": comp["colour"],
-            "colour_index": comp["colour_index"],
-            "colour_distance": comp["colour_distance"],
-            "brightness": comp["brightness"],
-        })
+        elements.append(
+            {
+                "index": i,
+                "left": comp["left"],
+                "top": comp["top"],
+                "width": comp["width"],
+                "height": comp["height"],
+                "area": comp["area"],
+                "gap_to_next": gap,
+                "angle_deg": comp["angle_deg"],
+                "colour": comp["colour"],
+                "colour_index": comp["colour_index"],
+                "colour_distance": comp["colour_distance"],
+                "brightness": comp["brightness"],
+            }
+        )
     if len(elements) < active.min_elements:
         return SegmentationResult(
             "too_few_elements",
             detail=f"{len(elements)} element(s) below min_elements={active.min_elements}",
-            width=width, height=height, elements=elements, config=active,
+            width=width,
+            height=height,
+            elements=elements,
+            config=active,
         )
-    return SegmentationResult("ok", width=width, height=height,
-                              elements=elements, config=active)
+    return SegmentationResult(
+        "ok", width=width, height=height, elements=elements, config=active
+    )
 
 
 def validate_segmentation(doc: dict[str, Any]) -> list[str]:
@@ -289,17 +333,26 @@ def validate_segmentation(doc: dict[str, Any]) -> list[str]:
         if not cond:
             errors.append(msg)
 
-    need(doc.get("schema") == SEGMENTATION_SCHEMA, f"schema must be {SEGMENTATION_SCHEMA}")
-    need(doc.get("decoded_message") is None,
-         "segmentation must not claim a decoded message (C-09)")
+    need(
+        doc.get("schema") == SEGMENTATION_SCHEMA,
+        f"schema must be {SEGMENTATION_SCHEMA}",
+    )
+    need(
+        doc.get("decoded_message") is None,
+        "segmentation must not claim a decoded message (C-09)",
+    )
     segmenter = doc.get("segmenter") or {}
     need(segmenter.get("name") == SEGMENTER_NAME, "segmenter name is required")
     need(bool(segmenter.get("version")), "segmenter version is required")
     statuses = {m["status"] for m in FAILURE_MODES} | {"ok"}
     need(doc.get("status") in statuses, "status must be a recorded status/failure mode")
     if doc.get("status") == "ok":
-        need(doc.get("element_count", 0) >= 3, "ok results need >= min_elements elements")
+        need(
+            doc.get("element_count", 0) >= 3, "ok results need >= min_elements elements"
+        )
         elements = doc.get("elements") or []
-        need([e["index"] for e in elements] == list(range(len(elements))),
-             "elements must be indexed in reading order")
+        need(
+            [e["index"] for e in elements] == list(range(len(elements))),
+            "elements must be indexed in reading order",
+        )
     return errors

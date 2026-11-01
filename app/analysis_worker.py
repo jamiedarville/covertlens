@@ -66,8 +66,9 @@ def _candidate_steps(values: list[float], tolerance: float) -> list[float]:
     return steps
 
 
-def _periodogram(values: list[float], tolerance: float,
-                 channel: dict[str, Any]) -> dict[str, Any]:
+def _periodogram(
+    values: list[float], tolerance: float, channel: dict[str, Any]
+) -> dict[str, Any]:
     """Sampled Rayleigh R(step) sweep for one channel (CL-48)."""
     from covertlens.grid import rayleigh
 
@@ -77,16 +78,25 @@ def _periodogram(values: list[float], tolerance: float,
         "discovered_rayleigh_R": channel.get("rayleigh_R"),
     }
     if len(values) < 3 or max(values) == min(values):
-        return {**base, "available": False,
-                "reason": "constant or too-short sequence; no sweep",
-                "points": []}
+        return {
+            **base,
+            "available": False,
+            "reason": "constant or too-short sequence; no sweep",
+            "points": [],
+        }
     candidates = _candidate_steps(values, tolerance)
     if not candidates:
-        return {**base, "available": False,
-                "reason": "observed range too small for a resolvable step",
-                "points": []}
-    budget = (_PERIODOGRAM_POINTS if len(values) <= _LARGE_SEQUENCE
-              else _PERIODOGRAM_POINTS_LARGE)
+        return {
+            **base,
+            "available": False,
+            "reason": "observed range too small for a resolvable step",
+            "points": [],
+        }
+    budget = (
+        _PERIODOGRAM_POINTS
+        if len(values) <= _LARGE_SEQUENCE
+        else _PERIODOGRAM_POINTS_LARGE
+    )
     if len(candidates) > budget:
         stride = (len(candidates) - 1) / (budget - 1)
         sampled = [candidates[round(i * stride)] for i in range(budget)]
@@ -99,11 +109,14 @@ def _periodogram(values: list[float], tolerance: float,
     # The headline discovered step/R must appear verbatim so the
     # marker the page draws is exactly the library measurement.
     if discovered_step is not None and not any(
-            abs(p["step"] - discovered_step) < 1e-9 for p in points):
-        points.append({
-            "step": round(float(discovered_step), 4),
-            "rayleigh_R": channel.get("rayleigh_R"),
-        })
+        abs(p["step"] - discovered_step) < 1e-9 for p in points
+    ):
+        points.append(
+            {
+                "step": round(float(discovered_step), 4),
+                "rayleigh_R": channel.get("rayleigh_R"),
+            }
+        )
         points.sort(key=lambda p: p["step"])
     return {**base, "available": True, "reason": None, "points": points}
 
@@ -115,8 +128,10 @@ def _histogram(residuals: list[float], tolerance: float) -> dict[str, Any]:
     bound = max(max(abs(r) for r in residuals), abs(tolerance))
     if bound <= 0:
         bound = 1.0
-    edges = [round(-bound + 2.0 * bound * i / _HISTOGRAM_BINS, 4)
-             for i in range(_HISTOGRAM_BINS + 1)]
+    edges = [
+        round(-bound + 2.0 * bound * i / _HISTOGRAM_BINS, 4)
+        for i in range(_HISTOGRAM_BINS + 1)
+    ]
     counts = [0] * _HISTOGRAM_BINS
     width = 2.0 * bound / _HISTOGRAM_BINS
     for r in residuals:
@@ -144,8 +159,7 @@ def _overlay_block(geometric: dict[str, Any]) -> dict[str, Any] | None:
         "gap": ("gap_to_next", "px", config.residual_tolerance),
         "lit": ("brightness", "grey levels", config.brightness_tolerance),
         "angle": ("angle_deg", "degrees", config.angle_residual_tolerance),
-        "colour": ("colour_index", "palette index",
-                   config.colour_distance_tolerance),
+        "colour": ("colour_index", "palette index", config.colour_distance_tolerance),
     }
     primary = geometric.get("primary_channel")
     out: dict[str, Any] = {}
@@ -165,8 +179,9 @@ def _overlay_block(geometric: dict[str, Any]) -> dict[str, Any] | None:
         if name == "colour":
             entry["periodogram"] = {
                 "available": False,
-                "reason": ("colour is scored by exact palette repetition, "
-                           "not a Rayleigh grid"),
+                "reason": (
+                    "colour is scored by exact palette repetition, not a Rayleigh grid"
+                ),
                 "discovered_step": None,
                 "discovered_rayleigh_R": channel.get("rayleigh_R"),
                 "points": [],
@@ -214,7 +229,8 @@ def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
             base["status"] = "oversized"
             base["detail"] = (
                 f"image is {width}x{height} "
-                f"({width * height} px > {max_pixels} px limit)")
+                f"({width * height} px > {max_pixels} px limit)"
+            )
             return base
 
     result = analyze_all_bytes(data)

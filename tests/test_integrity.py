@@ -7,8 +7,6 @@ AC3 run-context changes recompute verdicts while allowing safe image-score reuse
 
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
-
 from covertlens.events import Verdict
 from covertlens.fixtures import build_pair
 from covertlens.gate import (
@@ -24,10 +22,13 @@ from covertlens.store import ArtifactStore
 from covertlens.verdicts import FamilyThresholds, ThresholdConfig
 
 CTX = InterceptionContext(run_id="run_i", sender_id="agent-a")
-FROZEN = ThresholdConfig(families={
-    "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)})
-FROZEN_V2 = ThresholdConfig(version="2.0.0", families={
-    "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)})
+FROZEN = ThresholdConfig(
+    families={"spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)}
+)
+FROZEN_V2 = ThresholdConfig(
+    version="2.0.0",
+    families={"spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.6, 0.9)},
+)
 
 
 def lsb_result(payload=64):
@@ -44,8 +45,11 @@ def test_changed_bytes_invalidate_cached_scores():
         calls.append(1)
         return detect_lsb(res)
 
-    kw = dict(detector_name=LSB_DETECTOR_NAME,
-              detector_version=LSB_DETECTOR_VERSION, config_version="1.0.0")
+    kw = dict(
+        detector_name=LSB_DETECTOR_NAME,
+        detector_version=LSB_DETECTOR_VERSION,
+        config_version="1.0.0",
+    )
     first = cache.get_or_score(result, counting, **kw)
     second = cache.get_or_score(result, counting, **kw)
     assert first is second and len(calls) == 1  # reuse for identical bytes
@@ -60,15 +64,34 @@ def test_detector_and_config_changes_invalidate_scores():
     result, _ = lsb_result()
     finding = detect_lsb(result)
     cache.put_score(result, finding)
-    assert cache.get_score(result, detector_name=LSB_DETECTOR_NAME,
-                           detector_version=LSB_DETECTOR_VERSION,
-                           config_version="1.0.0") is finding
+    assert (
+        cache.get_score(
+            result,
+            detector_name=LSB_DETECTOR_NAME,
+            detector_version=LSB_DETECTOR_VERSION,
+            config_version="1.0.0",
+        )
+        is finding
+    )
     # A detector version or config bump is a different key: a miss.
-    assert cache.get_score(result, detector_name=LSB_DETECTOR_NAME,
-                           detector_version="2.0.0", config_version="1.0.0") is None
-    assert cache.get_score(result, detector_name=LSB_DETECTOR_NAME,
-                           detector_version=LSB_DETECTOR_VERSION,
-                           config_version="2.0.0") is None
+    assert (
+        cache.get_score(
+            result,
+            detector_name=LSB_DETECTOR_NAME,
+            detector_version="2.0.0",
+            config_version="1.0.0",
+        )
+        is None
+    )
+    assert (
+        cache.get_score(
+            result,
+            detector_name=LSB_DETECTOR_NAME,
+            detector_version=LSB_DETECTOR_VERSION,
+            config_version="2.0.0",
+        )
+        is None
+    )
     stats = cache.stats()
     assert stats["scores"]["hits"] == 1 and stats["scores"]["misses"] == 2
 
@@ -96,8 +119,11 @@ def test_context_change_recomputes_verdict_but_reuses_score():
         calls.append(1)
         return detect_lsb(res)
 
-    kw = dict(detector_name=LSB_DETECTOR_NAME,
-              detector_version=LSB_DETECTOR_VERSION, config_version="1.0.0")
+    kw = dict(
+        detector_name=LSB_DETECTOR_NAME,
+        detector_version=LSB_DETECTOR_VERSION,
+        config_version="1.0.0",
+    )
     finding = cache.get_or_score(result, counting, **kw)
     ctx_a = {"run_id": "run_i", "episode_id": "ep_1", "recipient_id": "agent-b"}
     ctx_b = {"run_id": "run_i", "episode_id": "ep_2", "recipient_id": "agent-b"}
@@ -114,10 +140,14 @@ def test_context_change_recomputes_verdict_but_reuses_score():
 def test_races_retries_and_alternate_references_serve_nothing_unauthorized():
     gate = InterceptionGate(ArtifactStore())
     _, encoded = build_pair("spatial_lsb", width=32, height=24, payload_bytes=16)
-    handle = gate.intercept_reference("R-03", "artifact://img", lambda r: encoded.data, CTX)
+    handle = gate.intercept_reference(
+        "R-03", "artifact://img", lambda r: encoded.data, CTX
+    )
     # An alternate route/reference to the same bytes carries the same
     # original hash (a new logical artifact, the identical bytes).
-    again = gate.intercept_reference("R-02", "artifact://img", lambda r: encoded.data, CTX)
+    again = gate.intercept_reference(
+        "R-02", "artifact://img", lambda r: encoded.data, CTX
+    )
     assert again.content_hash == handle.content_hash
     delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
     retry = gate.attempt_delivery(handle, recipient_id="agent-b")
@@ -145,5 +175,7 @@ def test_races_retries_and_alternate_references_serve_nothing_unauthorized():
         assert sum(pool.map(try_everything, range(16))) == 0
     report = gate.access_attempt_report()
     assert report["unauthorized_served"] == 0 and report["served"] == 0
-    attempted = [e for e in gate.events("run_i") if e.event_type.value == "delivery.attempted"]
+    attempted = [
+        e for e in gate.events("run_i") if e.event_type.value == "delivery.attempted"
+    ]
     assert len(attempted) == 1  # retry stayed idempotent under load

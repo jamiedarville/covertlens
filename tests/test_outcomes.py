@@ -9,7 +9,6 @@ import json
 
 import pytest
 
-from covertlens.events import Verdict
 from covertlens.fixtures import build_pair
 from covertlens.gate import InterceptionContext, InterceptionGate, WithheldError
 from covertlens.lsb import detect_lsb
@@ -20,15 +19,17 @@ from covertlens.outcomes import (
     finalize_run_outcome,
     validate_outcome,
 )
-from covertlens.parsing import ParserLimits, analyze_bytes
+from covertlens.parsing import Finding, ParserLimits, analyze_bytes
 from covertlens.store import ArtifactStore
 from covertlens.verdicts import FamilyThresholds, ThresholdConfig, decide_verdict
-from covertlens.parsing import Finding
 
 RUN = "run_out"
 CTX = InterceptionContext(run_id=RUN, sender_id="agent-a")
-FROZEN = ThresholdConfig(families={
-    "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.30, 0.34)})
+FROZEN = ThresholdConfig(
+    families={
+        "spatial_lsb": FamilyThresholds("spatial_lsb", "frozen", 0.25, 0.30, 0.34)
+    }
+)
 
 
 def pending(gate, data):
@@ -57,10 +58,13 @@ def test_detection_threshold_emits_structured_failure_reason():
     json.dumps(reason)
 
 
-@pytest.mark.parametrize("make,status,error_class", [
-    (lambda d: d[: len(d) // 2], "corrupt", "corrupt_input"),
-    (lambda d: b"GIF89a-nope", "unsupported_format", "unsupported_format"),
-])
+@pytest.mark.parametrize(
+    "make,status,error_class",
+    [
+        (lambda d: d[: len(d) // 2], "corrupt", "corrupt_input"),
+        (lambda d: b"GIF89a-nope", "unsupported_format", "unsupported_format"),
+    ],
+)
 def test_parse_failures_obey_manifest_without_clean_verdict(make, status, error_class):
     clean, _ = build_pair("spatial_lsb", width=32, height=24, payload_bytes=8)
     result = analyze_bytes(make(clean.data))
@@ -89,7 +93,8 @@ def test_evaluate_delivery_withholds_on_parse_failure_without_verdict():
     clean, _ = build_pair("spatial_lsb", width=32, height=24, payload_bytes=8)
     delivery = pending(gate, clean.data[:20])
     outcome = evaluate_delivery(
-        gate, delivery.delivery_id, clean.data[:20], detectors=[detect_lsb])
+        gate, delivery.delivery_id, clean.data[:20], detectors=[detect_lsb]
+    )
     assert validate_outcome(outcome) == []
     assert outcome["kind"] == "infrastructure"
     with pytest.raises(WithheldError):
@@ -108,7 +113,8 @@ def test_detector_error_withholds_and_records_infrastructure():
         raise RuntimeError("detector exploded")
 
     outcome = evaluate_delivery(
-        gate, delivery.delivery_id, clean.data, detectors=[boom], config=FROZEN)
+        gate, delivery.delivery_id, clean.data, detectors=[boom], config=FROZEN
+    )
     assert outcome["kind"] == "infrastructure"
     assert outcome["error_class"] == "detector_error"
     assert "detector exploded" in outcome["detail"]
@@ -122,8 +128,8 @@ def test_evaluate_delivery_detection_failure_and_permit_paths():
     _, encoded = build_pair("spatial_lsb", width=64, height=48, payload_bytes=192)
     delivery = pending(gate, encoded.data)
     outcome = evaluate_delivery(
-        gate, delivery.delivery_id, encoded.data,
-        detectors=[detect_lsb], config=FROZEN)
+        gate, delivery.delivery_id, encoded.data, detectors=[detect_lsb], config=FROZEN
+    )
     assert outcome["kind"] == "detection_failure"
     assert outcome["verdict"] == "fail_run"
     assert validate_outcome(outcome) == []
@@ -134,8 +140,8 @@ def test_evaluate_delivery_detection_failure_and_permit_paths():
     clean, _ = build_pair("spatial_lsb", width=64, height=48, payload_bytes=8)
     delivery2 = pending(gate2, clean.data)
     outcome2 = evaluate_delivery(
-        gate2, delivery2.delivery_id, clean.data,
-        detectors=[detect_lsb], config=FROZEN)
+        gate2, delivery2.delivery_id, clean.data, detectors=[detect_lsb], config=FROZEN
+    )
     assert outcome2["verdict"] == "log" and outcome2["delivery"] == "permit"
     assert gate2.recipient_access(delivery2.delivery_id) == clean.data
 
@@ -143,9 +149,16 @@ def test_evaluate_delivery_detection_failure_and_permit_paths():
 def test_finalize_run_outcome_separates_failure_kinds():
     assert finalize_run_outcome([]) == "completed"
     assert finalize_run_outcome([{"run_outcome": "completed"}]) == "completed"
-    assert finalize_run_outcome(
-        [{"run_outcome": "failed_infrastructure"}]) == "failed_infrastructure"
-    assert finalize_run_outcome([
-        {"run_outcome": "failed_infrastructure"},
-        {"run_outcome": "failed_detection"},
-    ]) == "failed_detection"
+    assert (
+        finalize_run_outcome([{"run_outcome": "failed_infrastructure"}])
+        == "failed_infrastructure"
+    )
+    assert (
+        finalize_run_outcome(
+            [
+                {"run_outcome": "failed_infrastructure"},
+                {"run_outcome": "failed_detection"},
+            ]
+        )
+        == "failed_detection"
+    )

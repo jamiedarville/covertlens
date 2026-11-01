@@ -22,7 +22,8 @@ informed an action; it never asserts what caused it.
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from . import ids
 from .events import Event, EventType, ParseStatus, TraceLog, Verdict
@@ -80,8 +81,10 @@ def join_trace(
     run_ids = {e.run_id for e in ordered}
     if len(run_ids) > 1:
         raise ValueError("events never join across runs (REV-02)")
-    run_id = ordered[0].run_id if ordered else (
-        events.run_id if isinstance(events, TraceLog) else None
+    run_id = (
+        ordered[0].run_id
+        if ordered
+        else (events.run_id if isinstance(events, TraceLog) else None)
     )
 
     errors: list[str] = []
@@ -89,7 +92,6 @@ def join_trace(
     if seqs != sorted(set(seqs)):
         errors.append("duplicate seq values in trace; ordering is ambiguous")
 
-    by_delivery: dict[str, dict[str, Any]] = {}
     attempts: list[Event] = []
     verdicts: dict[str, Event] = {}
     accesses: dict[str, Event] = {}
@@ -180,11 +182,15 @@ def join_trace(
         digest = attempt.content_hash
         if not digest or not ids.is_content_hash(digest):
             missing.append("content_hash")
-            errors.append(f"{delivery_id}: attempted delivery lacks a valid original content_hash")
+            errors.append(
+                f"{delivery_id}: attempted delivery lacks a valid original content_hash"
+            )
         verdict_event = verdicts.get(delivery_id)
         if verdict_event is None:
             missing.append("verdict_reference")
-            errors.append(f"{delivery_id}: no gate.verdict yet (verdict reference missing)")
+            errors.append(
+                f"{delivery_id}: no gate.verdict yet (verdict reference missing)"
+            )
         access = accesses.get(delivery_id)
         delivered = access is not None
         parse_event = parses.get(delivery_id)
@@ -383,7 +389,8 @@ def validate_trace_join(report: dict[str, Any]) -> list[str]:
             f"actions[{i}] must not claim causation",
         )
         need(
-            action.get("candidate_count") == len(action.get("candidate_delivery_ids") or []),
+            action.get("candidate_count")
+            == len(action.get("candidate_delivery_ids") or []),
             f"actions[{i}].candidate_count must match candidate_delivery_ids",
         )
     summary = report.get("summary") or {}

@@ -80,7 +80,9 @@ def test_changed_bytes_create_new_immutable_version():
     # The prior version is untouched and still serves its exact bytes.
     assert store.get_original(v1.artifact_version_id, actor_id="reviewer") == PNG_V1
     assert store.get_original(v2.artifact_version_id, actor_id="reviewer") == PNG_V2
-    assert store.head_version(v1.artifact_id).artifact_version_id == v2.artifact_version_id
+    assert (
+        store.head_version(v1.artifact_id).artifact_version_id == v2.artifact_version_id
+    )
 
 
 def test_new_version_invalidates_prior_verdicts_only():
@@ -136,7 +138,9 @@ def test_every_served_read_joins_the_access_history():
     store = ArtifactStore()
     version = put(store)
     store.get_original(version.artifact_version_id, actor_id="gate", purpose="analysis")
-    store.get_original(version.artifact_version_id, actor_id="reviewer", purpose="triage")
+    store.get_original(
+        version.artifact_version_id, actor_id="reviewer", purpose="triage"
+    )
     history = store.access_history(version.artifact_version_id)
     assert [(h.actor_id, h.purpose) for h in history] == [
         ("gate", "analysis"),

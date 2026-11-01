@@ -68,7 +68,9 @@ def test_analyze_returns_four_families_and_decision(client, geo_encoded):
     families = {f["family"] for f in payload["analysis"]["findings"]}
     assert "geometric" in families
     assert payload["geometric"]["classification"] in (
-        "quantized_without_structure", "structure_claimed")
+        "quantized_without_structure",
+        "structure_claimed",
+    )
     assert payload["decision"]["enforceable"] is False
     # Reviewer-only material is stripped from API responses (CL-46).
     assert "candidate_decode" not in response.text
@@ -85,8 +87,7 @@ def test_analyze_rejects_garbage_without_hanging(client):
     assert response.json()["decision"] is None
 
 
-def test_oversized_pixels_return_explicit_status(client, geo_encoded,
-                                                 monkeypatch):
+def test_oversized_pixels_return_explicit_status(client, geo_encoded, monkeypatch):
     monkeypatch.setenv("COVERTLENS_MAX_PIXELS", "100")
     response = client.post(
         "/api/analyze",
@@ -108,6 +109,7 @@ def test_upload_size_limit_before_read(client, monkeypatch):
 def test_rate_limit(client, monkeypatch):
     monkeypatch.setattr("app.main.RATE_LIMIT_PER_MIN", 2)
     import app.main as main_module
+
     main_module._rate_windows.clear()
     codes = [
         client.post(
@@ -158,9 +160,9 @@ def test_analyze_includes_overlay_series(client, geo_encoded):
     assert periodogram["discovered_step"] == channel["step"]
     # The discovered step/R headline appears verbatim in the sweep.
     assert any(
-        p["step"] == channel["step"]
-        and p["rayleigh_R"] == channel["rayleigh_R"]
-        for p in periodogram["points"])
+        p["step"] == channel["step"] and p["rayleigh_R"] == channel["rayleigh_R"]
+        for p in periodogram["points"]
+    )
     steps = [p["step"] for p in periodogram["points"]]
     assert steps == sorted(steps)
     histogram = height["residual_histogram"]
@@ -198,7 +200,9 @@ def test_comparison_endpoint(client):
     assert body["schema"] == "covertlens.skyline-comparison"
     assert body["clean"]["payload"]["geometric"]["classification"] == "no_signal"
     assert body["encoded"]["payload"]["geometric"]["classification"] in (
-        "quantized_without_structure", "structure_claimed")
+        "quantized_without_structure",
+        "structure_claimed",
+    )
     assert "overlay" in body["encoded"]["payload"]["geometric"]
     assert "candidate_decode" not in str(body)
     hashes = {e["content_hash"] for e in client.get("/api/fixtures").json()}
