@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/geo-benchmark.schema.json",
+  "title": "CovertLens geometric benchmark with benign controls (CL-42)",
+  "type": "object",
+  "required": ["schema", "subfamilies", "benign_controls", "coverage",
+               "enforcement", "prevalence"],
+  "properties": {
+    "schema": {"const": "covertlens.geo-benchmark"},
+    "coverage": {
+      "type": "object",
+      "required": ["evaluated_subfamilies", "general_geometric_coverage_claimed"],
+      "properties": {
+        "general_geometric_coverage_claimed": {"const": false},
+        "evaluated_subfamilies": {
+          "type": "array",
+          "contains": {"enum": ["height_position", "gap_timing", "lit_dark",
+                                "colour_code", "angle_tilt"]},
+          "minItems": 5
+        }
+      }
+    },
+    "enforcement": {
+      "type": "object",
+      "properties": {
+        "height_or_size_alone_triggers_enforcement": {"const": false},
+        "mode": {"const": "log_only_triage"}
+      }
+    },
+    "equated_with_collusion": {"const": false}
+  }
+}
