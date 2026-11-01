@@ -107,9 +107,10 @@ export interface GeoElement {
 export interface Geometric {
   status: string;
   classification: string | null;
-  signal_grade: string | null;
-  primary_channel: string | null;
-  channels: Record<string, GeoChannel>;
+  // Absent entirely when segmentation fails (minimal report).
+  signal_grade?: string | null;
+  primary_channel?: string | null;
+  channels?: Record<string, GeoChannel>;
   structure: {
     claimed: boolean;
     code: string | null;

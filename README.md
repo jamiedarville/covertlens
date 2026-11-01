@@ -457,6 +457,15 @@ criterion to code, contract doc, schema, and tests. History in
 | Wall-clock latency tests cannot flake the required check | `tests/test_latency.py` marked `slow`; required CI runs `pytest -m "not slow"` (plain local runs still include them) |
 | Schema gate catches real drift | First run caught `candidate.decode.read` (CL-46) missing from `schemas/runtime-policy.schema.json`; schema fixed, not the test |
 
+### CL-51 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| A user can produce an image carrying a word they chose, send it to Analyze, and see the discovered step, structure score and ladder verdict in under 2 s | `/generate` page ([app/frontend/src/pages/Generate.tsx](app/frontend/src/pages/Generate.tsx)) over `POST /api/generate` ([app/generation_worker.py](app/generation_worker.py)): geometric scenes (subfamily, element count, seeds; payload random/word/Morse/ASCII/custom text; declared, custom, or random-hidden grid) plus spatial-LSB, JPEG-DCT and metadata encoders; one-click handoff to `/analyze?generated=…` (measured 0.34 s end-to-end locally) |
+| Each generated image's provenance recorded in the store as a fixture with `source: red_team` | Bytes are put in a persistent `ArtifactStore` (`run_id=red_team`) and appended to `red-team/index.jsonl` under the data dir with full parameters (hidden grid values server-side only, withheld from the API response); images serve from `GET /api/generated/{digest}.png|.jpg` |
+| Random-hidden grid is actually hidden from the attacker view | Response echoes only `{mode: random_hidden, hidden: true}`; base/step exist solely in the server-side provenance record (tested) |
+| No regression to the CL-48 Analyze page | Includes a follow-on fix found through this page: failed-segmentation reports omit `channels` entirely and crashed the overlay (`geometric.channels` dereference); overlay and landing now tolerate the minimal report shape |
+
 
 ## Development quickstart
 

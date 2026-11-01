@@ -143,14 +143,16 @@ export function Overlay({
 
   const seg = geometric.segmentation;
   const elements = seg?.elements ?? [];
-  const channelNames = CHANNEL_ORDER.filter((name) => geometric.channels[name]);
+  // Failed-segmentation reports omit channels entirely (CL-51 fix).
+  const channels = geometric.channels ?? {};
+  const channelNames = CHANNEL_ORDER.filter((name) => channels[name]);
   const active =
-    selected && geometric.channels[selected]
+    selected && channels[selected]
       ? selected
-      : geometric.primary_channel && geometric.channels[geometric.primary_channel]
+      : geometric.primary_channel && channels[geometric.primary_channel]
         ? geometric.primary_channel
         : (channelNames[0] ?? "height");
-  const channel = geometric.channels[active];
+  const channel = channels[active];
   const overlayChannel = geometric.overlay?.channels[active];
   const values = overlayChannel?.values ?? fallbackValues(geometric, active);
   const chart = geometric.chart_likeness;
@@ -214,7 +216,7 @@ export function Overlay({
                 onClick={() => setSelected(name)}
               >
                 {CHANNEL_LABELS[name] ?? name}
-                {geometric.channels[name]?.quantized ? " · quantized" : ""}
+                {channels[name]?.quantized ? " · quantized" : ""}
               </button>
             ))}
           </div>
@@ -350,7 +352,7 @@ export function Overlay({
           </thead>
           <tbody>
             {channelNames.map((name) => {
-              const c = geometric.channels[name] as NonNullable<typeof channel>;
+              const c = channels[name] as NonNullable<typeof channel>;
               return (
                 <tr key={name} className={name === active ? "row-active" : undefined}>
                   <th scope="row">{CHANNEL_LABELS[name] ?? name}</th>
