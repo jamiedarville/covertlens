@@ -32,7 +32,11 @@ nothing here can withhold or fail a run.
 
 from __future__ import annotations
 
+import hashlib
+import math
+import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .grid import discover_grid
@@ -40,9 +44,9 @@ from .parsing import AnalysisResult, AnalysisStatus, Finding
 from .segmentation import SegmentationResult, segment_image
 
 GEO_DETECTOR_NAME = "geometric-quantization-structure"
-GEO_DETECTOR_VERSION = "1.0.0"
+GEO_DETECTOR_VERSION = "2.0.0"
 GEO_FAMILY = "geometric"
-GEO_CONFIG_VERSION = "1.0.0"
+GEO_CONFIG_VERSION = "2.0.0"
 SIGNAL_STRUCTURE = "structure_claimed"
 SIGNAL_QUANTIZED = "quantized_without_structure"
 SIGNAL_DECLARED = "quantized_declared_channel"
@@ -61,14 +65,61 @@ _LIMITATIONS = (
     "exists); this detector cannot withhold delivery",
 )
 
-# Declared lexicon for the alphabet_position code: the only words
-# structure may claim through that code. Deliberately tiny and
-# explicit — anything outside it is not grammatical *for this code*.
-_ALPHABET_LEXICON = frozenset({
-    "A", "I", "BE", "DO", "GO", "NO", "ON", "IN", "IS", "IT", "AT",
-    "CAB", "BAD", "BED", "BEAD", "DEAD", "FACE", "HEAD", "DECAF",
-    "DECODE", "SIGNAL", "GEO",
-})
+# Committed word list (CL-46): trains the character trigram model
+# used by every text-producing declared code. The file's hash is
+# recorded in the detector config so a model change is a config
+# change. Structure is claimed only when a mapped candidate beats
+# a symbol-shuffle null at the stated level — never from a lexicon
+# lookup alone.
+_WORDLIST_PATH = Path(__file__).resolve().parent / "wordlist.txt"
+
+
+def _load_wordlist() -> tuple[str, ...]:
+    return tuple(
+        word.strip().upper()
+        for word in _WORDLIST_PATH.read_text(encoding="utf-8").split()
+        if word.strip()
+    )
+
+
+WORDLIST = _load_wordlist()
+WORDLIST_SHA256 = "sha256:" + hashlib.sha256(
+    _WORDLIST_PATH.read_bytes()).hexdigest()
+
+
+def _build_trigram_model(words: tuple[str, ...]):
+    corpus = " ".join(words)
+    trigram_counts: dict[str, dict[str, int]] = {}
+    context_counts: dict[str, int] = {}
+    vocab: set[str] = set(corpus)
+    padded = "  " + corpus + " "
+    for i in range(len(padded) - 2):
+        ctx, ch = padded[i:i + 2], padded[i + 2]
+        trigram_counts.setdefault(ctx, {})[ch] = (
+            trigram_counts.setdefault(ctx, {}).get(ch, 0) + 1)
+        context_counts[ctx] = context_counts.get(ctx, 0) + 1
+    return trigram_counts, context_counts, vocab
+
+
+_TRIGRAMS, _CONTEXTS, _VOCAB = _build_trigram_model(WORDLIST)
+_TRIGRAM_ALPHA = 0.05
+
+
+def trigram_score(text: str) -> float:
+    """Mean smoothed log P(char | previous two) under the word-list model."""
+    if len(text) < 3:
+        return float("-inf")
+    padded = "  " + text.upper() + " "
+    total = 0.0
+    count = 0
+    vocab_size = max(1, len(_VOCAB))
+    for i in range(len(padded) - 2):
+        ctx, ch = padded[i:i + 2], padded[i + 2]
+        numerator = _TRIGRAMS.get(ctx, {}).get(ch, 0) + _TRIGRAM_ALPHA
+        denominator = _CONTEXTS.get(ctx, 0) + _TRIGRAM_ALPHA * vocab_size
+        total += math.log(numerator / denominator)
+        count += 1
+    return total / count if count else float("-inf")
 
 
 @dataclass(frozen=True)
@@ -86,6 +137,11 @@ class GeometricConfig:
     angle_residual_tolerance: float = 3.5    # degrees
     brightness_tolerance: float = 18.0       # grey levels
     colour_distance_tolerance: float = 3.0
+    # Structure test v2 (CL-46): a claim needs at least k symbols
+    # and must beat the symbol-shuffle null at the stated level.
+    structure_min_symbols: int = 8
+    structure_alpha: float = 0.01
+    structure_replicates: int = 100
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -96,37 +152,24 @@ class GeometricConfig:
             "min_support_elements": self.min_support_elements,
             "weak_floor": self.weak_floor,
             "operating_points": None,
+            "structure": {
+                "min_symbols": self.structure_min_symbols,
+                "alpha": self.structure_alpha,
+                "replicates": self.structure_replicates,
+                "wordlist_sha256": WORDLIST_SHA256,
+                "wordlist_words": len(WORDLIST),
+            },
         }
 
 
 DEFAULT_GEO_CONFIG = GeometricConfig()
 
 
-def _map_alphabet(symbols: list[int]) -> str:
-    return "".join(chr(ord("A") + s) if 0 <= s < 26 else "?" for s in symbols)
-
-
-def _valid_alphabet(text: str) -> bool:
-    # Declared rule: the mapped text is, or begins with, a lexicon
-    # word of at least three letters. Longer symbol streams are
-    # judged on their leading word only; the preview shows the rest.
-    return bool(text) and (
-        text in _ALPHABET_LEXICON
-        or any(text.startswith(word) for word in _ALPHABET_LEXICON if len(word) >= 3)
+def _map_alphabet(symbols: list[int], base: int = 0) -> str:
+    return "".join(
+        chr(ord("A") + s - base) if 0 <= s - base < 26 else "?"
+        for s in symbols
     )
-
-
-def _map_timing(symbols: list[int]) -> list[int]:
-    return [s + 1 for s in symbols]
-
-
-def _valid_timing(ratios: list[int]) -> bool:
-    for period in (1, 2, 3, 4):
-        if len(ratios) >= 2 * period and all(
-            ratios[i] == ratios[i % period] for i in range(len(ratios))
-        ):
-            return True
-    return False
 
 
 def _map_bits(symbols: list[int]) -> str:
@@ -134,37 +177,95 @@ def _map_bits(symbols: list[int]) -> str:
     for i in range(0, len(symbols) - 7, 8):
         byte = 0
         for bit in symbols[i:i + 8]:
-            byte = (byte << 1) | bit
+            byte = (byte << 1) | (bit & 1)
         chars.append(chr(byte) if 32 <= byte < 127 else "�")
     return "".join(chars)
 
 
-def _valid_bits(text: str) -> bool:
-    return bool(text) and "�" not in text
+def _map_base_k(symbols: list[int], base: int, digits_per_byte: int) -> str:
+    chars = []
+    for i in range(0, len(symbols) - digits_per_byte + 1, digits_per_byte):
+        value = 0
+        for d in symbols[i:i + digits_per_byte]:
+            value = value * base + d
+        chars.append(chr(value) if 32 <= value < 127 else "�")
+    return "".join(chars)
 
 
-# Simple declared codes (GEO-03). Keys are channel names; a code
-# may claim structure only for its channel, only when quantized.
-DECLARED_CODES: dict[str, dict[str, Any]] = {
-    "height": {
-        "code": "alphabet_position",
-        "description": "symbol -> A=0 letter position",
-        "map": _map_alphabet,
-        "validate": _valid_alphabet,
-    },
-    "gap": {
-        "code": "timing_ratios",
-        "description": "symbol -> duration ratio (symbol+1), periodic motif",
-        "map": _map_timing,
-        "validate": _valid_timing,
-    },
-    "lit": {
-        "code": "bit_packing",
-        "description": "lit states -> bits -> bytes (MSB first)",
-        "map": _map_bits,
-        "validate": _valid_bits,
-    },
+def _periodicity_stat(sequence: list[float]) -> float:
+    """Best lag-1..8 motif agreement plus autocorrelation (timing codes)."""
+    n = len(sequence)
+    if n < 4:
+        return 0.0
+    best = 0.0
+    for lag in range(1, 9):
+        if n - lag < 2:
+            break
+        agree = sum(
+            1 for i in range(lag, n) if sequence[i] == sequence[i - lag]
+        ) / (n - lag)
+        best = max(best, agree)
+        mean = sum(sequence) / n
+        num = sum((sequence[i] - mean) * (sequence[i - lag] - mean)
+                  for i in range(lag, n))
+        den = sum((v - mean) ** 2 for v in sequence)
+        autocorr = (num / den) if den else 0.0
+        best = max(best, min(1.0, max(0.0, autocorr)))
+    return round(best, 6)
+
+
+def _ranks(symbols: list[int]) -> list[int]:
+    rank = {s: i for i, s in enumerate(sorted(set(symbols)))}
+    return [rank[s] for s in symbols]
+
+
+# Declared codes v2 (GEO-03, CL-46). Every channel has at least one
+# applicable code. Text codes are judged by the trigram model
+# against a symbol-shuffle null; timing/rank codes by periodicity
+# and lag-1..8 autocorrelation against the same kind of null.
+CODES_V2: dict[str, list[dict[str, Any]]] = {
+    "height": [
+        {"code": "alphabet_position_a0", "kind": "text",
+         "description": "symbol -> letter (A=0)",
+         "map": lambda s: _map_alphabet(s, 0)},
+        {"code": "alphabet_position_a1", "kind": "text",
+         "description": "symbol -> letter (A=1)",
+         "map": lambda s: _map_alphabet(s, 1)},
+        {"code": "base_k_digits", "kind": "text",
+         "description": "3 base-8 digits -> byte",
+         "map": lambda s: _map_base_k(s, 8, 3)},
+    ],
+    "gap": [
+        {"code": "timing_ratios", "kind": "timing",
+         "description": "symbol -> duration ratio (symbol+1); "
+                        "periodic motif / autocorrelation",
+         "map": lambda s: [float(x) + 1.0 for x in s]},
+    ],
+    "lit": [
+        {"code": "bit_packing", "kind": "text",
+         "description": "lit states -> bits -> bytes (MSB first)",
+         "map": _map_bits},
+    ],
+    "colour": [
+        {"code": "base_k_digits", "kind": "text",
+         "description": "5 base-3 digits -> byte",
+         "map": lambda s: _map_base_k(s, 3, 5)},
+        {"code": "ordinal_rank", "kind": "rank",
+         "description": "rank pattern of the colour sequence",
+         "map": lambda s: [float(x) for x in _ranks(s)]},
+    ],
+    "angle": [
+        {"code": "base_k_digits", "kind": "text",
+         "description": "4 base-5 digits -> byte",
+         "map": lambda s: _map_base_k(s, 5, 4)},
+        {"code": "ordinal_rank", "kind": "rank",
+         "description": "rank pattern of the tilt sequence",
+         "map": lambda s: [float(x) for x in _ranks(s)]},
+    ],
 }
+
+# Backwards-compatible alias for the v1 registry name.
+DECLARED_CODES = CODES_V2
 
 
 _CHANNEL_TOLERANCES = ("height", "gap", "lit", "angle")
@@ -203,7 +304,10 @@ def _colour_channel(seg: SegmentationResult,
                  "levels": [list(c) for c in palette],
                  "palette_source": "exact_colour_clusters"},
         "step": None, "offset": None,
-        "symbols": symbols,
+        # Structure codes consume the segmenter's palette-index
+        # sequence (the payload digit space); support/residuals use
+        # the discovered exact-colour clusters above.
+        "symbols": [int(v) for v in seg.sequence("colour_index")],
         "residuals": distances,
         "supporting": supporting,
         "support_fraction": round(supporting / n, 6),
@@ -211,7 +315,7 @@ def _colour_channel(seg: SegmentationResult,
         "rms_residual": round((sum(d * d for d in distances) / n) ** 0.5, 4),
         "max_residual": round(max(distances, default=0.0), 4),
         "max_abs_residual": round(max(distances, default=0.0), 4),
-        "levels_used": len(set(s for s in symbols if s >= 0)),
+        "levels_used": len(set(int(v) for v in seg.sequence("colour_index"))),
         "rayleigh_R": 0.0, "null_exceedance": None,
         "quantization_method": "exact_palette_repetition",
         "score": round(supporting / n, 6),
@@ -306,13 +410,126 @@ def _channels(seg: SegmentationResult, config: GeometricConfig,
     return channels
 
 
+def _shuffle_exceedance(observed: float, null_stats: list[float]) -> float:
+    hits = sum(1 for s in null_stats if s >= observed)
+    return (hits + 1) / (len(null_stats) + 1)
+
+
+def _symbol_frames(symbols: list[int]) -> list[tuple[str, list[int]]]:
+    """Discovered frame plus the min-anchored frame.
+
+    Grid discovery recovers grid *lines* exactly, but absolute
+    symbol numbering can sit one step off (the encoder base is not
+    observable when the payload never uses level 0). Codes are
+    therefore evaluated in both frames, and the shuffle null uses
+    the same two frames, so the comparison stays honest.
+    """
+    frames = [("as_discovered", list(symbols))]
+    low = min(symbols) if symbols else 0
+    if low != 0:
+        frames.append(("min_anchored", [s - low for s in symbols]))
+    return frames
+
+
+def _evaluate_code(code: dict[str, Any], symbols: list[int],
+                   config: GeometricConfig, seed: int) -> dict[str, Any]:
+    """Score one declared code against its symbol-shuffle null."""
+    rng = random.Random(seed)
+    mapper = code["map"]
+    frames = _symbol_frames(symbols)
+    if code["kind"] == "text":
+        def _text_stat(frame_symbols: list[int]):
+            text = str(mapper(frame_symbols))
+            if len(text) < 3:
+                return float("-inf"), text
+            return trigram_score(text), text
+
+        observed, text, frame_name = max(
+            ((_text_stat(fs)[0], _text_stat(fs)[1], name)
+             for name, fs in frames),
+            key=lambda row: row[0],
+        )
+        if observed == float("-inf"):
+            return {"code": code["code"], "claimed": False,
+                    "reason": "mapped text too short for a trigram claim",
+                    "_candidate_text": text}
+        printable = (
+            sum(1 for ch in text if 32 <= ord(ch) < 127) / len(text)
+            if text else 0.0
+        )
+        null_stats = []
+        for _ in range(config.structure_replicates):
+            shuffled = list(symbols)
+            rng.shuffle(shuffled)
+            null_stats.append(max(
+                _text_stat(fs)[0] for _n, fs in _symbol_frames(shuffled)))
+        exceedance = _shuffle_exceedance(observed, null_stats)
+        finite_null = [s for s in null_stats if s != float("-inf")]
+        llr = (observed - (sum(finite_null) / len(finite_null)
+                           if finite_null else observed))
+        claimed = bool(
+            printable >= 0.9
+            and exceedance <= config.structure_alpha
+            and llr > 0
+        )
+        return {
+            "code": code["code"], "kind": "text", "claimed": claimed,
+            "symbol_frame": frame_name,
+            "trigram_score": round(observed, 6),
+            "null_exceedance": round(exceedance, 6),
+            "log_likelihood_ratio": round(llr, 6),
+            "printable_fraction": round(printable, 6),
+            "reason": ("trigram likelihood beats the symbol-shuffle "
+                       "null at the stated level"
+                       if claimed else
+                       "trigram likelihood does not beat the "
+                       "symbol-shuffle null at the stated level"),
+            "_candidate_text": text,
+        }
+    # timing / rank codes: periodicity + autocorrelation statistic.
+    def _stat(frame_symbols: list[int]) -> float:
+        return _periodicity_stat(
+            [float(v) for v in mapper(frame_symbols)])  # type: ignore[arg-type]
+
+    observed = max(_stat(fs) for _n, fs in frames)
+    null_stats = []
+    for _ in range(config.structure_replicates):
+        shuffled = list(symbols)
+        rng.shuffle(shuffled)
+        null_stats.append(max(
+            _stat(fs) for _n, fs in _symbol_frames(shuffled)))
+    exceedance = _shuffle_exceedance(observed, null_stats)
+    claimed = bool(
+        exceedance <= config.structure_alpha and observed >= 0.8)
+    return {
+        "code": code["code"], "kind": code["kind"], "claimed": claimed,
+        "periodicity_stat": observed,
+        "null_exceedance": round(exceedance, 6),
+        "reason": ("periodic/autocorrelated structure beats the "
+                   "symbol-shuffle null at the stated level"
+                   if claimed else
+                   "periodicity does not beat the symbol-shuffle "
+                   "null at the stated level"),
+        "_candidate_text": None,
+    }
+
+
 def _structure(channel: str, block: dict[str, Any],
                config: GeometricConfig) -> dict[str, Any]:
-    declared = DECLARED_CODES.get(channel)
-    base = {
+    """Structure test v2: declared codes + shuffle-null claims (CL-46).
+
+    The returned block never contains mapped text. A claimed
+    candidate is attached as `_candidate_text` for the caller to
+    route to the reviewer evidence path; it is stripped before the
+    finding is built.
+    """
+    codes = CODES_V2.get(channel) or []
+    base: dict[str, Any] = {
         "claimed": False,
-        "code": declared["code"] if declared else None,
+        "code": None,
         "reason": "",
+        "codes_evaluated": [],
+        "_candidate_text": None,
     }
     if block["support_fraction"] < config.min_support_fraction:
         base["reason"] = "sequence is not quantized at the required support"
@@ -320,27 +537,51 @@ def _structure(channel: str, block: dict[str, Any],
     if block["elements"] < config.min_support_elements:
         base["reason"] = "too few supporting elements for a structure claim"
         return base
-    if declared is None:
-        base["reason"] = "no declared code registered for this channel"
-        return base
-    symbols = block["symbols"]
+    symbols = [int(s) for s in block["symbols"]]
     if channel == "lit":
         # Discovered lit symbols are grid indices (e.g. 0 and 2 for a
         # 95-unit discovered step); the bit code consumes level ranks.
-        rank = {s: i for i, s in enumerate(sorted(set(symbols)))}
-        symbols = [rank[s] for s in symbols]
-    mapped = declared["map"](symbols)
-    preview = mapped if isinstance(mapped, str) else str(mapped)
-    if declared["validate"](mapped):
-        return {
-            "claimed": True,
-            "code": declared["code"],
-            "mapped_preview": preview[:32],
-            "reason": "quantized sequence maps through the declared "
-                      "code to output passing its validator",
-        }
-    base["reason"] = "mapped output fails the declared code's validator"
-    base["mapped_preview"] = preview[:32]
+        symbols = _ranks(symbols)
+    if len(symbols) < config.structure_min_symbols:
+        base["reason"] = (
+            f"too few symbols for a structure claim "
+            f"({len(symbols)} < {config.structure_min_symbols})")
+        base["codes_evaluated"] = [
+            {"code": c["code"], "claimed": False,
+             "reason": base["reason"]} for c in codes
+        ]
+        return base
+    if not codes:
+        base["reason"] = "no declared code registered for this channel"
+        return base
+    evaluated = []
+    for i, code in enumerate(codes):
+        result = _evaluate_code(code, symbols, config, seed=4242 + 17 * i)
+        evaluated.append(result)
+        if result["claimed"]:
+            return {
+                "claimed": True,
+                "code": code["code"],
+                "reason": result["reason"],
+                "trigram_score": result.get("trigram_score"),
+                "null_exceedance": result.get("null_exceedance"),
+                "log_likelihood_ratio": result.get("log_likelihood_ratio"),
+                "periodicity_stat": result.get("periodicity_stat"),
+                "printable_fraction": result.get("printable_fraction"),
+                "codes_evaluated": [
+                    {k: v for k, v in r.items() if not k.startswith("_")}
+                    for r in evaluated
+                ],
+                "_candidate_text": result.get("_candidate_text"),
+            }
+    base["codes_evaluated"] = [
+        {k: v for k, v in r.items() if not k.startswith("_")}
+        for r in evaluated
+    ]
+    best = max(evaluated, key=lambda r: -(r.get("null_exceedance") or 1.0))
+    base["code"] = best["code"]
+    base["null_exceedance"] = best.get("null_exceedance")
+    base["reason"] = "no declared code beats the shuffle null at the stated level"
     return base
 
 
@@ -481,6 +722,17 @@ def analyze_geometric(
     else:
         classification = SIGNAL_NONE
         signal_grade = "none"
+    # The candidate decode never enters the finding (CL-46): it is
+    # returned transiently so the caller can write it to the
+    # reviewer evidence path (EvidenceGateway, R-08).
+    candidate_text = structure.pop("_candidate_text", None)
+    candidate_decode = None
+    if structure.get("claimed") and candidate_text:
+        candidate_decode = {
+            "code": structure.get("code"),
+            "text": candidate_text,
+            "via": "evidence_gateway_reviewer_path",
+        }
     height_prior = None
     if primary_name == "height" and likeness["score"] >= 0.7:
         # Chart-likeness is a prior on the height channel only:
@@ -531,6 +783,7 @@ def analyze_geometric(
         "structure": structure,
         "chart_likeness": likeness,
         "declared_context": declared_context,
+        "candidate_decode": candidate_decode,
     }
 
 
@@ -588,6 +841,11 @@ def validate_geometric_report(report: dict[str, Any]) -> list[str]:
                     "support_fraction", "score"):
             need(key in block, f"channels.{name}.{key} is required (no bare verdicts)")
     structure = evidence.get("structure") or {}
+    for banned in ("mapped_preview", "candidate_text", "_candidate_text",
+                   "mapped_text"):
+        need(banned not in structure,
+             f"structure.{banned} must not appear in a finding; "
+             "candidate decodes live on the reviewer evidence path (CL-46)")
     if report.get("classification") == SIGNAL_STRUCTURE:
         need(structure.get("claimed") is True,
              "structure_claimed requires a claimed structure block")

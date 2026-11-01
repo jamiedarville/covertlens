@@ -30,7 +30,7 @@ from typing import Any, Iterable
 from .splits import scorer_ground_truth
 from .store import ArtifactStore
 
-POLICY_VERSION = "1.0.0"
+POLICY_VERSION = "1.1.0"
 PERMISSIONS = (
     "original.read",
     "trace.read",
@@ -40,6 +40,7 @@ PERMISSIONS = (
     "config.change",
     "retirement.request",
     "retirement.approve",
+    "candidate.decode.read",
 )
 
 _DEFAULT = Path(__file__).resolve().parent.parent / "config" / "runtime-policy.json"
@@ -219,6 +220,7 @@ class EvidenceGateway:
         self._audit = audit
         self._policy = policy if policy is not None else load_runtime_policy()
         self._overrides: list[dict[str, Any]] = []
+        self._candidate_decodes: dict[str, dict[str, Any]] = {}
 
     def _gate(
         self, principal: Principal, dataset_id: str, permission: str, action: str
@@ -251,6 +253,58 @@ class EvidenceGateway:
             detail={"artifact_version_id": artifact_version_id, "purpose": purpose},
         )
         return data
+
+    def record_candidate_decode(
+        self,
+        dataset_id: str,
+        artifact_version_id: str | None,
+        candidate: dict[str, Any] | None,
+    ) -> str | None:
+        """Reviewer evidence path for candidate decodes (CL-46, R-08).
+
+        Detector-side write: the mapped candidate text is stored
+        only here, never in a finding. The audit entry records the
+        code and length, never the text itself.
+        """
+        if not candidate or not candidate.get("text"):
+            return None
+        digest = hashlib.sha256(
+            json.dumps(candidate, sort_keys=True).encode()).hexdigest()
+        decode_id = f"cand_{digest[:12]}"
+        self._candidate_decodes[decode_id] = {
+            "decode_id": decode_id,
+            "dataset_id": dataset_id,
+            "artifact_version_id": artifact_version_id,
+            "code": candidate.get("code"),
+            "text": candidate["text"],
+        }
+        self._audit.append(
+            actor_id="geometric-detector", action="candidate_decode.write",
+            dataset_id=dataset_id, outcome="recorded",
+            detail={"decode_id": decode_id, "code": candidate.get("code"),
+                    "text_length": len(candidate["text"]),
+                    "artifact_version_id": artifact_version_id},
+        )
+        return decode_id
+
+    def read_candidate_decode(
+        self,
+        principal: Principal,
+        dataset_id: str,
+        decode_id: str,
+    ) -> dict[str, Any]:
+        """Reviewer-only read of a candidate decode (audited, R-08)."""
+        self._gate(principal, dataset_id, "candidate.decode.read",
+                   "candidate_decode.read")
+        decode = self._candidate_decodes.get(decode_id)
+        if decode is None or decode["dataset_id"] != dataset_id:
+            raise KeyError(f"unknown candidate decode {decode_id}")
+        self._audit.append(
+            actor_id=principal.actor_id, action="candidate_decode.read",
+            dataset_id=dataset_id, outcome="allowed",
+            detail={"decode_id": decode_id},
+        )
+        return dict(decode)
 
     def export_held_out_truth(
         self,

@@ -109,6 +109,77 @@ def _symbols(payload_seed: int, count: int, alphabet: int) -> tuple[int, ...]:
     return tuple(rng.randrange(alphabet) for _ in range(count))
 
 
+_MORSE = {
+    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".",
+    "F": "..-.", "G": "--.", "H": "....", "I": "..", "J": ".---",
+    "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---",
+    "P": ".--.", "Q": "--.-", "R": ".-.", "S": "...", "T": "-",
+    "U": "..-", "V": "...-", "W": ".--", "X": "-..-", "Y": "-.--",
+    "Z": "--..", "0": "-----", "1": ".----", "2": "..---",
+    "3": "...--", "4": "....-", "5": ".....", "6": "-....",
+    "7": "--...", "8": "---..", "9": "----.",
+}
+
+PAYLOAD_MODES = ("random", "word", "morse", "ascii")
+
+
+def _morse_stream(text: str, alphabet: int) -> list[int]:
+    symbols: list[int] = []
+    words = text.upper().split(" ")
+    for wi, word in enumerate(words):
+        letters = [c for c in word if c in _MORSE]
+        for li, ch in enumerate(letters):
+            for element in _MORSE[ch]:
+                symbols.append(0 if element == "." else 1)
+            if li < len(letters) - 1:
+                symbols.append(min(2, alphabet - 1))
+        if wi < len(words) - 1:
+            symbols.append(min(3, alphabet - 1))
+    return symbols
+
+
+def _byte_digits(data: bytes, base: int, digits: int) -> list[int]:
+    stream: list[int] = []
+    for byte in data:
+        chunk = []
+        value = byte
+        for _ in range(digits):
+            chunk.append(value % base)
+            value //= base
+        stream.extend(reversed(chunk))
+    return stream
+
+
+def _encode_payload(subfamily: str, mode: str, text: str, count: int,
+                    payload_seed: int, alphabet: int) -> tuple[int, ...]:
+    """Symbol stream for one payload mode (generator-side, CL-46)."""
+    if mode == "random":
+        return _symbols(payload_seed, count, alphabet)
+    if mode not in PAYLOAD_MODES:
+        raise ValueError(f"payload_mode must be one of {PAYLOAD_MODES}")
+    stream: list[int] = []
+    if mode == "morse":
+        stream = _morse_stream(text, alphabet)
+    elif subfamily == "height_position" and mode == "word":
+        stream = [ord(c) - 65 for c in text.upper() if "A" <= c <= "H"]
+        if not stream:
+            raise ValueError("word payload for height_position needs A-H letters")
+    elif subfamily == "gap_timing":
+        stream = _morse_stream(text, alphabet)
+    elif subfamily == "lit_dark":
+        for byte in text.encode("ascii"):
+            stream.extend((byte >> s) & 1 for s in range(7, -1, -1))
+    elif subfamily == "colour_code":
+        stream = _byte_digits(text.encode("ascii"), 3, 5)
+    elif subfamily == "angle_tilt":
+        stream = _byte_digits(text.encode("ascii"), 5, 4)
+    elif subfamily == "height_position":  # ascii: base-8 digits
+        stream = _byte_digits(text.encode("ascii"), 8, 3)
+    if not stream:
+        raise ValueError(f"payload text {text!r} encodes to no symbols")
+    return tuple(stream[i % len(stream)] for i in range(count))
+
+
 def _off_grid(rng: random.Random, low: float, high: float, grid_values: list[float],
               clearance: float) -> float:
     """Continuous value kept at least `clearance` from every grid point."""
@@ -122,6 +193,7 @@ def _off_grid(rng: random.Random, low: float, high: float, grid_values: list[flo
 def _scene_elements(
     subfamily: str, *, encoded: bool, scene_seed: int, payload_seed: int,
     n_elements: int, grid: dict[str, Any] | None = None,
+    payload_mode: str = "random", payload_text: str = "DECAF",
 ) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
     """Element attribute plan for one scene (renderer-side only)."""
     grid = {**GRIDS[subfamily], **(grid or {})}
@@ -132,8 +204,10 @@ def _scene_elements(
     else:
         count = n_elements
     if encoded:
-        symbols = _symbols(payload_seed, count, int(grid["alphabet"]))
-        if grid.get("attacker") and len(symbols) >= 3:
+        symbols = _encode_payload(
+            subfamily, payload_mode, payload_text, count,
+            payload_seed, int(grid["alphabet"]))
+        if grid.get("attacker") and payload_mode == "random" and len(symbols) >= 3:
             # Attacker fixtures exist to prove step *recovery*: if a
             # payload used only every-other level, the fundamental
             # step would be ambiguous (2x would fit equally well).
@@ -382,7 +456,8 @@ def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
              symbols: tuple[int, ...], attributes: tuple[float, ...],
              *, scene_seed: int, payload_seed: int, width: int, height: int,
              context: str = "scene", negative_kind: str | None = None,
-             grid: dict[str, Any] | None = None) -> GeoFixture:
+             grid: dict[str, Any] | None = None,
+             payload_mode: str = "random") -> GeoFixture:
     effective_grid = {**GRIDS[subfamily], **(grid or {})}
     digest = ids.content_hash(data)
     generator = {
@@ -398,6 +473,7 @@ def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
             "subfamily": subfamily,
             "unit": effective_grid["unit"],
             "alphabet": effective_grid["alphabet"],
+            "payload_mode": payload_mode if role == "encoded" else "none",
             "grid": {k: v for k, v in effective_grid.items()
                      if k in ("base", "step", "levels", "attacker")},
         },
@@ -490,14 +566,20 @@ def build_geo_pair(
     payload_seed: int = 202,
     n_elements: int = 12,
     grid: dict[str, Any] | None = None,
+    payload_mode: str = "random",
+    payload_text: str = "DECAF",
 ) -> tuple[GeoFixture, GeoFixture]:
     """One clean/encoded pair: same scene plan, grid vs off-grid attributes."""
     if subfamily not in SUBFAMILIES:
         raise ValueError(f"subfamily must be one of {SUBFAMILIES}")
     if subfamily == "gap_timing":
-        n_elements = min(n_elements, 10)
+        n_elements = min(
+            n_elements,
+            10 if width <= DEFAULT_WIDTH else max(10, (width - MARGIN_X) // 30))
     if subfamily == "angle_tilt":
-        n_elements = min(n_elements, 7)
+        n_elements = min(
+            n_elements,
+            7 if width <= DEFAULT_WIDTH else max(7, (width - MARGIN_X) // 56))
     pair_id = f"pair-geometric-{subfamily}-{scene_seed}"
     if grid and grid.get("attacker"):
         pair_id += f"-attacker-{grid['step']}"
@@ -506,6 +588,7 @@ def build_geo_pair(
         elements, symbols, attributes = _scene_elements(
             subfamily, encoded=encoded, scene_seed=scene_seed + (0 if not encoded else 500_000),
             payload_seed=payload_seed, n_elements=n_elements, grid=grid,
+            payload_mode=payload_mode, payload_text=payload_text,
         )
         # Clean and encoded share the scene seed family but must not
         # share jitter: encoded uses grid values; clean was sampled
@@ -516,6 +599,7 @@ def build_geo_pair(
             symbols if encoded else (), attributes,
             scene_seed=scene_seed, payload_seed=payload_seed,
             width=width, height=height, grid=grid,
+            payload_mode=payload_mode,
         ))
     clean, encoded_fx = built
     if not verify_geo_fixture(encoded_fx):

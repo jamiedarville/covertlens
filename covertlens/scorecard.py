@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
-SCORECARD_VERSION = "1.1.0"
+SCORECARD_VERSION = "1.2.0"
 SCORECARD_PATH = Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
 DECISIONS = ("release", "release_with_limitations", "no_release")
 

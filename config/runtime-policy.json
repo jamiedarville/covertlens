@@ -1,6 +1,6 @@
 {
   "policy_id": "covertlens.runtime-policy",
-  "policy_version": "1.0.0",
+  "policy_version": "1.1.0",
   "owner": {"team": "Agent Evaluation / AI Safety"},
   "internal_only": true,
   "default": "deny",
@@ -12,11 +12,13 @@
     "verdict.override",
     "config.change",
     "retirement.request",
-    "retirement.approve"
+    "retirement.approve",
+    "candidate.decode.read"
   ],
   "roles": {
     "agent": {"allow": []},
     "detector_worker": {"allow": ["original.read"]},
+    "reviewer": {"allow": ["candidate.decode.read", "original.read", "trace.read"]},
     "researcher": {
       "allow": ["original.read", "trace.read", "export.create", "verdict.override"]
     },

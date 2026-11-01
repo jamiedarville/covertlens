@@ -57,15 +57,21 @@ def test_structure_claimed_only_through_declared_code():
     _clean, encoded = build_geo_pair("height_position", scene_seed=11,
                                      payload_seed=12)
     seg = segment_image(encoded.data)
-    symbols = [3, 4, 2, 0, 5, 1, 1, 1]
+    symbols = [3, 4, 2, 0, 5, 3, 4, 2, 0, 5, 3, 4]  # DECAFDECAFDE
     heights = [16 + 10 * s for s in symbols]
     for element, height in zip(seg.elements, heights):
         element["height"] = height
     report = analyze_geometric(seg)
     assert report["primary_channel"] == "height"
     assert report["classification"] == "structure_claimed"
-    assert report["structure"]["code"] == "alphabet_position"
-    assert report["structure"]["mapped_preview"].startswith("DECAF")
+    assert report["structure"]["code"] == "alphabet_position_a0"
+    assert report["structure"]["null_exceedance"] <= 0.01
+    # CL-46: no mapped text in the finding; the candidate decode is
+    # transient on the report for the reviewer evidence path only.
+    assert "mapped_preview" not in report["structure"]
+    assert report["candidate_decode"]["text"].startswith("DECAF")
+    import json
+    assert "DECAF" not in json.dumps(report["finding"].to_dict())
     # The finding never presents this as a decoded message.
     assert report["finding"].evidence["label"] == "evidence_aid_not_decoded_message"
 

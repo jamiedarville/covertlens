@@ -148,16 +148,20 @@ from .geometric_fixtures import (
 )
 from .handoff import run_handoff_verification, validate_handoff
 from .geometric import (
+    CODES_V2,
     GeometricConfig,
     analyze_geometric,
     analyze_geometric_bytes,
     chart_likeness,
     detect_geometric,
+    trigram_score,
     validate_geometric_report,
 )
 from .geo_benchmark import (
     benign_controls,
+    build_structured_pair,
     run_geo_benchmark,
+    run_structured_recall,
     validate_geo_benchmark,
 )
 from .vector_source import (
@@ -355,10 +359,14 @@ __all__ = [
     "validate_geo_splits",
     "verify_geo_fixture",
     "SegmentationResult",
+    "CODES_V2",
     "GeometricConfig",
+    "trigram_score",
     "analyze_with_source",
     "benign_controls",
+    "build_structured_pair",
     "run_geo_benchmark",
+    "run_structured_recall",
     "validate_geo_benchmark",
     "build_vector_source",
     "parse_vector_source",

@@ -67,34 +67,60 @@ classification by itself: charts and encoded scenes with the
 same height sequence are separated by the declaration plus the
 quantization/structure tests, not by the likeness score.
 
-## Structure test (GEO-03) — declared codes only
+## Structure test v2 (GEO-03, CL-46) — declared codes + shuffle null
 
 Structure is `structure_claimed` only when a quantized channel
-(support ≥ 0.9 over ≥ 4 elements) maps through a registered
-declared code and passes its validator:
+maps through a registered declared code **and beats a
+symbol-shuffle null at the stated level** (`structure_alpha`
+0.01, 100 replicates) over at least `structure_min_symbols`
+(8) symbols. Every channel has at least one applicable code:
 
-| Channel | Code | Validator |
+| Channel | Codes | Statistic vs shuffle null |
 |---|---|---|
-| height | alphabet_position | mapped text is/begins with a ≥3-letter word from the declared lexicon |
-| gap | timing_ratios | ratios (symbol+1) form a period ≤ 4 motif repeated at least twice |
-| lit | bit_packing | bits (MSB-first bytes) decode to printable ASCII |
+| height | `alphabet_position_a0`, `alphabet_position_a1`, `base_k_digits` (3×base-8/byte) | trigram log-likelihood (committed word list, hashed into the config) + printable fraction |
+| gap | `timing_ratios` | periodicity and lag-1..8 autocorrelation of ratios |
+| lit | `bit_packing` (MSB-first bytes) | printable fraction AND trigram likelihood |
+| colour | `base_k_digits` (5×base-3/byte), `ordinal_rank` | trigram / rank-pattern periodicity |
+| angle | `base_k_digits` (4×base-5/byte), `ordinal_rank` | trigram / rank-pattern periodicity |
+
+Codes are evaluated in the discovered symbol frame and the
+min-anchored frame (grid lines are exact; absolute numbering
+can sit one step off), with the null using the same two frames.
+The evidence block reports per-code statistics — trigram score,
+log-likelihood ratio vs the null mean, null exceedance,
+printable fraction — never the mapped text.
+
+**Candidate decodes** (CL-46): a claimed candidate's mapped
+text is *not* in the finding. It is returned transiently on the
+analysis report so the caller can write it through
+`EvidenceGateway.record_candidate_decode` to the reviewer
+evidence path (R-08); reads need the `candidate.decode.read`
+permission (reviewer role), are audited (allowed and denied),
+and researcher reads are denied. A score is still never a
+decoded message (C-09): the finding is an evidence aid.
 
 Otherwise a quantized sequence is `quantized_without_structure` —
 a **weak triage signal only** (the legitimate-chart case: its
-grid snap is by design, GEO-05). Candidate mapped previews are
-labelled `evidence_aid_not_decoded_message`; they are hypotheses
-under a declared code, never recovered messages (C-09).
+grid snap is by design, GEO-05).
+
+Structured fixtures (CL-46): `build_geo_pair(payload_mode=...)`
+supports `random | word | morse | ascii` payloads; the benchmark
+reports three rows per subfamily — continuous,
+quantized-unstructured (random payloads, with false-structure
+rates), and quantized-structured (word payloads, with recall).
 
 ## Operating points
 
-`GeometricConfig` 1.0.0 is an **unfrozen placeholder**
+`GeometricConfig` 2.0.0 is an **unfrozen placeholder**
 (`enforceable: false`, no points): the geometric family has no
 calibration/freeze yet. This detector cannot withhold or fail a
-run; CL-42 produces the benchmark on which a freeze could rest.
+run; the CL-42/CL-46 benchmarks are what a freeze could rest on.
 
 ## Verification
 
 `python -m covertlens geometric-demo`;
-`tests/test_geometric.py` asserts the measurement report, the
-low clean scores, the chart classification, and the declared-code
-structure claim.
+`tests/test_structure_v2.py` asserts per-subfamily structure
+detection from pixels, recall ≥ 0.8 at n=20 per subfamily, the
+no-mapped-text finding, and the reviewer-gateway roles;
+`tests/test_geometric.py` covers the measurement report and the
+chart classification.
