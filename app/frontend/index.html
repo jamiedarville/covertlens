@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CovertLens</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 44rem; padding: 0 1rem; }
+  code { background: #eef; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+</style>
+</head>
+<body>
+<h1>CovertLens</h1>
+<p>CovertLens scores eval-generated images across four channel
+families — spatial LSB, JPEG DCT, metadata, and geometric — and
+records verdicts that are evidence, never accusations.</p>
+<p>The interactive Analyze page arrives with the React build
+(CL-48). The API is live now:</p>
+<ul>
+  <li><a href="/docs">/docs</a> — OpenAPI</li>
+  <li><code>GET /api/health</code>, <code>GET /api/version</code></li>
+  <li><code>POST /api/analyze</code> — multipart image upload</li>
+  <li><code>GET /api/fixtures</code>, <code>GET /api/benchmarks/geometric</code>,
+      <code>GET /api/scorecard</code></li>
+</ul>
+</body>
+</html>

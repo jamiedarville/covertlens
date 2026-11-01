@@ -336,6 +336,24 @@ store** that every later task builds on.
 | No mapped text in findings; candidate decodes only on the reviewer evidence path | `Finding.to_dict()` contains no mapped text (validator rejects it); `EvidenceGateway.record_candidate_decode` / `read_candidate_decode` with the new `candidate.decode.read` permission (reviewer role) — researcher reads denied and audited |
 | Structure recall ≥ 0.8 on structured payloads, n ≥ 20 per subfamily, end-to-end from pixels | `tests/test_structure_v2.py`: per-subfamily pixel-level detection and `run_structured_recall(20)` |
 
+## CL-47 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Runnable web service with the required endpoints | `app/main.py` (FastAPI): `POST /api/analyze`, `GET /api/fixtures`, `GET /api/fixtures/{digest}.png`, `GET /api/benchmarks/{name}` (cached), `GET /api/scorecard`, `GET /api/version`, `GET /api/health`, OpenAPI at `/docs`; reviewer-only fields stripped from responses |
+| Analysis is bounded | ProcessPoolExecutor (`COVERTLENS_WORKERS`, default 4) with a wall-clock deadline → `timeout` status; pixel limit → explicit `oversized` status; upload size limited before read (413); per-IP rate limit (429); CSP + nosniff headers |
+| Benchmarks/reports precomputed once, keyed by version + git SHA | `scripts/precompute.py` writes `/data/cache/*.json`; the service runs it in a background thread at first start so `/api/health` answers immediately |
+| One-command image | Multi-stage `Dockerfile` (node frontend build → `python:3.12-slim`, pinned digests, non-root `appuser`, `VOLUME /data`, `HEALTHCHECK`) and `docker-compose.yml` with a named volume; a placeholder static frontend ships until CL-48 replaces it with the React app |
+| CI publishes the image | `.github/workflows/image.yml` on version tags: library tests inside the image, health + analyze smoke, push to `ghcr.io/jamiedarville/covertlens:<tag>` |
+
+Run it:
+
+```bash
+docker build -t covertlens .
+docker run -p 8000:8000 -v covertlens-data:/data covertlens
+# then open http://127.0.0.1:8000/ (or /docs) in a browser
+```
+
 ## Quickstart
 
 ```bash
