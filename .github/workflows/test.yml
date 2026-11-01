@@ -76,3 +76,4 @@ jobs:
           python -m covertlens geo-fixtures-demo > /dev/null
           python -m covertlens segmentation-demo > /dev/null
           python -m covertlens geometric-demo > /dev/null
+          python -m covertlens vector-demo > /dev/null

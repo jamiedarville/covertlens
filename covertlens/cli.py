@@ -35,6 +35,7 @@ Usage:
     python -m covertlens geo-fixtures-demo
     python -m covertlens segmentation-demo
     python -m covertlens geometric-demo
+    python -m covertlens vector-demo
 """
 
 from __future__ import annotations
@@ -62,12 +63,14 @@ from .robustness import run_robustness
 from .geometric_fixtures import (
     assign_geo_splits,
     build_geo_dataset,
+    build_geo_pair,
     geo_manifest,
     validate_geo_splits,
     verify_geo_fixture,
 )
 from .handoff import run_handoff_verification
 from .geometric import analyze_geometric_bytes
+from .vector_source import analyze_with_source, build_vector_source
 from .segmentation import segment_image
 from .scorecard import load_scorecard
 from .route_audit import run_route_audit
@@ -615,6 +618,21 @@ def main(argv: list[str] | None = None) -> int:
                 "score": report["finding"].score if report["finding"] else None,
             }
         print(json.dumps(out, indent=2))
+        return 0
+
+    if command == "vector-demo":
+        pair = build_geo_pair("height_position")
+        encoded = next(f for f in pair if f.role == "encoded")
+        clean = next(f for f in pair if f.role == "clean")
+        print(json.dumps({
+            "bound": analyze_with_source(
+                encoded, build_vector_source(encoded), store=ArtifactStore()
+            ),
+            "c10_refusal": analyze_with_source(
+                clean, build_vector_source(clean), source_intercepted=False
+            )["clearance"],
+            "raster_fallback": analyze_with_source(encoded, None)["vector_status"],
+        }, indent=2, default=str))
         return 0
 
     if command == "sequence-demo":
