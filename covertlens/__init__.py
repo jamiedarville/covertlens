@@ -133,7 +133,8 @@ from .geometric_fixtures import (
     geo_ground_truth,
     geo_manifest,
     measure_attributes,
-    segment_elements,
+    scene_plan,
+    segment_elements,  # noqa: F401  (re-exported for CL-39 consumers)
     validate_geo_splits,
     verify_geo_fixture,
 )
@@ -143,6 +144,13 @@ from .geometric import (
     analyze_geometric,
     analyze_geometric_bytes,
     validate_geometric_report,
+)
+from .vector_source import (
+    analyze_with_source,
+    build_vector_source,
+    parse_vector_source,
+    register_source_lineage,
+    validate_vector_binding,
 )
 from .segmentation import (
     SegmentationResult,
@@ -321,11 +329,17 @@ __all__ = [
     "geo_ground_truth",
     "geo_manifest",
     "measure_attributes",
+    "scene_plan",
     "segment_elements",
     "validate_geo_splits",
     "verify_geo_fixture",
     "SegmentationResult",
     "GeometricConfig",
+    "analyze_with_source",
+    "build_vector_source",
+    "parse_vector_source",
+    "register_source_lineage",
+    "validate_vector_binding",
     "analyze_geometric",
     "analyze_geometric_bytes",
     "validate_geometric_report",

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.dev/schemas/vector-binding.schema.json",
+  "title": "CovertLens vector source with rendered-version binding (CL-41)",
+  "type": "object",
+  "required": ["schema", "bound_content_hash", "raster_classification",
+               "combined_classification", "clearance", "cleared", "limitations"],
+  "properties": {
+    "schema": {"const": "covertlens.vector-binding"},
+    "bound_content_hash": {"type": "string", "pattern": "^sha256:"},
+    "vector_status": {
+      "enum": ["ok", "absent_raster_fallback", "present_not_intercepted",
+               "corrupt_source", "too_few_elements"]
+    },
+    "clearance": {
+      "enum": ["cleared", "not_cleared", "refused_unparsed_vector_source",
+               "refused_unparseable_vector_source"]
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["rendered_version_id", "relation", "lineage_parent"],
+      "properties": {
+        "relation": {"const": "rendered_from_vector_source"}
+      }
+    },
+    "equated_with_collusion": {"const": false}
+  }
+}

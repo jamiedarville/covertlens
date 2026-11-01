@@ -277,6 +277,17 @@ store** that every later task builds on.
 | Structure claimed only under a simple declared code mapped to words/codes/grammar | Registered codes (alphabet position + declared lexicon, timing-ratio motifs, bit packing) with validators; unregistered mappings never inferred |
 | Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); thresholds unfrozen placeholders, detector cannot withhold |
 
+## CL-41 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Vector sources containing embedded objects/elements/attributes are parsed directly and emitted to DET-02 | `parse_vector_source` reads the `covertlens.vector-source` object list into the CL-39 record shape, consumed by the same CL-40 tests · [docs/contracts/vector-source.md](docs/contracts/vector-source.md) · [schemas/vector-binding.schema.json](schemas/vector-binding.schema.json) |
+| Raster fallback (original bytes only) is recorded with renderer-effect limitations | `analyze_with_source(..., source=None)`: `absent_raster_fallback` + `RASTER_LIMITATIONS` (pixel quantization, PNG-only, original bytes) |
+| Vector and rendered outputs are associated via artefact lineage, and gate evaluation binds the verdict to the exact rendered version (hash) | Combined report binds `bound_content_hash` (rendered raster hash/version); store registers the source as lineage derivative `rendered_from_vector_source` parented to the rendered version |
+| When vector sources are available, gate-level verdict binding binds to the exact delivered (rendered) artefact version | Gate binding activates with frozen geometric thresholds (post CL-42 benchmark); until then the geometric finding is log-only triage bound to the rendered hash |
+| Vector source present but not intercepted: a clean raster score cannot clear it (C-10) | `clearance: refused_unparsed_vector_source`, `cleared: false`; same refusal for a corrupt source |
+| Geometric findings emit to DET-02 rows with no underlying message decoded | The CL-40 findings shape is reused on both paths; no decoded message is ever claimed (C-09) |
+
 ## Quickstart
 
 ```bash
@@ -317,6 +328,7 @@ python -m covertlens handoff-demo        # CL-36 ops/rollback/handoff verificati
 python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
 python -m covertlens segmentation-demo   # CL-39 segmentation + attribute sequences
 python -m covertlens geometric-demo      # CL-40 quantization + structure tests
+python -m covertlens vector-demo         # CL-41 vector source + rendered-version binding
 pytest
 ```
 

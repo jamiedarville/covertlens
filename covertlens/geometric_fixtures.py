@@ -384,6 +384,30 @@ def _fixture(subfamily: str, role: str, pair_id: str, data: bytes,
     )
 
 
+def scene_plan(
+    subfamily: str,
+    *,
+    encoded: bool,
+    scene_seed: int,
+    payload_seed: int,
+    n_elements: int = 12,
+) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
+    """Public renderer plan (elements, symbols, attributes) for one scene.
+
+    Used by the CL-41 vector-source builder to emit the object list
+    the raster was rendered from. Detector code must never call
+    this — it is generator-side provenance.
+    """
+    if subfamily == "gap_timing":
+        n_elements = min(n_elements, 10)
+    if subfamily == "angle_tilt":
+        n_elements = min(n_elements, 7)
+    return _scene_elements(
+        subfamily, encoded=encoded, scene_seed=scene_seed,
+        payload_seed=payload_seed, n_elements=n_elements,
+    )
+
+
 def build_geo_pair(
     subfamily: str,
     *,
