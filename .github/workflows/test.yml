@@ -15,11 +15,23 @@ concurrency:
 jobs:
   test:
     name: test
-    runs-on: [self-hosted, Linux, X64]
+    # The repository is public, so a pull request from a fork must never
+    # run on the self-hosted runner (it would execute untrusted code on
+    # the maintainer's machine). Fork PRs use a GitHub-hosted runner;
+    # pushes to main and same-repository PRs use the self-hosted one.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted", "Linux", "X64"]') }}
     timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Later steps never push, so do not leave a token on disk.
+          persist-credentials: false
+
+      - name: Check host Python version
+        run: |
+          python3 --version
+          python3 -c 'import sys; assert (3, 11) <= sys.version_info[:2] < (3, 15), "unsupported Python " + sys.version'
 
       # No actions/setup-python: it has no build for this host's
       # distro (CachyOS), so use the host Python (>= 3.11 per
@@ -30,10 +42,10 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install dev dependencies
-        run: .venv/bin/python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev]"
 
       - name: Run test suite
-        run: .venv/bin/python -m pytest -q
+        run: python -m pytest -q
 
       - name: Contract smoke checks
         run: |
