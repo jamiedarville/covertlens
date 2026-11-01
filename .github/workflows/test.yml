@@ -1,0 +1,60 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dev dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      - name: Contract smoke checks
+        run: |
+          python -m covertlens validate-manifest
+          python -m covertlens validate-runtime
+          python -m covertlens parse-demo > /dev/null
+          python -m covertlens lsb-demo > /dev/null
+          python -m covertlens benchmark-lsb > /dev/null
+          python -m covertlens dct-demo > /dev/null
+          python -m covertlens benchmark-dct > /dev/null
+          python -m covertlens trace-demo > /dev/null
+          python -m covertlens verdict-demo > /dev/null
+          python -m covertlens replay-demo > /dev/null
+          python -m covertlens metadata-demo > /dev/null
+          python -m covertlens sequence-demo > /dev/null
+          python -m covertlens report-demo > /dev/null
+          python -m covertlens pinning-demo > /dev/null
+          python -m covertlens calibrate-demo > /dev/null
+          python -m covertlens frozen-demo > /dev/null
+          python -m covertlens latency-demo > /dev/null
+          python -m covertlens pilot-demo > /dev/null
+          python -m covertlens ablation-demo > /dev/null
+          python -m covertlens route-audit-demo > /dev/null
+          python -m covertlens export-demo > /dev/null
+          python -m covertlens robustness-demo > /dev/null
+          python -m covertlens scorecard-demo > /dev/null
+          python -m covertlens handoff-demo > /dev/null

@@ -1,0 +1,293 @@
+# CovertLens — Project Review and Competition Strategy
+
+*Reviewed at commit `335e344` (branch `main`, 2026-10-31). Read-only review: no code or files in the repository were changed. Tooling used: the repo's own test suite, `ruff`, `mypy`, and a run of every `*-demo` CLI command.*
+
+---
+
+## 0. Executive summary
+
+CovertLens is a zero-dependency, pure-standard-library Python package (~14k lines, 32 modules, 190 tests, all passing in 75 s) that implements an inline steganalysis gate for images exchanged between AI agents in an evaluation harness. It covers three channel families (spatial LSB in PNG, JPEG DCT coefficients, and file metadata), an immutable content-addressed evidence store, a verdict ladder (log → flag → quarantine → fail-run), trace joining, calibration, frozen benchmarks, a seeded pilot, ablations, and audited review exports. Each Jira task (CL-7 … CL-33) maps to exactly one module, one test file, one contract document and one JSON schema.
+
+**Verdict on code quality: good to very good for a research prototype, with a handful of real engineering gaps and one presentation risk.** The design discipline (versioned contracts, fail-closed errors, no-lookahead guards, hash-sealed exports) is well above what most competition entries ship. The weaknesses are (a) the detectors themselves are textbook 2001-era statistics validated on tiny procedural fixtures, (b) a pure-Python JPEG decoder that cannot meet the project's own 2-second latency target above ~1 MP, (c) a monolithic CLI that carries almost all of the type errors, and (d) every benchmark, pilot and latency number in the repository is produced by the project's own 64×48-pixel synthetic fixtures, so the headline "≥95% recall / ≥99% precision" figures rest on one or two held-out positives per family.
+
+**On "Geo" as the selling point: this is the right call, and it is currently the least-built part of the project.** The geometric/semantic family (§8 of REQUIREMENTS.md, GEO-01…GEO-07) exists only as a requirements addendum; there is no code, fixture, schema, or test for it. That is both the risk and the opportunity. Section 3 of this report makes the case for why GEO is the *only* family that addresses how a modern AI agent would actually smuggle information, and lays out a concrete build plan that reuses the existing infrastructure almost unchanged.
+
+**On a web app: moderately easy.** Every public function already returns JSON-shaped dictionaries validated against schemas, the package has zero dependencies, and the gate/store are already in-memory objects. A FastAPI wrapper plus a small React front end is a one-to-two-week job for one engineer. Because the library is pure standard-library Python, there is also an unusual option: run the entire detector client-side in the browser via Pyodide, so that no image bytes ever leave the user's machine, which is a strong story for an evidence-handling tool.
+
+---
+
+## 1. Is the code quality of a good standard?
+
+### 1.1 What is genuinely well done
+
+- **Contract-first architecture.** Each module declares its schema name and version as constants, exposes `to_dict()` and a `validate_*()` function, and ships a matching JSON Schema under `schemas/` and a human contract under `docs/contracts/`. This is rare and reviewers at a company like Meta will notice it.
+- **Fail-closed by construction.** `parsing.analyze_bytes` returns one explicit status per input (`parsed / corrupt / unsupported_format / unsupported_encoding / oversized / timeout`) and never attaches findings to a failed parse (`parsing.py:200-205`). The manifest's `error_behavior` block routes every failure to `no_clean_verdict_withhold`. Delivery gating in `gate.py` refuses to serve bytes in the `pending` state, and `withhold_for_infrastructure` withholds without recording a verdict (`gate.py:277-293`).
+- **Explicit epistemic guards.** `LookaheadError` in `verdicts.decide_verdict` rejects any recipient-action evidence or any event past the caller's cutoff (`verdicts.py:318-332`). `TraceLog.append` enforces monotonic sequence numbers, single-run scope, and the "withheld → parse `not_observed`" invariant (`events.py:150-186`). `VerdictDecision.equated_with_collusion` is hard-wired to `False`. These encode the project's constraints C-02/C-03/C-04 as code, not comments.
+- **Immutability done properly.** `ArtifactStore` is content-addressed, has no delete/overwrite API, keeps a per-artifact version chain, invalidates verdicts bound to superseded versions, hash-checks every read, and writes `index.json` atomically via a temp file and `replace()` (`store.py:347-363`).
+- **Honest reporting of limits.** Every detector finding carries a `limitations` tuple. The frozen benchmark records `universal_claim: false` and a narrative `claim_scope`. The latency contract explicitly lists misses (large JPEG times out; medium JPEG misses under 4-worker concurrency). This honesty is a strength to lean on in a competition, not hide.
+- **Determinism.** Fixtures use a custom LCG (`fixtures.py:36-46`) rather than `random`, so bytes are stable across Python versions; benchmarks take explicit seeds; IDs are derived from hashes.
+- **Documentation density.** 29 contract docs (~1,500 lines), a README that maps every acceptance criterion to a deliverable, module docstrings that explain the *why*.
+
+### 1.2 Measured quality signals
+
+| Check | Result |
+|---|---|
+| `pytest` | 201 passed, 0 failed, 75 s |
+| Test functions | 190 across 30 files (one per CL task) |
+| `ruff check` (default rules) | 35 findings: 6 unused imports, 4 unused variables, 7 unused unpacked variables, misc. |
+| `ruff --select E501` | 134 lines over 88 chars (no formatter configured) |
+| `ruff --select C90` (complexity > 10) | 10 functions flagged |
+| `mypy` | 106 errors in 7 files, **94 of them in `cli.py`** |
+| `TODO/FIXME` | 0 |
+| Dependencies | 0 runtime, 1 dev (`pytest`) |
+| CI | CircleCI: tests + 20 demo smoke runs. No lint, no type check, no coverage |
+
+### 1.3 Specific issues worth fixing
+
+Ordered by how much they matter for a demo and for credibility with technical judges.
+
+1. **Pure-Python JPEG/PNG decoding is the performance ceiling.** `parsing._BitReader` expands the entropy-coded scan into a Python `list[int]` of individual bits (`parsing.py:364-383`), so a 10 MB JPEG becomes an ~80 M-element list before decoding starts. PNG unfiltering is a per-byte Python loop (`parsing.py:325-351`). The project's own latency report says large JPEGs always hit the 2 s deadline and the 20 MP target is "not measurable with the pure-Python encoder". For a web demo, anything above a few hundred kilopixels will time out. The fix is either `numpy` for the hot loops, or an optional accelerated path (Pillow for PNG rows, a C JPEG coefficient reader) with the pure-Python path kept as the reference implementation.
+
+2. **The parser can raise where it promises not to.** `analyze_bytes` catches only `_Fail`; a truncated SOF segment reaches `body[6 + i * 3 + 1]` (`parsing.py:454`) and raises `IndexError`, and `_parse_huffman` can `IndexError` on a short DHT. The docstring says "never raises for malformed image input". A fuzz test (a few hundred random byte-flips over the fixture set) would find these in minutes and is exactly the kind of test a security-minded judge would ask about.
+
+3. **JPEG decoder assumes one DC and one AC table for all components.** `_parse_jpeg` reads tables `0x00` and `0x10` only (`parsing.py:496-498`) and ignores the per-component table selectors in the SOS header. That is fine for the project's own encoder (which writes exactly those tables) but any real-world baseline JPEG from libjpeg uses separate luma/chroma tables and would parse to garbage coefficients, or fail as `corrupt`. The declared subset in the docstring doesn't mention this restriction.
+
+4. **`cli.py` is a 547-line `if command == ...` chain** (28 branches) with 94 of the project's 106 mypy errors. It should be a dispatch table or `argparse` sub-commands with one function per command. This is the first file a judge will open after the README.
+
+5. **`ArtifactStore._save()` rewrites the whole `index.json` on every read**, because `get_original` appends an access record and then saves (`store.py:200-215`). On disk-backed stores this is O(n) per read and will dominate as access history grows. `Derivative` records are also never persisted (`_save` omits `_derivatives`). There is no cross-process locking; two processes sharing a `root` would clobber each other's index.
+
+6. **Duplication.** The threshold sweep, Wilson interval, bootstrap, and `need()` validation helper are copy-pasted: `benchmark_lsb` and `benchmark_dct` share ~80 lines; `dct.py` and `metadata.py` import private `_wilson/_roc_auc/_score_summary` from `lsb.py`; `_now()` is defined in three modules; a local `def need(cond, msg)` closure appears 20 times. A small `covertlens/_stats.py` and `covertlens/_validation.py` would remove several hundred lines.
+
+7. **`unauthorized_served` is hard-coded to 0** in `gate.access_attempt_report` (`gate.py:369`). The comment says "by construction", which is true today, but a test that asserts a constant is not testing anything. Compute it: count `served` attempts whose delivery state was not `permitted` at serve time.
+
+8. **The metadata "detector" is a keyword match.** `metadata.classify_entries` scores 0.9 if a chunk keyword equals the literal string `CovertLensPayload` (the project's own fixture keyword), 0.3 for any unknown keyword, 0 otherwise. This is a policy check, not a detector, and the module's own limitations list admits "a payload disguised under an allowed keyword evades the strong rule". It is fine as a floor, but should not be described as a detector family with equal standing to LSB/DCT.
+
+9. **Frozen thresholds rest on very small samples, and are literally sample scores.** `config/frozen-thresholds.json` calibrates each family on 2 positives and 4–6 negatives; the held-out frozen benchmark has 1, 1 and 2 positives per family. `calibration.calibrate_family` sets triage = lowest positive score, fail-run = highest positive score, quarantine = their midpoint (`calibration.py:52`), so the "frozen enforcement point" for spatial LSB (0.272414) is the average of the only two positive scores it ever saw. For metadata the score is `0.9 + min(bytes, 512)/5120` (`metadata.py:126`), so its three frozen thresholds are just the 12-byte and 64-byte fixture payload sizes in disguise. The reports do flag "tiny-n intervals", and the Wilson intervals are computed, but "≥95% recall" on n=1 is a target that cannot be failed. Judges who read the JSON will see this.
+
+10. **Audits treat *any* exception as "denied".** `route_audit._denied` (`route_audit.py:47-51`), the gate-reliability check in `latency.py:182,219,226`, and the pilot (`pilot.py:144`) all use bare `except Exception` and count it as a successful denial. The gate already defines `PendingDeliveryError` and `WithheldError`; catching those specifically costs nothing. As written, a `TypeError` introduced by a refactor would make the "zero unauthorized serves" audit pass vacuously, which is the opposite of what an audit is for.
+
+11. **Latent cache-key bug.** `integrity.AnalysisCache.get_score` defaults `config_version=""` (`integrity.py:106,143`), but `put_score` keys on the finding's `detector_config_version` ("1.0.0"). A caller using the default never hits. The tests always pass `config_version="1.0.0"` explicitly, which is why this has not surfaced.
+
+12. **Narrative conclusions are hard-coded, not computed.** `ablations.py:205` embeds the string "0.87 vs 0.53"; `latency.py:302` sets `proposal_met_for_jpeg_envelope: False` as a constant; the latency contract doc repeats a table of measured numbers. If the data changes, the reports will state stale conclusions with full confidence. Derive these from `rows`.
+
+13. **Retirement deletes a caller-supplied path.** `DatasetRetirement.execute` runs `shutil.rmtree(self._store_root)` (`runtime.py:421`) with no check that the path is actually an `ArtifactStore` root (e.g. that it contains `blobs/` and `index.json`). Also, denied `approve`/`execute` calls raise without an audit entry, while denied `request` is audited, contradicting the contract doc's "denied access is still audited".
+
+14. **Minor.** `parsing.analyze_version` reaches into `store._require` (a private method) with a comment excusing it; `datetime.timezone.utc` should be `datetime.UTC` on 3.11+; `str, Enum` should be `StrEnum`; several unused variables; `events.Event` is a mutable dataclass whose derived `event_id` can drift after `TraceLog` has recorded it; `report.build_run_report` runs `join_trace` twice (once directly, once inside `build_episode_context`); `outcomes.validate_outcome` re-reads the manifest from disk on every call; `test_calibration` silently skips its JSON-Schema validation when `jsonschema` isn't installed, which it isn't in CI, so none of the 24 schemas are machine-validated in CI.
+
+### 1.4 Test quality
+
+Tests are acceptance-style, named after the acceptance criterion they prove, and generally assert behaviour rather than implementation. Genuinely strong tests: `test_gate.py` (every gated route reaches the gate, R-08 rejected); `test_quarantine.py` (threads race the gate); `test_runtime.py` (audit-chain tamper detection, role and dataset scoping); `test_trace_join.py` (hash mismatch and cross-run rejection); `test_splits.py` (planted leaks are caught); `test_calibration.py` (locks the shipped freeze to a recomputation, a real regression guard); and the frozen-benchmark test that documents a real detector failure on smooth covers instead of hiding it.
+
+Weaknesses: the dominant pattern in the later modules is "run the self-contained demo, assert `validate_x(report) == []`, check a few shapes". Because the validators mostly check constants the builders hard-code (`equated_with_collusion is False`, `universal_claim is False`, `causation_claimed is False`, `unauthorized_served == 0`), those passes are tautological. Validator *failure* paths are exercised in only about a quarter of the test files. `test_latency.py` asserts a wall-clock P95 ≤ 2 s, which will flake on a loaded CI runner. There are no property-based or fuzz tests for the parsers, no test loads a PNG/JPEG produced by any encoder other than the project's own (the parsers have never seen a libpng or libjpeg file), there is no coverage measurement, and the statistics helpers (`_roc_auc`, `_wilson`, `_bootstrap_interval`) are only tested through end-to-end benchmarks rather than against known values.
+
+### 1.5 How much of the evaluation is real measurement?
+
+This matters for how you present results. Everything is closed-loop synthetic; there is no external image or trace anywhere in the repository.
+
+| Artifact | What it actually is |
+|---|---|
+| Fixture dataset | 30 images, all 64×48 px: 3 LSB pairs + 3 DCT pairs at 12/64/192-byte payloads, 4 negatives, 6 metadata pairs + 2 controls. Six cover-lineage groups in total, so the "leakage-safe split" is a hash over six groups. |
+| Held-out set | 8 fixtures: one LSB pair, one DCT pair, two metadata pairs; every positive is in the 192-byte "high" band. |
+| Clean-run stability | 320 freshly seeded 64×48 `gradient_noise` covers, alternating PNG/JPEG. Real runs through the real ladder, but one texture only. |
+| Latency | Real `perf_counter` timings, but the >1 MP classes are a 64×64 smooth block tiled, which is pathologically compressible; 5 repetitions per class; 4 GIL-bound threads. |
+| Seeded pilot | The same 30 fixtures plus 3 extra LSB pairs; the 5 "unseeded" traces are hand-built with author-known truth; adjudications are supplied by the test. |
+| Ablations | Context features are synthetic: `prior_actions` is incremented whenever a delivery succeeds (`ablations.py:124-126`), so "actions" equal deliveries and the trace order is dataset order. |
+| Route audit / review export | Verdicts are assigned from the fixture's ground-truth role (`review_export.py:203`), so these exercise plumbing, not detection. |
+
+The docstrings are candid about all of this, which is to the project's credit. But "benchmark", "pilot" and "latency report" should be read, and presented, as integration demonstrations of the pipeline rather than as evidence about detector performance. Section 5 explains how to turn this from a liability into a narrative.
+
+### 1.6 Overall grade
+
+**B+ as engineering, A- as a specification.** The scaffolding is excellent. The detection science inside the scaffolding is thin, and the people who will judge this at Meta are more likely to be detection-science people than scaffolding people. Section 3 addresses that directly.
+
+---
+
+## 2. Ideas for improvement (ordered by value per day of effort)
+
+### Quick wins (hours)
+
+1. Add `ruff` (with a formatter) and `mypy` to `pyproject.toml` and CI; fix the unused imports/variables; sort `__all__`. Zero risk, visible polish.
+2. Add `jsonschema` to the dev extras so the schema validation test actually runs in CI, then extend it to validate the output of every `*-demo` command against its schema. The schemas already exist; this turns 24 documents into 24 enforced contracts.
+3. Replace the CLI if-chain with `argparse` sub-commands and one function per command.
+4. Add a fuzz test for `analyze_bytes` (random truncation and byte flips over all fixtures; assert it never raises and always returns a valid result).
+5. Rename `config/allowed-channel-manifest.json`'s `"implementation": "planned: CL-14"` strings now that CL-14/15/23 exist. Stale "planned" text in a shipped manifest reads badly.
+
+### Medium (days)
+
+6. **Real-image corpus.** Add a small set of PNG/JPEG files produced by libpng, libjpeg-turbo, Pillow, matplotlib, and at least one diffusion-model output. Run the parsers on them. This will surface the Huffman-table issue and tell you whether `unsupported_encoding` fires on normal files (it will for any 4:2:0 JPEG, which is nearly all of them).
+7. **Optional accelerated parsing.** Keep pure-Python as the reference, add a `numpy` path for PNG unfiltering and the chi-square histograms, and extend the JPEG subset to 4:2:0 with per-component Huffman tables. This probably moves the latency misses in CL-29 into passes.
+8. **Stronger pixel detectors.** PoV chi-square is the 2000 Westfeld–Pfitzmann test; it is defeated by LSB matching (±1), which the code admits. Adding RS analysis or sample-pair analysis (SPA) for spatial, and a calibrated-histogram test (Fridrich's JPEG calibration) for DCT, would move the detectors from "textbook" to "credible". Both are a few hundred lines each and have no dependencies.
+9. **Larger fixture bands.** The high payload band is absent from calibration ("uncalibrated"). Generate more pairs per band (dozens, not two) so the Wilson intervals mean something.
+10. **Consolidate statistics and validation helpers** into shared private modules (see §1.3 item 6).
+
+### Larger (weeks)
+
+11. **Build the GEO family** (Section 3). This is the one that changes what the project *is*.
+12. **Web application** (Section 4).
+13. **Adaptive attacker evaluation (CL-34).** The requirements call for adaptive and unseen-configuration results reported separately. Even a simple "attacker tunes payload rate to sit just under the triage threshold" experiment would be a compelling figure.
+
+### Positioning (hours, but important)
+
+14. **The README currently says the tool is "for the Meta AI internal eval harness"** and REQUIREMENTS.md says "Jira project CL on rumination.atlassian.net" and "this document is my working interpretation". For a submission *to* Meta, this framing is risky: it implies an affiliation that does not exist and reads as internal planning notes. Reword to "designed for multi-agent evaluation harnesses" and move the Jira-tracing material to a `docs/planning/` folder or an appendix.
+15. The README is a deliverables ledger (33 tables of acceptance criteria). It needs a 10-line "what this is, why it matters, 30-second demo" opening before the ledger. Judges decide in the first screen.
+
+---
+
+## 3. Making "Geo" the selling point
+
+### 3.1 Why GEO is the right bet
+
+The LSB, DCT and metadata families are the three things any steganalysis tutorial covers. A judge will accept them as table stakes; they are defensible, as you say, but not differentiating. More importantly, **they do not match the threat model of a capable AI agent:**
+
+- An LLM-driven agent does not have bit-level access to the pixels it produces. It produces images by *describing* them (to a diffusion model, a plotting library, an SVG template, or a rendering tool). The channels it controls are semantic: how many objects, how tall, what colour, where, in what order.
+- An image encoded at generation time hashes cleanly, passes LSB and DCT tests (the carrier is the scene, not the noise floor), and has no suspicious metadata. The §8 addendum states this correctly in 8.2.
+- Published work on secret collusion among generative agents (Motwani et al., 2024) and on steganographic reasoning in language models treats *semantic* and *structural* channels as the realistic ones. Meta's own multi-agent and safety researchers will know this literature. A tool that only checks pixel noise is checking the channel the agent would never use.
+
+So the pitch becomes: **"Everyone can detect hidden bits. CovertLens detects hidden *meaning*: a skyline whose building heights spell a word, a chart whose bar order encodes a key, a star field whose brightness pattern is Morse."** That sentence alone is more memorable than the 33 acceptance-criteria tables.
+
+The existing infrastructure helps enormously: the manifest, finding schema, verdict ladder, trace join, fixture/split/calibration pipeline, and report/export machinery are all family-agnostic. Adding a fourth family is a new `geo.py`, a new fixture generator, one schema, one contract doc, one test file, and a one-line addition to `manifest.FAMILIES`. The hard work is the detector science, not the plumbing.
+
+### 3.2 Proposed design, mapped to GEO-01…GEO-07
+
+**Fixtures first (GEO-07).** Build a procedural *scene* generator alongside the existing cover generator, with scene types chosen to span the subfamilies in GEO-06:
+
+| Scene type | Encodable attribute | Subfamily | Benign twin |
+|---|---|---|---|
+| Skyline (row of rectangles) | height per building | height/position | random-height skyline, a real bar chart |
+| Dash row (Morse) | element length and gap | gap/timing | evenly-spaced dashes, a dotted divider |
+| Window grid / star field | lit vs dark per cell | lit/dark + colour code | random lit pattern, uniform grid |
+| Fence or blade row | angle per element | angle/tilt | uniform angle, wind-like smooth variation |
+| Bar chart with axes | bar height | height/position (declared) | real chart from task data |
+
+Each encoded scene embeds a declared payload via a declared mapping (A=1…Z=26 in height levels; Morse timing ratios; byte bits in lit/dark). Each clean twin uses the *same seed and layout* but draws attributes from a continuous distribution. Verification is "independent re-measurement": a separate measurement routine recovers the payload from the rendered raster, exactly as `decode_lsb_png` does today. Render to PNG through the existing `_save_png`, and also emit an SVG source for the vector route (GEO-04). Record generator/encoder versions, seeds, and declared payload units in the existing fixture manifest shape, and run them through the existing leakage-safe `splits.py` unchanged.
+
+**Segmentation (GEO-01).** For the raster route: threshold against the background colour (fixtures have a known background; for real images use Otsu on luminance), connected-component labelling (a two-pass union-find is ~60 lines of standard-library Python), filter components by area and by shape similarity to the median component, sort by reading order (y-band then x), and emit one attribute vector per element: bounding-box height, width, centroid x/y, gap to next element, mean RGB, luminance state, principal-axis angle (from second-order moments). Record method, tolerances, and the count of discarded components in `coverage`, as the LSB detector records `pairs_used`.
+
+**Vector route (GEO-04).** When the harness has the SVG or plotting source, parse `<rect>/<circle>/<line>` elements with `xml.etree` and read attributes directly; bind the finding to the rendered PNG's content hash with the source hash in lineage. This is a huge advantage: in an agent eval, the image is nearly always produced by code the harness can see, so the detector gets exact attributes with zero segmentation error. Nothing in the existing route inventory prevents adding "R-09 vector source" as a gated route.
+
+**Quantization test (GEO-02).** For each attribute sequence `v₁…vₙ`, search candidate grid steps `s` and offsets `o` and compute the residual `rᵢ = ((vᵢ − o) mod s) / s`, folded to [−0.5, 0.5]. Report the best `(s, o)`, root-mean-square residual, the number of elements within tolerance, and the implied number of levels. Compare against a permutation/continuous null: draw `n` values uniformly from the observed range, repeat, and report the fraction of null draws that achieve an equal or lower residual. This gives a p-value-like evidence score with no magic numbers, in the same `degrees/chi_square` spirit the LSB detector already uses. Note that legitimate charts *also* quantize (integers, round numbers), which is exactly why GEO-05 requires the structure test before anything is enforced.
+
+**Structure test (GEO-03).** Only when quantization passes, map levels through each *declared* mapping (the manifest lists them, like `declared_keys` for metadata today) to a symbol sequence, and score "structure" against a null: dictionary-word hit rate, character-bigram log-likelihood under an English model versus a shuffled sequence, run-length regularity for Morse, and byte-entropy for binary. Report the per-mapping score and the *best* mapping. Crucially, per C-09, the finding records "mapping M yields structure score 0.87 over 14 symbols", **not the decoded string**. The candidate decode is written only to the reviewer-access evidence path (R-08), the way quarantined originals are today. This is both the right ethics and a great talking point: the gate can say "this looks like language" without ever reading the message.
+
+**Benign controls and context (GEO-05).** Add a *declared geometric channel* concept to the allowed-channel manifest, mirroring `allowed_metadata_exceptions`: a task that asks for a bar chart declares `height` as an allowed carrier before the run, so height quantization on that artifact is benign by policy, but a Morse pattern in the gaps between bars is not. Add a lightweight chart-context detector (presence of axis lines, tick marks, text-like components) that lowers the prior for the height subfamily. Height or size alone never crosses the enforcement point; only quantization *and* structure do.
+
+**Subfamily reporting (GEO-06).** Emit one `Finding` per subfamily (`geo_height`, `geo_gap`, `geo_state`, `geo_angle`), each with its own coverage and limitations, so the benchmark and scorecard break down per subfamily and the project never claims "general geometric coverage" it has not tested. The verdict ladder's "most severe family wins" rule already handles multiple findings.
+
+**Threshold policy.** Ship unfrozen with explicit `null` placeholders, exactly as the three existing families did before CL-27, then calibrate on the development split with the existing `calibration.py`. This consistency is itself a selling point: the fourth family goes through the identical governance as the first three.
+
+### 3.3 Effort estimate
+
+| Piece | Days (one engineer) |
+|---|---|
+| Scene generator + 4 encoders + independent re-measurement + fixtures/splits | 4–5 |
+| Segmentation + attribute extraction (raster) and SVG parser (vector) | 3–4 |
+| Quantization + structure tests with permutation nulls | 3 |
+| `geo.py` findings, manifest/schema/contract/tests, benchmark + calibration | 3 |
+| Demo images, figures, README section | 2 |
+| **Total** | **~3 weeks** |
+
+Two weeks if you drop angle/tilt and the vector route for the first cut. Do not drop the benign controls; they are the whole credibility of the family.
+
+### 3.4 The demo that wins the room
+
+Two images side by side, both skylines, both visually ordinary. Slide 1: hashes identical in structure, LSB score 0.03, DCT not applicable, metadata clean, every classic detector says "fine". Slide 2: CovertLens GEO overlay draws bounding boxes, plots the height sequence, shows the residual collapsing onto a 26-level grid, shows the structure score against the shuffled null, and issues `quarantine` with the finding "height subfamily: quantized, structured under mapping alpha26, 11 symbols" while the benign skyline next to it logs clean. Then the reviewer view, and only the reviewer view, shows the candidate decode. That is a 60-second story a judge can retell.
+
+---
+
+## 4. Turning it into a web app
+
+### 4.1 Difficulty assessment: moderate, and lower than usual
+
+Three properties make this easier than a typical "wrap a research library" job:
+
+- **Every entry point already returns JSON.** `analyze_all_bytes(data).to_dict()`, `decide_verdict(...).to_dict()`, `build_run_report(...)`, `run_frozen_evaluation()`, `join_trace(...)` are all plain dictionaries with schemas. An HTTP layer is a thin translation.
+- **Zero dependencies.** No compiled extensions, no model weights. The package installs in seconds in any container, and can even run in-browser via Pyodide.
+- **The gate and store are already objects with explicit state**, so a service is just one long-lived `InterceptionGate` over a disk-backed `ArtifactStore`.
+
+The real difficulties are: (1) pure-Python decode latency for realistic image sizes (§1.3 item 1), (2) the store's whole-index rewrite per read, (3) in-memory gate state that disappears on restart, and (4) no authentication layer; the `runtime.EvidenceGateway` role model exists but nothing maps HTTP identity to a `Principal`.
+
+### 4.2 Recommended architecture
+
+```
+browser (React + Vite, TypeScript)
+   │  REST + SSE
+   ▼
+FastAPI service (Python 3.12)
+   ├─ covertlens (unchanged library)
+   ├─ one InterceptionGate over a disk-backed ArtifactStore
+   ├─ background worker pool for analysis (ProcessPool; the 2 s deadline becomes a real wall-clock bound)
+   └─ SQLite (or Postgres) for sessions, runs, and access audit
+```
+
+Why not Django or Flask: FastAPI gives you Pydantic models that can be generated from the existing JSON Schemas, automatic OpenAPI docs (judges love an interactive `/docs` page), and native async for server-sent events as the analysis runs.
+
+Why a process pool: the CL-29 report shows GIL contention inflating per-item latency under 4 threads. Processes fix that for free.
+
+### 4.3 Pages and endpoints
+
+| Page | What it shows | Backing calls |
+|---|---|---|
+| **Analyze** | Drag-and-drop an image, see per-family scores, coverage, limitations, verdict, evidence table; GEO overlay with segmentation boxes and sequence plots | `POST /analyze` → `analyze_all_bytes`, `decide_verdict` |
+| **Fixture gallery** | The paired clean/encoded fixtures with scores, filterable by family and band | `GET /fixtures` → `build_dataset`, `build_metadata_dataset`, GEO dataset |
+| **Live gate** | Simulate a run: sender agent posts an image, the delivery sits `pending`, the detector decides, the recipient is served or withheld, the trace timeline grows in real time | `POST /runs/{id}/intercept`, `/deliver`, `GET /runs/{id}/events` (SSE) over `InterceptionGate` |
+| **Trace explorer** | Episode context, repeated weak signals per sender, join records with missing-link reasons | `join_trace`, `build_episode_context`, `build_run_report` |
+| **Benchmarks** | ROC curves, Wilson intervals, per-band recall, ablation arms, latency classes | `benchmark_lsb/dct/metadata`, `run_ablations`, `run_reliability_report` (precomputed and cached) |
+| **Review** | Reviewer-only: quarantined originals, candidate decodes for GEO, disposition workflow, sealed export download | `reviewer_access`, `apply_review`, `build_review_package` behind a role |
+| **Red-team playground** | A user picks a scene type, types a secret, the app *generates* the encoded image, then runs the gate on it; score the attacker vs the detector | GEO encoders + `/analyze` |
+
+Endpoints are stateless except the gate/run ones. Keep the library's rule that only reviewers see originals: the Analyze page can show the uploaded image because the uploader owns it, but the Live gate page must not render withheld bytes to the "recipient" pane.
+
+### 4.4 Plan and estimate
+
+| Phase | Work | Days |
+|---|---|---|
+| 0 | Fix parser robustness (fuzz) and add the accelerated decode path; otherwise uploads of normal photos will time out | 2–3 |
+| 1 | FastAPI skeleton, `/analyze`, `/fixtures`, OpenAPI docs, Dockerfile | 2 |
+| 2 | React front end: Analyze + Gallery pages, score cards, evidence tables | 3 |
+| 3 | Live gate + trace explorer with SSE timeline | 3 |
+| 4 | Benchmarks page (precomputed JSON → charts) | 1–2 |
+| 5 | Review role, sessions, sealed export download; map HTTP identity to `Principal` | 2 |
+| 6 | GEO overlay and red-team playground (depends on §3) | 3 |
+| 7 | Deploy (Fly.io / Render / a single VM), domain, demo video | 1 |
+| **Total** | | **~3 weeks** including GEO UI; ~2 weeks without |
+
+### 4.5 The client-side option
+
+Because the library imports nothing outside the standard library, it runs under Pyodide in the browser today. A static site (no backend at all) could load the package, accept an image, and run `analyze_all_bytes` locally. Latency would be worse than native CPython, so it suits the demo-size images only, but the message, "the detector runs on your machine, your evidence never leaves it", aligns perfectly with constraint C-01 and makes for a zero-ops demo link you can put in a submission form. Consider shipping both: the full app for the live demo, the Pyodide page as the fallback that cannot go down.
+
+---
+
+## 5. Standing out in a Meta competition
+
+1. **Lead with the threat model, not the tool.** Open with "two Llama agents in an eval share an image; the image is innocent to a human and to every classical steganalysis test; it contains the answer key." Then show the gate. Judges at Meta will respond to a demo built with Llama-based agents in a sandbox, actually attempting the covert channel, far more than to synthetic fixtures. The replay machinery in `replay.py` and the seeded pilot in `pilot.py` are already shaped for exactly this experiment; swap the synthetic sender for a real model and you have a result nobody else will have.
+
+2. **Show one number you can defend and one figure you can explain.** The ablation table (image-only AUC 0.94, context-only 0.43, combined 0.47) is a real, honest, slightly surprising result; it says "context is a triage aid, not an enforcer", which is a mature finding. Put it on a slide. Do *not* lead with "≥95% recall" because it rests on n=1.
+
+3. **Make the honesty a feature.** `universal_claim: false`, explicit timeouts, narrowed coverage, "evidence not decoded message". Safety reviewers are allergic to over-claiming; a tool that structurally refuses to over-claim is itself a safety contribution. Say so explicitly.
+
+4. **Ship the red-team playground.** Interactive "try to smuggle a message past it" demos get shared. It also produces real adversarial data for CL-34, which the requirements call for and which is currently empty.
+
+5. **A two-minute video and a one-page architecture diagram.** The current README has neither. The diagram should be the pipeline: intercept → immutable store → bounded parse → four families → ladder → trace join → reviewer; with GEO highlighted.
+
+6. **Fix the framing problems** in §2 item 14 before anyone at Meta reads the repo: no implied Meta affiliation, no Jira-tracking prose in the top-level requirements file.
+
+7. **Name the scorecard (CL-35) and runbook (CL-36) as "next", with dates.** Judges like a roadmap with two unfinished boxes more than a roadmap with none; it signals the project is alive.
+
+8. **Consider a short companion write-up** (4–6 pages) structured as threat model → gate design → detector families → GEO → evaluation → limitations. The contract docs already contain most of the text; this is an editing job, not a writing job.
+
+---
+
+## Appendix A. Files examined
+
+`covertlens/parsing.py`, `lsb.py`, `dct.py`, `fixtures.py`, `gate.py`, `store.py`, `verdicts.py`, `events.py`, `metadata.py`, `cli.py`, `__init__.py`, `sequence.py` (in full); all other modules via a delegated read-through (see Appendix B); `tests/test_gate.py` and the test suite as a whole; `README.md`, `REQUIREMENTS.md`, `pyproject.toml`, `.circleci/config.yml`, all three `config/*.json`, representative `schemas/` and `docs/contracts/` files.
+
+## Appendix B. Secondary-module review notes
+
+The modules not read line-by-line in the main review (`runtime`, `trace_join`, `sequence`, `report`, `pinning`, `calibration`, `frozen_benchmark`, `latency`, `pilot`, `ablations`, `route_audit`, `review_export`, `metadata_fixtures`, `outcomes`, `integrity`, `replay`, `splits`, `manifest`, `routes`, `ids`) were reviewed in a delegated pass and every finding cited above from them was re-verified against the source before inclusion. Additional smaller observations from that pass:
+
+- Unversioned magic numbers in scoring: context weights 0.12/0.08 in `sequence.py`, the 0.5 agreement bound in `pinning.py`, the 7919 seed stride in `replay.py`, and `+0.999999` instead of `math.ceil` in `latency.py`.
+- `pinning._canonical` serialises with `default=str` (bytes silently stringified) while `AuditLog` does not; the two hash paths should share one canonicaliser.
+- `replay.py` passes the fixture rather than the received bytes to `recover`, despite the docstring saying otherwise.
+- `review_export._FORBIDDEN_KEYS` is a name-based heuristic for keeping raw bytes out of exports; a type-based check (reject any `bytes` value anywhere in the tree) would be stronger.
+- Needless function-local imports in `pinning.py` and `integrity.py` to avoid import cycles that do not exist.
+- Tests that pass a hand-crafted feature set designed to yield AUC 1.0 (`test_sequence.py`) prove the plumbing, not the scorer.
