@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
-SCORECARD_VERSION = "1.0.0"
+SCORECARD_VERSION = "1.1.0"
 SCORECARD_PATH = Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
 DECISIONS = ("release", "release_with_limitations", "no_release")
 
@@ -34,6 +34,7 @@ _SOURCES = {
     "pilot": ("covertlens.seeded-pilot", "docs/contracts/seeded-pilot.md"),
     "ablations": ("covertlens.ablations-prevention", "docs/contracts/ablations-prevention.md"),
     "robustness": ("covertlens.robustness-evaluation", "docs/contracts/robustness-evaluation.md"),
+    "geometric": ("covertlens.geo-benchmark", "docs/contracts/geo-benchmark.md"),
 }
 
 
@@ -46,6 +47,7 @@ def build_scorecard() -> dict[str, Any]:
     """Aggregate the merged CL-28..CL-34 reports into the scorecard."""
     from .ablations import run_ablations
     from .frozen_benchmark import run_frozen_evaluation
+    from .geo_benchmark import run_geo_benchmark
     from .latency import run_reliability_report
     from .pilot import run_pilot
     from .review_export import run_export_verification
@@ -63,6 +65,7 @@ def build_scorecard() -> dict[str, Any]:
     audit = run_route_audit()
     exports = run_export_verification()
     robustness = run_robustness()
+    geo = run_geo_benchmark()
 
     families = frozen["held_out"]["families"]
     latency_classes = latency["classes"]
@@ -85,6 +88,10 @@ def build_scorecard() -> dict[str, Any]:
         "derivative enforcement is procedural (CL-32).",
         "Context/sequence evidence is a triage aid only: combined "
         "scoring dilutes image evidence (CL-31).",
+        "The geometric family (CL-38..CL-44) is log-only triage: "
+        "its thresholds are unfrozen, structure claims rest on "
+        "declared codes only, and no general geometric coverage "
+        "is claimed from any single subfamily.",
     ]
     target_revisions = [
         {
@@ -214,6 +221,38 @@ def build_scorecard() -> dict[str, Any]:
                 "unresolved": robustness["unresolved"],
                 "separate_from_frozen_benchmark": True,
             }),
+            "geometric": _section("geometric", {
+                "family": "geometric",
+                "thresholds_status": geo["detector"]["threshold_status"],
+                "enforceable": geo["detector"]["enforceable"],
+                "per_subfamily": {
+                    name: {
+                        "encoded_recall_any_signal":
+                            block["encoded"]["recall_any_signal"]["rate"],
+                        "encoded_recall_any_wilson95":
+                            block["encoded"]["recall_any_signal"]["wilson_95"],
+                        "benign_false_structure_claim_rate":
+                            block["benign"]["false_structure_claims"]["rate"],
+                        "benign_false_structure_claim_wilson95":
+                            block["benign"]["false_structure_claims"]["wilson_95"],
+                    }
+                    for name, block in geo["subfamilies"].items()
+                },
+                "attacker_grid": {
+                    name: (
+                        row["encoded_quantized_recall"]["rate"]
+                        if row.get("status") == "evaluated" else row["status"]
+                    )
+                    for name, row in geo["attacker_grid"].items()
+                },
+                "benign_controls_false_structure_claims": {
+                    kind: block["false_structure_claims"]["successes"]
+                    for kind, block in geo["benign_controls"].items()
+                },
+                "prevalence": geo["prevalence"],
+                "general_geometric_coverage_claimed":
+                    geo["coverage"]["general_geometric_coverage_claimed"],
+            }),
         },
         "decision": {
             "value": "release_with_limitations",
@@ -257,7 +296,7 @@ def validate_scorecard(scorecard: dict[str, Any]) -> list[str]:
     for name in (
         "detection_frozen_benchmark", "latency_reliability", "gate_and_trace",
         "evidence_exports", "pilot_adjudication", "sequence_value",
-        "prevention", "robustness_bounds",
+        "prevention", "robustness_bounds", "geometric",
     ):
         section = (scorecard.get("sections") or {}).get(name)
         need(section is not None, f"sections.{name} is required")

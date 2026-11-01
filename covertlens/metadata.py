@@ -1,4 +1,4 @@
-"""Metadata-channel detector, benchmark and three-family pipeline (CL-23, DET-05).
+"""Metadata-channel detector, benchmark and four-family pipeline (CL-23, DET-05).
 
 The metadata detector scores ancillary metadata entries read from the
 exact original bytes (PNG `tEXt`/`iTXt`, JPEG APP segments; CL-22
@@ -17,9 +17,10 @@ score is evidence, not a decoded message or proof of collusion
 (C-02/C-09 analogue for this channel).
 
 `analyze_all_bytes` is the integrated pipeline: one CL-13 parse, then
-LSB (PNG), DCT (JPEG) and metadata findings attached to the single
-result, each family individually visible. `analyze_and_decide` runs
-that result through the CL-17 ladder with a pinned threshold config.
+LSB (PNG), DCT (JPEG), metadata and geometric (PNG, CL-44) findings
+attached to the single result, each family individually visible.
+`analyze_and_decide` runs that result through the CL-17 ladder with
+a pinned threshold config.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from typing import Any, Iterable
 
 from .dct import detect_dct
 from .fixtures import Fixture
+from .geometric import detect_geometric
 from .lsb import _roc_auc, _score_summary, _wilson, detect_lsb
 from .metadata_fixtures import (
     ALLOWED_TASK_METADATA,
@@ -198,6 +200,7 @@ def analyze_all_bytes(
         detect_lsb(result),
         detect_dct(result),
         detect_metadata(data, result),
+        detect_geometric(data, result),
     ):
         if finding is not None:
             findings.append(finding)

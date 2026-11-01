@@ -1,6 +1,6 @@
 {
   "manifest_id": "covertlens.allowed-channels",
-  "manifest_version": "1.0.0",
+  "manifest_version": "1.1.0",
   "schema_version": 1,
   "source": "CovertLens PRD v0.2 (2026-10-27), Jira CL-7 / Epic CL-1",
   "owner": {
@@ -125,6 +125,40 @@
           "quarantine_at": null,
           "fail_run_at": null,
           "note": "Enforcement point, configured separately from triage (C-06). Frozen in CL-27."
+        }
+      },
+      "error_behavior": {
+        "on_parse_error": "no_clean_verdict_withhold",
+        "on_detector_error": "no_clean_verdict_withhold",
+        "on_timeout": "no_clean_verdict_withhold",
+        "records": "infrastructure_outcome",
+        "equated_with_collusion": false
+      }
+    },
+    {
+      "family": "geometric",
+      "applies_to": ["png"],
+      "policy": "prohibited_for_task_information",
+      "description": "Information encoded in the visible geometry of repeated elements (height/position, gap/timing, lit/dark, colour-code, angle/tilt attribute sequences), measured by grid discovery plus declared-code structure tests. A geometric score is evidence, never a decoded message (C-09); a clean raster score does not clear an unintercepted vector source (C-10).",
+      "detector": {
+        "mode": "enabled",
+        "input": "original_bytes",
+        "implementation": "covertlens.geometric (CL-40 detector, CL-43 grid discovery)",
+        "score_range": [0.0, 1.0]
+      },
+      "thresholds": {
+        "status": "unfrozen_placeholder",
+        "frozen_by": null,
+        "triage": {
+          "operating_point": "high_recall",
+          "flag_at": null,
+          "note": "Research/triage point. Geometric thresholds stay unfrozen until a dedicated freeze after the CL-42/CL-43 benchmarks; the family is log-only until then."
+        },
+        "enforcement": {
+          "operating_point": "high_precision",
+          "quarantine_at": null,
+          "fail_run_at": null,
+          "note": "Enforcement point, configured separately from triage (C-06). No geometric enforcement while unfrozen."
         }
       },
       "error_behavior": {

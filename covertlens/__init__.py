@@ -146,6 +146,7 @@ from .geometric import (
     GeometricConfig,
     analyze_geometric,
     analyze_geometric_bytes,
+    detect_geometric,
     validate_geometric_report,
 )
 from .geo_benchmark import (
@@ -357,6 +358,7 @@ __all__ = [
     "register_source_lineage",
     "validate_vector_binding",
     "analyze_geometric",
+    "detect_geometric",
     "analyze_geometric_bytes",
     "validate_geometric_report",
     "SegmenterConfig",

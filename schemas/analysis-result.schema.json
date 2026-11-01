@@ -82,7 +82,7 @@
         "coverage", "evidence", "limitations", "schema_version"
       ],
       "properties": {
-        "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata"]},
+        "family": {"enum": ["spatial_lsb", "jpeg_dct", "metadata", "geometric"]},
         "detector_name": {"type": "string", "minLength": 1},
         "detector_version": {"type": "string", "minLength": 1},
         "score": {"type": "number", "minimum": 0, "maximum": 1},
@@ -90,7 +90,13 @@
         "evidence": {"type": "object"},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "schema_version": {"const": "1.0.0"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"family": {"const": "geometric"}}},
+          "then": {"$ref": "geometric-finding.schema.json"}
+        }
+      ]
     }
   }
 }

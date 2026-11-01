@@ -306,6 +306,17 @@ store** that every later task builds on.
 | `geometric.py` has no import of `geometric_fixtures.GRIDS` | Source-level test; fixture grids are test inputs only |
 | Geometric benchmark gains an `attacker_grid` row per subfamily | `attacker_grid` section in `run_geo_benchmark` (evaluated for height/gap/angle; `not_applicable` with reason for lit/colour) |
 
+## CL-44 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Geometric is a channel family of the gate, not a side pipeline | `geometric` added to `manifest.FAMILIES` and `config/allowed-channel-manifest.json` (manifest 1.1.0, `applies_to: ["png"]`, thresholds `unfrozen_placeholder`, same fail-closed error behaviour) |
+| The geometric `Finding` validates under DET-02 and the ladder handles the family | `validate_finding(geometric) == []`; `decide_verdict` returns `log` with `enforceable == False` while unfrozen; `families_without_findings` lists geometric when absent; `schemas/geometric-finding.schema.json` referenced from the analysis-result finding schema |
+| `analyze_all_bytes` attaches at most one finding per family, including geometric for parsed PNGs | `detect_geometric` in the integrated pipeline (PNG only; JPEG/failed parses get none) |
+| Trace join, run report, review export and pin carry geometric findings and detector/config versions | Findings flow through `join_trace`/`build_run_report`/`export_bundle` generically; `build_pin` pins the geometric detector + config version and the family's threshold status |
+| Scorecard gains a geometric section citing the CL-42 benchmark, per subfamily, never pooled | `sections.geometric` in `build_scorecard` and the republished `config/release-scorecard.json` (scorecard 1.1.0) |
+| REQUIREMENTS.md traces the family; `corrupt_source` is a recorded segmentation status | GEO-01..07 traced to CL-38..CL-44 with C-09/C-10 marked active; `corrupt_source` added to `segmentation.FAILURE_MODES` |
+
 ## Quickstart
 
 ```bash

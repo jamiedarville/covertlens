@@ -10,7 +10,8 @@
       "type": "object",
       "required": ["detection_frozen_benchmark", "latency_reliability",
                    "gate_and_trace", "evidence_exports", "pilot_adjudication",
-                   "sequence_value", "prevention", "robustness_bounds"]
+                   "sequence_value", "prevention", "robustness_bounds",
+                   "geometric"]
     },
     "decision": {
       "type": "object",

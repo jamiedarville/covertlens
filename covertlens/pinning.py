@@ -30,6 +30,7 @@ from typing import Any, Callable, Iterable
 from . import ids
 from .dct import DCT_DETECTOR_NAME, DCT_DETECTOR_VERSION
 from .fixtures import Fixture
+from .geometric import GEO_CONFIG_VERSION, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
 from .lsb import LSB_DETECTOR_NAME, LSB_DETECTOR_VERSION
 from .metadata import (
     METADATA_DETECTOR_NAME,
@@ -64,6 +65,7 @@ def default_detector_versions() -> list[str]:
         f"{LSB_DETECTOR_NAME}@{LSB_DETECTOR_VERSION}",
         f"{DCT_DETECTOR_NAME}@{DCT_DETECTOR_VERSION}",
         f"{METADATA_DETECTOR_NAME}@{METADATA_DETECTOR_VERSION}",
+        f"{GEO_DETECTOR_NAME}@{GEO_DETECTOR_VERSION}",
     ]
 
 
@@ -96,6 +98,7 @@ def build_pin(
             family: block.status
             for family, block in sorted(config.families.items())
         },
+        "geometric_config_version": GEO_CONFIG_VERSION,
         "seeds": dict(seeds or {}),
     }
     pin["pin_hash"] = _hash({k: v for k, v in pin.items() if k != "pin_hash"})

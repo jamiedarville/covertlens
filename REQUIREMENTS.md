@@ -107,23 +107,30 @@ state of repeated visual elements, read in order. A human viewer may
 see only an ordinary scene; the sequence of attributes may still
 carry a structured message.
 
+Implementation status: **implemented** as the fourth channel
+family (manifest 1.1.0) by CL-38 through CL-44 — fixtures,
+segmentation, quantization/structure tests, vector binding,
+benign-control benchmark, and gate integration. Thresholds
+remain unfrozen placeholders; the family is log-only until a
+dedicated freeze.
+
 - **GEO-01** Repeated-object segmentation: segment repeated,
   similarly shaped visual elements in a generated image, in reading
   order, and extract a numeric attribute sequence per element
   (height, vertical position, width, gap, angle/tilt, colour code,
   lit/dark state, or equivalent), with segmentation method,
-  tolerances, and failure modes recorded. (Proposed)
+  tolerances, and failure modes recorded. (`CL-39`)
 - **GEO-02** Quantization test: test whether attribute values snap
   to a small, regular grid or discrete set with near-zero residual,
   versus continuous natural variation; report grid step, residual,
   and count. A bare "pattern detected" verdict without these numbers
-  is not acceptable. (Proposed)
+  is not acceptable. (`CL-40`, grid discovery `CL-43`)
 - **GEO-03** Language/structure test: only where a quantized
   sequence maps through a simple, declared code (alphabet position,
   timing ratios, byte patterns, or equivalent) to a structured
   sequence (words, codes, grammatical text) may it be scored as a
   candidate encoding. A quantized sequence alone, without structure,
-  is a weak signal for triage only. (Proposed)
+  is a weak signal for triage only. (`CL-40`)
 - **GEO-04** Vector source: where a vector source is available,
   parse object attributes directly from the source, with lineage
   linking the source version to the rendered version; the verdict
@@ -131,7 +138,7 @@ carry a structured message.
   raster is available, segment on original raster bytes; renderer,
   resize, and recompression effects are recorded as limitations,
   and no resize or recompression is applied before analysis.
-  (Proposed)
+  (`CL-41`)
 - **GEO-05** Benign controls and legitimate encoding: height, size,
   and similar attributes are legitimate in data visualizations,
   charts, diagrams, and ordinary scenes. The detector must
@@ -139,19 +146,19 @@ carry a structured message.
   diagram?), by the quantization and structure tests, and by
   comparison to benign controls (benign generated scenes, skylines,
   charts, abstract art). Height or size alone never triggers
-  enforcement. (Proposed)
+  enforcement. (`CL-42`, context input `CL-45`)
 - **GEO-06** Family coverage, not height-only: coverage must
   include, at minimum, height/position, gap/timing, lit/dark and
   colour-code sequences, and angle/tilt, and must report
   per-subfamily results separately. A detector tuned only to one
-  subfamily must not claim general geometric coverage. (Proposed)
+  subfamily must not claim general geometric coverage. (`CL-42`)
 - **GEO-07** Geometric fixtures and benchmark: build clean/encoded
   paired fixtures for geometric encoding analogous to CL-9: the
   same scene, with and without an encoded attribute sequence,
   verified by independent re-measurement; include benign negatives
   and generator variation; record generator, encoder, seeds,
   configs, and declared payload units; keep scorer ground truth
-  separate, with leakage-safe splits per DT-03/DT-04. (Proposed)
+  separate, with leakage-safe splits per DT-03/DT-04. (`CL-38`)
 
 ### ENF — Inline verdicts, quarantine, run failure (Epic CL-4)
 
@@ -258,11 +265,11 @@ carry a structured message.
 - **C-08** Consumer uploads and transports are out of scope. (Epic notes)
 - **C-09** A geometric score is evidence, never a decoded message.
   Attribute sequences and heatmaps are evidence aids, never decoded
-  messages. (Proposed, §8; extends REV-04)
+  messages. (Active, §8; extends REV-04; `CL-40`+)
 - **C-10** Where a vector source and a rendered raster both exist,
   lineage must link them. A verdict on the rendered version does
   not by itself prove source intent, and a clean raster score does
-  not clear a vector source that was not intercepted. (Proposed, §8)
+  not clear a vector source that was not intercepted. (Active, §8; `CL-41`)
 
 ## 5. Delivery plan
 
@@ -384,7 +391,9 @@ equated with demonstrated collusion (C-02, C-06, C-09).
 
 - Add a geometric detector family alongside spatial LSB, JPEG DCT,
   and metadata, with its own versioned scores, configuration, and
-  limitations recorded per DET-02/DET-03 style.
+  limitations recorded per DET-02/DET-03 style. (Done: `CL-44` —
+  manifest 1.1.0, four families in the pipeline, ladder, report,
+  export, pin and scorecard.)
 - Prefer vector-source parsing where the harness provides it;
   otherwise segment the original raster bytes, and record renderer
   and transform limitations explicitly.

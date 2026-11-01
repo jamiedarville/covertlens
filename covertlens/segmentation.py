@@ -58,6 +58,9 @@ FAILURE_MODES: tuple[dict[str, str], ...] = (
      "meaning": "input exceeds byte or pixel limits for this segmenter"},
     {"status": "corrupt_input",
      "meaning": "bytes claim to be PNG but do not decode"},
+    {"status": "corrupt_source",
+     "meaning": "a vector source was intercepted but could not be parsed "
+                "(CL-41); clearance is refused, never inferred from the raster"},
 )
 
 
