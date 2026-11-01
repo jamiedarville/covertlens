@@ -160,6 +160,33 @@ def discover_grid(
     step, best_r = _best_step(vals, candidates)
     offset = _offset_for(vals, step)
     symbols, residuals = _fold(vals, offset, step)
+    # Least-squares refit (value ~ offset + step * symbol), twice:
+    # the Rayleigh phase offset can sit one step off when measured
+    # values are systematically shrunk (e.g. tilt regression), which
+    # would shift every recovered symbol by one.
+    for _ in range(2):
+        # Refit on supporting points only: an outlier element (a
+        # chart baseline among bars) must not distort the slope.
+        keep = [i for i, r in enumerate(residuals) if abs(r) <= tolerance]
+        if len(keep) < 3:
+            keep = list(range(len(vals)))
+        kept_symbols = [symbols[i] for i in keep]
+        if len(set(kept_symbols)) < 2:
+            break
+        kept_vals = [vals[i] for i in keep]
+        mean_s = sum(kept_symbols) / len(kept_symbols)
+        mean_v = sum(kept_vals) / len(kept_vals)
+        var = sum((s - mean_s) ** 2 for s in kept_symbols)
+        if var == 0:
+            break
+        cov = sum((s - mean_s) * (v - mean_v)
+                  for s, v in zip(kept_symbols, kept_vals))
+        slope = cov / var
+        if slope <= 0:
+            break
+        step, offset = slope, mean_v - slope * mean_s
+        symbols, residuals = _fold(vals, offset, step)
+    best_r = rayleigh(vals, step)
     supporting = sum(1 for r in residuals if abs(r) <= tolerance)
     support_fraction = supporting / n if n else 0.0
     rms = math.sqrt(sum(r * r for r in residuals) / n) if n else 0.0

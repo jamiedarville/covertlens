@@ -326,6 +326,16 @@ store** that every later task builds on.
 | Chart-likeness is inferred from segmentation and used as a height-only prior, never the sole discriminator | `chart_likeness` (baseline/axis, equal widths/gaps, axis text marks) in every finding's evidence; ≥ 0.7 on chart controls, ≤ 0.3 on skyline/abstract/benign-scene controls; `height_prior` annotation only |
 | Benchmark rows prove the three cases | `scene_context` section in `run_geo_benchmark`: chart with declared height, chart undeclared, encoded structured scene without declaration |
 
+## CL-46 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Structure test v2: every subfamily has an applicable declared code, judged against a null — not a lexicon lookup | Code registry (alphabet A=0/A=1, timing ratios, bit packing, base-k digits, ordinal rank); trigram model trained on the committed word list (sha256 in `GeometricConfig`); a claim needs ≥ 8 symbols and beats the symbol-shuffle null at level 0.01 |
+| Structured geometric fixtures exist for every subfamily | `payload_mode` `random \| word \| morse \| ascii` in `build_geo_pair` (word/morse/ASCII encodings per subfamily; mode recorded in the encoder config) |
+| Benchmark: three rows per subfamily with recall / false-claim rates and intervals | `rows.continuous / quantized_unstructured / quantized_structured` in `run_geo_benchmark`; false-structure rates on random-payload and chart rows reported with Wilson intervals (no invented target) |
+| No mapped text in findings; candidate decodes only on the reviewer evidence path | `Finding.to_dict()` contains no mapped text (validator rejects it); `EvidenceGateway.record_candidate_decode` / `read_candidate_decode` with the new `candidate.decode.read` permission (reviewer role) — researcher reads denied and audited |
+| Structure recall ≥ 0.8 on structured payloads, n ≥ 20 per subfamily, end-to-end from pixels | `tests/test_structure_v2.py`: per-subfamily pixel-level detection and `run_structured_recall(20)` |
+
 ## Quickstart
 
 ```bash

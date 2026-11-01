@@ -46,7 +46,7 @@
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
-  "scorecard_version": "1.1.0",
+  "scorecard_version": "1.2.0",
   "sections": {
     "detection_frozen_benchmark": {
       "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",

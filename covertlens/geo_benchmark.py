@@ -144,6 +144,44 @@ def _classify(item_bytes: bytes) -> str:
     return analyze_geometric_bytes(item_bytes)["classification"]
 
 
+STRUCTURED_SPECS: dict[str, dict[str, Any]] = {
+    "height_position": {"n_elements": 12, "width": 384, "payload_text": "DECAF"},
+    "gap_timing": {"n_elements": 20, "width": 768, "payload_text": "ETET"},
+    "lit_dark": {"n_elements": 32, "width": 768, "payload_text": "DECAF"},
+    "colour_code": {"n_elements": 40, "width": 1024, "payload_text": "DECAF"},
+    "angle_tilt": {"n_elements": 17, "width": 1024, "payload_text": "DECAF"},
+}
+
+
+def build_structured_pair(subfamily: str, index: int = 0):
+    """One clean/structured-encoded pair (payload_mode='word', CL-46)."""
+    spec = STRUCTURED_SPECS[subfamily]
+    return build_geo_pair(
+        subfamily, payload_mode="word",
+        payload_text=spec["payload_text"],
+        n_elements=spec["n_elements"], width=spec["width"],
+        scene_seed=20000 + 977 * index, payload_seed=555,
+    )
+
+
+def run_structured_recall(pairs_per_subfamily: int = 5) -> dict[str, Any]:
+    """Structure recall on structured payloads, per subfamily (CL-46)."""
+    rows: dict[str, Any] = {}
+    for subfamily in SUBFAMILIES:
+        classes = []
+        for j in range(pairs_per_subfamily):
+            _clean, encoded = build_structured_pair(subfamily, j)
+            classes.append(_classify(encoded.data))
+        rows[subfamily] = {
+            "n": len(classes),
+            "classifications": _tally(classes),
+            "structure_recall": _rate(
+                sum(1 for c in classes if c == SIGNAL_STRUCTURE),
+                len(classes)),
+        }
+    return rows
+
+
 @lru_cache(maxsize=8)
 def structured_payload_fixture(max_seed: int = 2000):
     """First height pair whose encoded payload passes a declared code.
@@ -159,7 +197,8 @@ def structured_payload_fixture(max_seed: int = 2000):
     return None
 
 
-def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str, Any]:
+def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3,
+                      structured_count: int = 5) -> dict[str, Any]:
     """Per-subfamily benchmark. Deterministic; ground truth (roles and
     control expectations) stays scorer-side (C-07)."""
     fixtures = build_geo_dataset()
@@ -173,12 +212,16 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
 
     encoded: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
     benign: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
+    continuous: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
     for fixture in fixtures:
         classification = _classify(fixture.data)
         if fixture.role == "encoded":
             encoded[fixture.subfamily].append(classification)
         else:  # clean + negative roles are benign for scoring
             benign[fixture.subfamily].append(classification)
+            if fixture.role == "clean":
+                continuous[fixture.subfamily].append(classification)
+    structured_rows = run_structured_recall(structured_count)
 
     control_rows: dict[str, list[str]] = {}
     for control in controls:
@@ -203,6 +246,23 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
                     sum(1 for c in ben if c == SIGNAL_STRUCTURE), len(ben)),
                 "any_signal": _rate(
                     sum(1 for c in ben if c != SIGNAL_NONE), len(ben)),
+            },
+            # Three benchmark rows per subfamily (CL-46).
+            "rows": {
+                "continuous": {
+                    "classifications": _tally(continuous[name]),
+                    "false_structure_claims": _rate(
+                        sum(1 for c in continuous[name]
+                            if c == SIGNAL_STRUCTURE),
+                        len(continuous[name])),
+                },
+                "quantized_unstructured": {
+                    "classifications": _tally(enc),
+                    "false_structure_claims": _rate(
+                        sum(1 for c in enc if c == SIGNAL_STRUCTURE),
+                        len(enc)),
+                },
+                "quantized_structured": structured_rows[name],
             },
         }
 
@@ -244,11 +304,17 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
             "n": len(chart_declared),
             "classifications": _tally(chart_declared),
             "expected": SIGNAL_DECLARED,
+            "false_structure_claims": _rate(
+                sum(1 for c in chart_declared if c == SIGNAL_STRUCTURE),
+                len(chart_declared)),
         },
         "chart_with_undeclared_height": {
             "n": len(chart_undeclared),
             "classifications": _tally(chart_undeclared),
             "expected": "quantized_without_structure",
+            "false_structure_claims": _rate(
+                sum(1 for c in chart_undeclared if c == SIGNAL_STRUCTURE),
+                len(chart_undeclared)),
         },
         "encoded_structured_no_declaration": {
             "classification": structured_class,
@@ -334,6 +400,9 @@ def run_geo_benchmark(extra_pairs: int = 3, control_count: int = 3) -> dict[str,
         "chart_undeclared_is_triage": bool(chart_undeclared) and all(
             c == "quantized_without_structure" for c in chart_undeclared),
         "structured_undeclared_claimed": structured_class == SIGNAL_STRUCTURE,
+        "structured_recall_at_least_0.8_each_subfamily": all(
+            (row["structure_recall"]["rate"] or 0.0) >= 0.8
+            for row in structured_rows.values()),
         "attacker_grid_rows_present": all(
             name in attacker_grid for name in SUBFAMILIES),
         "attacker_grid_encoded_quantized": all(
