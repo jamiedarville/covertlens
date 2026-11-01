@@ -1,7 +1,6 @@
 # CovertLens (CL) — Working Requirements
 
-Derived from a review of the Jira project **Covert Lens (CL)** on
-`rumination.atlassian.net` on 2026-10-28: 6 epics (CL-1…CL-6), 30 tasks
+Derived from a review of the Jira project **Covert Lens (CL)** on 2026-10-28: 6 epics (CL-1…CL-6), 30 tasks
 (CL-7…CL-36), 6 planned sprints, board “CL board”. Jira is the source of
 truth; this document is my working interpretation, with every requirement
 traced to its Jira issue(s).
