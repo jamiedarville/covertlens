@@ -252,6 +252,15 @@ store** that every later task builds on.
 | Dataset retention/access and pinned campaign change rules are documented | Runbook §5 (dataset-lifetime retention, dataset-scoped deny-by-default access, governed retirement) and §4 (pin-before-rerun, drift = new campaign) |
 | Harness engineers and researchers receive integration and review instructions | Runbook §6: gate integration path for engineers; report/export review path, disposition and evidence-aid rules for researchers |
 
+## CL-38 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Clean/encoded pairs encode attribute sequences verified by independent re-measurement | `covertlens.geometric_fixtures.build_geo_dataset` (5 subfamilies × 2 pairs; raster re-measurement recovers exact symbols) · [docs/contracts/geometric-fixtures.md](docs/contracts/geometric-fixtures.md) |
+| Generator, encoder, seeds, configs and declared payload units recorded | Per-fixture provenance + detector-facing `geo_manifest` (payload unit = symbol sequence) |
+| Benign negatives and generator variation included | Legitimate chart (grid-snapped by design, GEO-05), unencoded scene, benign edit, generator variation |
+| Scorer ground truth separate; lineage/units/split rules match the initial dataset | `geo_ground_truth` is scorer-role-gated (DT-04); `assign_geo_splits` follows the CL-10 lineage-group policy |
+
 ## Quickstart
 
 ```bash
@@ -289,6 +298,7 @@ python -m covertlens export-demo         # CL-33 review export + access verifica
 python -m covertlens robustness-demo     # CL-34 adaptive/unseen-config evaluation
 python -m covertlens scorecard-demo      # CL-35 MVP release scorecard + decision
 python -m covertlens handoff-demo        # CL-36 ops/rollback/handoff verification
+python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
 pytest
 ```
 
