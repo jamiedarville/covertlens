@@ -1,0 +1,9 @@
+{
+  "name": "covertlens-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CovertLens web UI (CL-48 replaces this placeholder with the React + Vite app)",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

@@ -1,0 +1,16 @@
+services:
+  covertlens:
+    build:
+      context: .
+      args:
+        GIT_SHA: local
+    image: covertlens:local
+    ports:
+      - "8000:8000"
+    environment:
+      COVERTLENS_WORKERS: "4"
+    volumes:
+      - covertlens-data:/data
+
+volumes:
+  covertlens-data:
