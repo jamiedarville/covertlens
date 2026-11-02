@@ -163,18 +163,18 @@
       "general_geometric_coverage_claimed": false,
       "held_out_evaluation": {
         "chart_control_hashes": [
-          "sha256:f808f39d3ad22398bb0797aff5f13dac982811e9e743addedfb0edb0ccf1fc02",
-          "sha256:bb045778c50bf9261573c5d17aa783f41a55382f1aaa66891a3b2ccc63cdb32b",
-          "sha256:b2ff5091276b859c29f90c101bb5a5941ab0d366aa2538de0770f09d6d902c9b",
-          "sha256:903551d18fdcdeb885105bd54017304e30cf62e55beb4f39dce38929cb0a7719",
-          "sha256:2adc2ce9cda11992572c1159bb1133b76aca9e3ace7c3e1daea5502ffa0e16a7",
-          "sha256:6f33842fcf0384c48e69f05d6cf28fc01e72eddc3a64a31d6a77ca8c3a356f73",
-          "sha256:3f97523a298bb2f39022150b941abaf2c585eb503472ce46818ad58e00eadd74",
-          "sha256:a09d0ebc07e6ea63db50793eb6d7578482ae73cd341a85bcf6f6af1f8abd5b42",
-          "sha256:f12bc8ffd1ff366cf4bfb2ca09aa5d62f2f8ff60b39066141493c8d9691ebf4a",
-          "sha256:3a9e7e735779aa8b40c908b054d30637d07bd748d3218c903421fcdf324d2c86",
-          "sha256:0c1e5677eca5931eef1a9570ee30fdb8e911ca2f29f763d7432a66e78ea80c47",
-          "sha256:3a131a1985d0a32419ab8c18a2f7e8ea17695b86bde22fb26cca03eb8395224c"
+          "sha256:a976f26b8cbca7bb46ee5951dc742ad8d6aec5331e8bbcfccdde2b4e778b6e2c",
+          "sha256:142088532bf05972ca6602255ae3030ca8c1a77087f556c5b3c1304c507cd9e4",
+          "sha256:03cdfd60daf6795cb6a40d0a350645bc6352df6e1e6e72bca48ab6c292f8ab6a",
+          "sha256:4b4c37e711b1135f5ee474c857fe21e99199258c2a1b7da3ae3987edf139effb",
+          "sha256:a811b81a937baa14dd4db351ceeef6585d6a5479483b11a66fb957e6add6acf9",
+          "sha256:4fcdb05210db895ced53a94c26a387289bf743d5d44b4d789ca0c88571a208d6",
+          "sha256:b40b9e128435f04f1237c01db5b67b6b74e016eecf989b0a11f81451a865503d",
+          "sha256:fc8d06fb8fc131312d50b6bfcd42a9eaad0fc32d18212edec3f204d7a8946c5f",
+          "sha256:3c62dac68a43e9477058b5f44f80b7075ef66a15cd668d40e5619f3795cdba74",
+          "sha256:8400dd59458c26b52ca8695adf1b1c803c790ac091ddc5e137e891a93702f6ca",
+          "sha256:1caa2c278d874b6772f73cdb14fdfa25da7de98f4a9a4f70304d2240a07b6b07",
+          "sha256:0ce2056e0359e294f11b31dcab5c2c6cbc2678cba13209295247f3849b310f92"
         ],
         "chart_controls": {
           "declared_height": {
@@ -218,38 +218,38 @@
             }
           }
         },
-        "dataset_hash": "sha256:252ea3dc4acb5c41505a004ebd8de64ae463042d9ef9f7b118201c25980ef3d3",
+        "dataset_hash": "sha256:c26c5f37c988a15278b6829397ad300d15dc505de0b4dc9c93d1b63377c9ebf8",
         "development_overlap": false,
         "fixture_ids": [
-          "geometric-angle_tilt-clean-1b1fcba7247e",
-          "geometric-angle_tilt-clean-4e2fecffd12c",
-          "geometric-angle_tilt-clean-f6bb4f6be62d",
-          "geometric-angle_tilt-encoded-71cba10a0706",
-          "geometric-angle_tilt-encoded-72b20a5fa615",
-          "geometric-angle_tilt-encoded-7b3148e3f3b2",
-          "geometric-colour_code-clean-b98f1d80a090",
-          "geometric-colour_code-clean-e9201c53c1f3",
-          "geometric-colour_code-encoded-8c335645b414",
-          "geometric-colour_code-encoded-d1ea7440bff0",
-          "geometric-gap_timing-clean-a1c63f59ed76",
-          "geometric-gap_timing-clean-faa6606dfdbb",
-          "geometric-gap_timing-encoded-963c22412465",
-          "geometric-gap_timing-encoded-e509407318ec",
-          "geometric-height_position-clean-33886f45c942",
-          "geometric-height_position-clean-497b740f62bc",
-          "geometric-height_position-clean-aa380e0ef314",
-          "geometric-height_position-encoded-235654fe1617",
-          "geometric-height_position-encoded-44ad7816d9a0",
-          "geometric-height_position-encoded-e3eeb79ef91e",
-          "geometric-height_position-negative-2d2f52071850",
-          "geometric-lit_dark-clean-05bc8b348eeb",
-          "geometric-lit_dark-clean-676b59ed640b",
-          "geometric-lit_dark-clean-8247a42014f3",
-          "geometric-lit_dark-clean-90da0b251102",
-          "geometric-lit_dark-encoded-23ab54014af3",
-          "geometric-lit_dark-encoded-2a3dae0e894b",
-          "geometric-lit_dark-encoded-75a8b8cae88e",
-          "geometric-lit_dark-encoded-fa380a2ecd32"
+          "geometric-angle_tilt-clean-4a9f04212891",
+          "geometric-angle_tilt-clean-c2eb0009635d",
+          "geometric-angle_tilt-clean-e37d489fed73",
+          "geometric-angle_tilt-encoded-32421520406b",
+          "geometric-angle_tilt-encoded-79aa9edf4a39",
+          "geometric-angle_tilt-encoded-cdef40abb906",
+          "geometric-colour_code-clean-592ef636201d",
+          "geometric-colour_code-clean-9b0357f045ba",
+          "geometric-colour_code-encoded-2ab567098106",
+          "geometric-colour_code-encoded-5112779f33b7",
+          "geometric-gap_timing-clean-09e0c292a76f",
+          "geometric-gap_timing-clean-be2690c39f81",
+          "geometric-gap_timing-encoded-8be35b6406ca",
+          "geometric-gap_timing-encoded-d0ac1614f1da",
+          "geometric-height_position-clean-86831ffc3e87",
+          "geometric-height_position-clean-ab24deb70dce",
+          "geometric-height_position-clean-fa553038738e",
+          "geometric-height_position-encoded-0ea47fcbc7b0",
+          "geometric-height_position-encoded-4761de12ae0a",
+          "geometric-height_position-encoded-e9902afb3729",
+          "geometric-height_position-negative-abcc319cb7b0",
+          "geometric-lit_dark-clean-6eaf3e63e410",
+          "geometric-lit_dark-clean-7d6f82b00088",
+          "geometric-lit_dark-clean-a2064fa2db03",
+          "geometric-lit_dark-clean-f18331c94f9f",
+          "geometric-lit_dark-encoded-08ea0632d9b2",
+          "geometric-lit_dark-encoded-1bc1ba547306",
+          "geometric-lit_dark-encoded-b40b7c7a5f91",
+          "geometric-lit_dark-encoded-eb583720aeb7"
         ],
         "held_out_only": true,
         "limitations": [
@@ -262,9 +262,9 @@
         "subfamilies": {
           "angle_tilt": {
             "fixture_ids": [
-              "geometric-angle_tilt-encoded-72b20a5fa615",
-              "geometric-angle_tilt-encoded-7b3148e3f3b2",
-              "geometric-angle_tilt-encoded-71cba10a0706"
+              "geometric-angle_tilt-encoded-32421520406b",
+              "geometric-angle_tilt-encoded-cdef40abb906",
+              "geometric-angle_tilt-encoded-79aa9edf4a39"
             ],
             "recall_enforcement": {
               "n": 3,
@@ -296,8 +296,8 @@
           },
           "colour_code": {
             "fixture_ids": [
-              "geometric-colour_code-encoded-d1ea7440bff0",
-              "geometric-colour_code-encoded-8c335645b414"
+              "geometric-colour_code-encoded-5112779f33b7",
+              "geometric-colour_code-encoded-2ab567098106"
             ],
             "recall_enforcement": {
               "n": 2,
@@ -329,8 +329,8 @@
           },
           "gap_timing": {
             "fixture_ids": [
-              "geometric-gap_timing-encoded-e509407318ec",
-              "geometric-gap_timing-encoded-963c22412465"
+              "geometric-gap_timing-encoded-d0ac1614f1da",
+              "geometric-gap_timing-encoded-8be35b6406ca"
             ],
             "recall_enforcement": {
               "n": 2,
@@ -362,9 +362,9 @@
           },
           "height_position": {
             "fixture_ids": [
-              "geometric-height_position-encoded-44ad7816d9a0",
-              "geometric-height_position-encoded-235654fe1617",
-              "geometric-height_position-encoded-e3eeb79ef91e"
+              "geometric-height_position-encoded-4761de12ae0a",
+              "geometric-height_position-encoded-0ea47fcbc7b0",
+              "geometric-height_position-encoded-e9902afb3729"
             ],
             "recall_enforcement": {
               "n": 3,
@@ -396,10 +396,10 @@
           },
           "lit_dark": {
             "fixture_ids": [
-              "geometric-lit_dark-encoded-23ab54014af3",
-              "geometric-lit_dark-encoded-fa380a2ecd32",
-              "geometric-lit_dark-encoded-75a8b8cae88e",
-              "geometric-lit_dark-encoded-2a3dae0e894b"
+              "geometric-lit_dark-encoded-eb583720aeb7",
+              "geometric-lit_dark-encoded-08ea0632d9b2",
+              "geometric-lit_dark-encoded-1bc1ba547306",
+              "geometric-lit_dark-encoded-b40b7c7a5f91"
             ],
             "recall_enforcement": {
               "n": 4,

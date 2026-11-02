@@ -30,6 +30,14 @@ intended difference inside a pair is the payload itself.
 4. **Freeze.** The saved bytes are the fixture. No resize or
    recompression happens afterwards (CL-13 analyses exactly these
    bytes), and ingest into the CL-8 store preserves their hashes.
+   PNG image data is written as uncompressed (stored) deflate blocks,
+   not through the platform's `zlib.compress`: classic zlib and
+   zlib-ng produce different bytes for the same pixels, which would
+   change fixture IDs and the pinned dataset hashes from one machine
+   to the next. `tests/test_fixture_determinism.py` enforces this.
+   Only the CL-29 latency workload uses real compression, because its
+   large images must stay under the input-size limit and its bytes
+   are never pinned.
 
 ## Verification (independent of the encoder)
 
