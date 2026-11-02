@@ -76,7 +76,9 @@ def _pixels(width: int, height: int, seed: int = 7) -> bytes:
 def _artifact(media: str, width: int, height: int) -> bytes:
     pixels = _pixels(width, height)
     if media == "png":
-        return _save_png(pixels, width, height)
+        # Real compression keeps large latency PNGs inside the input-size
+        # limit; their bytes are machine-specific and never pinned.
+        return _save_png(pixels, width, height, compress=True)
     return encode_dct_jpeg(pixels, width, height, b"")
 
 

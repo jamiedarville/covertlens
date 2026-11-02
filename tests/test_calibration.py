@@ -4,23 +4,18 @@ import pytest
 
 from covertlens.calibration import (
     calibrate_thresholds,
+    development_calibration_data,
     load_frozen_thresholds,
     validate_calibration,
 )
 from covertlens.fixtures import build_dataset
-from covertlens.metadata_fixtures import build_metadata_dataset
 from covertlens.parsing import Finding
 from covertlens.splits import assign_splits
 from covertlens.verdicts import decide_verdict
 
 
 def _dev():
-    fixtures, assignments = [], {}
-    for dataset in (build_dataset(), build_metadata_dataset()):
-        split = assign_splits(dataset)
-        assignments.update(split)
-        fixtures.extend(f for f in dataset if split[f.fixture_id] != "held_out")
-    return fixtures, assignments
+    return development_calibration_data()
 
 
 def test_calibration_uses_development_data_only():
@@ -56,7 +51,10 @@ def test_shipped_freeze_matches_recalibration_and_is_enforceable():
     report = calibrate_thresholds(fixtures, assignments)
     config, frozen = load_frozen_thresholds()
     assert frozen["threshold_config"] == report["threshold_config"]
-    assert config.version == "frozen-1.0.0"
+    assert frozen["families"] == report["families"]
+    assert frozen["development_dataset_hash"] == report["development_dataset_hash"]
+    assert frozen["geometric_detector"] == report["geometric_detector"]
+    assert config.version == "frozen-1.1.0"
     assert all(fam.status == "frozen" for fam in config.families.values())
     # A frozen config changes CL-17 behaviour: enforcement points are
     # no longer log-only.

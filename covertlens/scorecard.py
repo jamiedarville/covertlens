@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
-SCORECARD_VERSION = "1.2.0"
+SCORECARD_VERSION = "1.3.0"
 SCORECARD_PATH = (
     Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
 )
@@ -62,6 +62,7 @@ def build_scorecard() -> dict[str, Any]:
     from .ablations import run_ablations
     from .frozen_benchmark import run_frozen_evaluation
     from .geo_benchmark import run_geo_benchmark
+    from .geo_calibration import evaluate_geometric_held_out
     from .latency import run_reliability_report
     from .pilot import run_pilot
     from .review_export import run_export_verification
@@ -84,6 +85,7 @@ def build_scorecard() -> dict[str, Any]:
     exports = run_export_verification()
     robustness = run_robustness()
     geo = run_geo_benchmark()
+    geometric_frozen = evaluate_geometric_held_out()
 
     families = frozen["held_out"]["families"]
     latency_classes = latency["classes"]
@@ -106,8 +108,8 @@ def build_scorecard() -> dict[str, Any]:
         "derivative enforcement is procedural (CL-32).",
         "Context/sequence evidence is a triage aid only: combined "
         "scoring dilutes image evidence (CL-31).",
-        "The geometric family (CL-38..CL-44) is log-only triage: "
-        "its thresholds are unfrozen, structure claims rest on "
+        "The geometric family has frozen synthetic-scene points (CL-54): "
+        "quantization alone permits delivery, structure claims rest on "
         "declared codes only, and no general geometric coverage "
         "is claimed from any single subfamily.",
     ]
@@ -292,8 +294,9 @@ def build_scorecard() -> dict[str, Any]:
                 "geometric",
                 {
                     "family": "geometric",
-                    "thresholds_status": geo["detector"]["threshold_status"],
-                    "enforceable": geo["detector"]["enforceable"],
+                    "thresholds_status": "frozen",
+                    "enforceable": True,
+                    "held_out_evaluation": geometric_frozen,
                     "per_subfamily": {
                         name: {
                             "encoded_recall_any_signal": block["encoded"][

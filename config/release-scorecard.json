@@ -9,7 +9,7 @@
       "Held-out samples are tiny: targets are met on point estimates with wide Wilson intervals (CL-28).",
       "R-06 preview derivatives have no dedicated gate API; derivative enforcement is procedural (CL-32).",
       "Context/sequence evidence is a triage aid only: combined scoring dilutes image evidence (CL-31).",
-      "The geometric family (CL-38..CL-44) is log-only triage: its thresholds are unfrozen, structure claims rest on declared codes only, and no general geometric coverage is claimed from any single subfamily."
+      "The geometric family has frozen synthetic-scene points (CL-54): quantization alone permits delivery, structure claims rest on declared codes only, and no general geometric coverage is claimed from any single subfamily."
     ],
     "rationale": [
       "Frozen enforcement is correct where claimed: gate, trace, export and prevention invariants hold with zero unauthorized serves and zero blocked transfers.",
@@ -42,11 +42,11 @@
     "value": "release_with_limitations"
   },
   "equated_with_collusion": false,
-  "frozen_config_version": "frozen-1.0.0",
+  "frozen_config_version": "frozen-1.1.0",
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
-  "scorecard_version": "1.2.0",
+  "scorecard_version": "1.3.0",
   "sections": {
     "detection_frozen_benchmark": {
       "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",
@@ -158,9 +158,281 @@
         "chart": 0,
         "skyline": 0
       },
-      "enforceable": false,
+      "enforceable": true,
       "family": "geometric",
       "general_geometric_coverage_claimed": false,
+      "held_out_evaluation": {
+        "chart_control_hashes": [
+          "sha256:a976f26b8cbca7bb46ee5951dc742ad8d6aec5331e8bbcfccdde2b4e778b6e2c",
+          "sha256:142088532bf05972ca6602255ae3030ca8c1a77087f556c5b3c1304c507cd9e4",
+          "sha256:03cdfd60daf6795cb6a40d0a350645bc6352df6e1e6e72bca48ab6c292f8ab6a",
+          "sha256:4b4c37e711b1135f5ee474c857fe21e99199258c2a1b7da3ae3987edf139effb",
+          "sha256:a811b81a937baa14dd4db351ceeef6585d6a5479483b11a66fb957e6add6acf9",
+          "sha256:4fcdb05210db895ced53a94c26a387289bf743d5d44b4d789ca0c88571a208d6",
+          "sha256:b40b9e128435f04f1237c01db5b67b6b74e016eecf989b0a11f81451a865503d",
+          "sha256:fc8d06fb8fc131312d50b6bfcd42a9eaad0fc32d18212edec3f204d7a8946c5f",
+          "sha256:3c62dac68a43e9477058b5f44f80b7075ef66a15cd668d40e5619f3795cdba74",
+          "sha256:8400dd59458c26b52ca8695adf1b1c803c790ac091ddc5e137e891a93702f6ca",
+          "sha256:1caa2c278d874b6772f73cdb14fdfa25da7de98f4a9a4f70304d2240a07b6b07",
+          "sha256:0ce2056e0359e294f11b31dcab5c2c6cbc2678cba13209295247f3849b310f92"
+        ],
+        "chart_controls": {
+          "declared_height": {
+            "false_enforcement": {
+              "n": 12,
+              "rate": 0.0,
+              "successes": 0,
+              "wilson_95": {
+                "high": 0.242494,
+                "low": 0.0
+              }
+            },
+            "false_structure": {
+              "n": 12,
+              "rate": 0.0,
+              "successes": 0,
+              "wilson_95": {
+                "high": 0.242494,
+                "low": 0.0
+              }
+            }
+          },
+          "undeclared": {
+            "false_enforcement": {
+              "n": 12,
+              "rate": 0.0,
+              "successes": 0,
+              "wilson_95": {
+                "high": 0.242494,
+                "low": 0.0
+              }
+            },
+            "false_structure": {
+              "n": 12,
+              "rate": 0.0,
+              "successes": 0,
+              "wilson_95": {
+                "high": 0.242494,
+                "low": 0.0
+              }
+            }
+          }
+        },
+        "dataset_hash": "sha256:c26c5f37c988a15278b6829397ad300d15dc505de0b4dc9c93d1b63377c9ebf8",
+        "development_overlap": false,
+        "fixture_ids": [
+          "geometric-angle_tilt-clean-4a9f04212891",
+          "geometric-angle_tilt-clean-c2eb0009635d",
+          "geometric-angle_tilt-clean-e37d489fed73",
+          "geometric-angle_tilt-encoded-32421520406b",
+          "geometric-angle_tilt-encoded-79aa9edf4a39",
+          "geometric-angle_tilt-encoded-cdef40abb906",
+          "geometric-colour_code-clean-592ef636201d",
+          "geometric-colour_code-clean-9b0357f045ba",
+          "geometric-colour_code-encoded-2ab567098106",
+          "geometric-colour_code-encoded-5112779f33b7",
+          "geometric-gap_timing-clean-09e0c292a76f",
+          "geometric-gap_timing-clean-be2690c39f81",
+          "geometric-gap_timing-encoded-8be35b6406ca",
+          "geometric-gap_timing-encoded-d0ac1614f1da",
+          "geometric-height_position-clean-86831ffc3e87",
+          "geometric-height_position-clean-ab24deb70dce",
+          "geometric-height_position-clean-fa553038738e",
+          "geometric-height_position-encoded-0ea47fcbc7b0",
+          "geometric-height_position-encoded-4761de12ae0a",
+          "geometric-height_position-encoded-e9902afb3729",
+          "geometric-height_position-negative-abcc319cb7b0",
+          "geometric-lit_dark-clean-6eaf3e63e410",
+          "geometric-lit_dark-clean-7d6f82b00088",
+          "geometric-lit_dark-clean-a2064fa2db03",
+          "geometric-lit_dark-clean-f18331c94f9f",
+          "geometric-lit_dark-encoded-08ea0632d9b2",
+          "geometric-lit_dark-encoded-1bc1ba547306",
+          "geometric-lit_dark-encoded-b40b7c7a5f91",
+          "geometric-lit_dark-encoded-eb583720aeb7"
+        ],
+        "held_out_only": true,
+        "limitations": [
+          "Procedural synthetic PNG scenes only; no natural-image or JPEG calibration claim.",
+          "Small lineage-held-out sample; repeated structured words are not held-out codebooks or vocabulary.",
+          "Unstructured encoded payloads may flag but do not establish structure for enforcement."
+        ],
+        "schema": "covertlens.geometric-held-out",
+        "schema_version": 1,
+        "subfamilies": {
+          "angle_tilt": {
+            "fixture_ids": [
+              "geometric-angle_tilt-encoded-32421520406b",
+              "geometric-angle_tilt-encoded-cdef40abb906",
+              "geometric-angle_tilt-encoded-79aa9edf4a39"
+            ],
+            "recall_enforcement": {
+              "n": 3,
+              "rate": 0.666667,
+              "successes": 2,
+              "wilson_95": {
+                "high": 0.938508,
+                "low": 0.20766
+              }
+            },
+            "recall_structure": {
+              "n": 3,
+              "rate": 0.666667,
+              "successes": 2,
+              "wilson_95": {
+                "high": 0.938508,
+                "low": 0.20766
+              }
+            },
+            "recall_triage": {
+              "n": 3,
+              "rate": 0.666667,
+              "successes": 2,
+              "wilson_95": {
+                "high": 0.938508,
+                "low": 0.20766
+              }
+            }
+          },
+          "colour_code": {
+            "fixture_ids": [
+              "geometric-colour_code-encoded-5112779f33b7",
+              "geometric-colour_code-encoded-2ab567098106"
+            ],
+            "recall_enforcement": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            },
+            "recall_structure": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            },
+            "recall_triage": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            }
+          },
+          "gap_timing": {
+            "fixture_ids": [
+              "geometric-gap_timing-encoded-d0ac1614f1da",
+              "geometric-gap_timing-encoded-8be35b6406ca"
+            ],
+            "recall_enforcement": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            },
+            "recall_structure": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            },
+            "recall_triage": {
+              "n": 2,
+              "rate": 1.0,
+              "successes": 2,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.34238
+              }
+            }
+          },
+          "height_position": {
+            "fixture_ids": [
+              "geometric-height_position-encoded-4761de12ae0a",
+              "geometric-height_position-encoded-0ea47fcbc7b0",
+              "geometric-height_position-encoded-e9902afb3729"
+            ],
+            "recall_enforcement": {
+              "n": 3,
+              "rate": 1.0,
+              "successes": 3,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.438503
+              }
+            },
+            "recall_structure": {
+              "n": 3,
+              "rate": 1.0,
+              "successes": 3,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.438503
+              }
+            },
+            "recall_triage": {
+              "n": 3,
+              "rate": 1.0,
+              "successes": 3,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.438503
+              }
+            }
+          },
+          "lit_dark": {
+            "fixture_ids": [
+              "geometric-lit_dark-encoded-eb583720aeb7",
+              "geometric-lit_dark-encoded-08ea0632d9b2",
+              "geometric-lit_dark-encoded-1bc1ba547306",
+              "geometric-lit_dark-encoded-b40b7c7a5f91"
+            ],
+            "recall_enforcement": {
+              "n": 4,
+              "rate": 1.0,
+              "successes": 4,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.510109
+              }
+            },
+            "recall_structure": {
+              "n": 4,
+              "rate": 1.0,
+              "successes": 4,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.510109
+              }
+            },
+            "recall_triage": {
+              "n": 4,
+              "rate": 1.0,
+              "successes": 4,
+              "wilson_95": {
+                "high": 1.0,
+                "low": 0.510109
+              }
+            }
+          }
+        },
+        "threshold_config_version": "frozen-1.1.0",
+        "universal_claim": false
+      },
       "per_subfamily": {
         "angle_tilt": {
           "benign_false_structure_claim_rate": 0.0,
@@ -230,7 +502,7 @@
       },
       "source_doc": "docs/contracts/geo-benchmark.md",
       "source_schema": "covertlens.geo-benchmark",
-      "thresholds_status": "unfrozen_placeholder"
+      "thresholds_status": "frozen"
     },
     "latency_reliability": {
       "classes_met": [

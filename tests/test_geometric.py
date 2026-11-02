@@ -29,7 +29,7 @@ def test_quantization_report_is_a_measurement_not_a_verdict(dataset):
     assert channel["supporting"] == 12
     assert channel["support_fraction"] == 1.0
     assert max(abs(r) for r in channel["residuals"]) <= 1.6
-    assert report["finding"].score == pytest.approx(1.0)
+    assert report["finding"].score == pytest.approx(0.5)
 
 
 def test_clean_continuous_variation_scores_low(dataset):

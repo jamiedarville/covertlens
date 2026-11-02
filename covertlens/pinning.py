@@ -32,6 +32,7 @@ from . import ids
 from .dct import DCT_DETECTOR_NAME, DCT_DETECTOR_VERSION
 from .fixtures import Fixture
 from .geometric import GEO_CONFIG_VERSION, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
+from .geometric_fixtures import GeoFixture
 from .lsb import LSB_DETECTOR_NAME, LSB_DETECTOR_VERSION
 from .metadata import (
     METADATA_DETECTOR_NAME,
@@ -55,7 +56,7 @@ def _hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
-def dataset_hash(fixtures: Iterable[Fixture]) -> str:
+def dataset_hash(fixtures: Iterable[Fixture | GeoFixture]) -> str:
     """One hash over the sorted (fixture_id, content_hash) dataset."""
     rows = sorted((f.fixture_id, f.content_hash) for f in fixtures)
     return _hash(rows)

@@ -19,8 +19,9 @@
     },
     "families": {
       "type": "object",
+      "required": ["spatial_lsb", "jpeg_dct", "metadata", "geometric"],
       "patternProperties": {
-        "^(spatial_lsb|jpeg_dct|metadata)$": {
+        "^(spatial_lsb|jpeg_dct|metadata|geometric)$": {
           "type": "object",
           "required": ["triage_flag_at", "enforcement_quarantine_at",
                        "enforcement_fail_run_at", "calibrated_payload_bands"],
@@ -29,7 +30,7 @@
             "enforcement_quarantine_at": {"type": "number", "minimum": 0, "maximum": 1},
             "enforcement_fail_run_at": {"type": "number", "minimum": 0, "maximum": 1},
             "calibrated_payload_bands": {
-              "type": "array", "items": {"enum": ["low", "medium", "high"]}
+              "type": "array", "items": {"enum": ["low", "medium", "high", "symbol_sequence"]}
             }
           }
         }

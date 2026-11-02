@@ -79,8 +79,8 @@ Independent review:
   derivative enforcement is procedural (CL-32).
 - Context/sequence evidence is a triage aid only: combined
   scoring dilutes image evidence (CL-31).
-- The geometric family (CL-38..CL-44) is log-only triage: its
-  thresholds are unfrozen, structure claims rest on declared
+- The geometric family has frozen synthetic-scene thresholds (CL-54);
+  quantization alone permits delivery, structure claims rest on declared
   codes only, and no general geometric coverage is claimed from
   any single subfamily.
 
@@ -355,7 +355,7 @@ criterion to code, contract doc, schema, and tests. History in
 |---|---|
 | Quantization test reports grid step, residual and supporting element count vs continuous variation | `covertlens.geometric.analyze_geometric_bytes`: per-channel grid fits with symbols, residuals, support fractions; constant channels marked inapplicable · [docs/contracts/geometric-detector.md](docs/contracts/geometric-detector.md) · [schemas/geometric-finding.schema.json](schemas/geometric-finding.schema.json) |
 | Structure claimed only under a simple declared code mapped to words/codes/grammar | Registered codes (alphabet position + declared lexicon, timing-ratio motifs, bit packing) with validators; unregistered mappings never inferred |
-| Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); thresholds unfrozen placeholders, detector cannot withhold |
+| Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); frozen-1.1.0 flags quantization; only supported undeclared structure can withhold |
 
 ### CL-41 deliverables
 
@@ -364,7 +364,7 @@ criterion to code, contract doc, schema, and tests. History in
 | Vector sources containing embedded objects/elements/attributes are parsed directly and emitted to DET-02 | `parse_vector_source` reads the `covertlens.vector-source` object list into the CL-39 record shape, consumed by the same CL-40 tests · [docs/contracts/vector-source.md](docs/contracts/vector-source.md) · [schemas/vector-binding.schema.json](schemas/vector-binding.schema.json) |
 | Raster fallback (original bytes only) is recorded with renderer-effect limitations | `analyze_with_source(..., source=None)`: `absent_raster_fallback` + `RASTER_LIMITATIONS` (pixel quantization, JPEG fidelity, original bytes; JPEG support added in CL-52) |
 | Vector and rendered outputs are associated via artefact lineage, and gate evaluation binds the verdict to the exact rendered version (hash) | Combined report binds `bound_content_hash` (rendered raster hash/version); store registers the source as lineage derivative `rendered_from_vector_source` parented to the rendered version |
-| When vector sources are available, gate-level verdict binding binds to the exact delivered (rendered) artefact version | Gate binding activates with frozen geometric thresholds (post CL-42 benchmark); until then the geometric finding is log-only triage bound to the rendered hash |
+| When vector sources are available, gate-level verdict binding binds to the exact delivered (rendered) artefact version | CL-54 derives vector clearance from the frozen ladder, bound to the rendered hash; C-10 refusals remain mandatory |
 | Vector source present but not intercepted: a clean raster score cannot clear it (C-10) | `clearance: refused_unparsed_vector_source`, `cleared: false`; same refusal for a corrupt source |
 | Geometric findings emit to DET-02 rows with no underlying message decoded | The CL-40 findings shape is reused on both paths; no decoded message is ever claimed (C-09) |
 
@@ -484,6 +484,21 @@ criterion to code, contract doc, schema, and tests. History in
 | `unauthorized_served` is computed and is 0 in every test | `InterceptionGate.access_attempt_report` counts recipient serves whose delivery state at serve time was not `permitted` (was hard-coded 0); synthetic withheld serve counts 1 in tests, every real suite reports 0 |
 | Recipient pane shows "withheld" with the gate's reason for quarantine and `fail_run` verdicts | `/gate` Live Gate page (`app/frontend/src/pages/LiveGate.tsx`) over `/api/gate/*`: create a run, sender posts via R-01…R-07, pending → analysed → verdict → delivered/withheld, SSE timeline, recipient/reviewer panes and access-attempt audit; recipient image serves only after a permitting verdict, withheld returns the `recipient_message` reason with no bytes |
 
+### CL-54 deliverables
+
+`frozen-1.1.0` carries four families. Reproduce development-only calibration
+with `python -m covertlens calibrate-demo`. The geometric score reserves its
+upper band for supported structure on an undeclared channel; quantization
+alone flags at most, and a declared height chart logs. Geometric `fail_run`
+is reserved (unreachable score 1) pending severity calibration; this freeze
+supports quarantine. Other families retain their CL-27 operating points.
+
+The scorecard includes `held_out_evaluation` per geometric subfamily and chart
+false-structure / false-enforcement rates with Wilson intervals. These are
+small procedural PNG scene samples, with repeated structured words; they do
+not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
+`universal_claim` remains false. See [the freeze contract](docs/contracts/calibration-freeze.md).
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.
@@ -549,7 +564,6 @@ pytest
   [docs/planning/](docs/planning/).
 - Scope is eval-generated PNG/JPEG only. Consumer
   uploads/transports are out of scope.
-- LSB/DCT/metadata thresholds froze in CL-27; geometric
-  thresholds remain explicit unfrozen placeholders, never
-  invented numbers, and that family is log-only until a
-  dedicated freeze.
+- LSB/DCT/metadata thresholds froze in CL-27; CL-54 adds the
+  geometric development-only freeze in `frozen-1.1.0`. The manifest
+  configuration remains available as an explicit log-only rollback.
