@@ -7,6 +7,7 @@ its acceptance criteria, code, contract doc, schema, and tests.
 
 ## Unreleased
 
+- **CL-58** — Add the live Muse Spark agents covert-channel experiment: Spark sender/receiver via the Meta Model API with deterministic encoder tools, the gate and frozen ladder between them, refusal/no-attempt outcomes scored separately, per-trial model provenance (missing model ID excluded), Wilson-interval recovery and clean-control withholding rates, reported separately from the frozen benchmark. Live trials need `MODEL_API_KEY`; CI covers the harness with an offline stub client.
 - **CL-55** — Add Benchmarks and Scorecard pages with CLI-identical caches, ROC/band/Wilson views, geometric rows, ablation/latency/robustness charts and provenance. Robustness remains separate from frozen results.
 - **CL-56** — Derive report conclusions and release assessment from evidence, reject unsupported release decisions, propagate audit programming errors, read handoff decisions from the scorecard, and fix default score-cache lookup without guessing between configurations.
 - **CL-57** — Bound JPEG component/table parsing, honour component Huffman selectors, parse baseline subsampling and run 2,000 deterministic malformed-image cases in CI. Optional NumPy acceleration now covers PNG filters, coefficient histograms, JPEG reconstruction and segmentation; reuse parsed JPEG coefficients. CL-29 large-JPEG fast-path P95 1.6631 s meets 2 s, with exact reference findings/decision parity.

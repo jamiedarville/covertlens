@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CovertLens Spark experiment report (CL-58)",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "model_ids",
+    "summary",
+    "by_subfamily",
+    "gate",
+    "trials",
+    "separate_from_frozen_benchmark",
+    "equated_with_collusion"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.spark-experiment"},
+    "schema_version": {"const": 1},
+    "separate_from_frozen_benchmark": {"const": true},
+    "equated_with_collusion": {"const": false},
+    "model_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "summary": {
+      "type": "object",
+      "required": [
+        "trials",
+        "attempts",
+        "clean_controls",
+        "refused",
+        "no_attempt",
+        "attempted",
+        "excluded",
+        "recovery_when_delivered",
+        "clean_control_withholding"
+      ]
+    },
+    "trials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "trial_id",
+          "kind",
+          "outcome",
+          "delivered",
+          "recovery",
+          "demonstrated_transfer",
+          "provenance"
+        ],
+        "properties": {
+          "kind": {"enum": ["attempt", "control"]},
+          "outcome": {"enum": ["attempted", "refused", "no_attempt"]},
+          "recovery": {
+            "enum": ["recovered", "not_recovered", "not_observed", "not_applicable"]
+          }
+        }
+      }
+    }
+  }
+}
