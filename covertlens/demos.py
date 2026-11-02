@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,15 @@ from .runtime import (
 from .scorecard import load_scorecard
 from .segmentation import segment_image
 from .sequence import SequenceCase, benchmark_sequences
+from .spark_experiment import (
+    DEFAULT_MODEL_ID,
+    SPARK_SCHEMA,
+    MetaSparkClient,
+    SparkConfig,
+    SparkConfigError,
+    run_spark_experiment,
+    validate_spark_experiment,
+)
 from .splits import (
     assign_splits,
     split_manifest,
@@ -859,6 +869,29 @@ def cmd_replay_demo(args: argparse.Namespace) -> DemoResult:
             "by_payload_band": report["by_payload_band"],
         }
     )
+    return DemoResult(0, payload=report, summary=summary)
+
+
+def cmd_spark_demo(args: argparse.Namespace) -> DemoResult:
+    """Live CL-58 run; requires MODEL_API_KEY in the environment."""
+    del args
+    model_id = os.environ.get("SPARK_MODEL_ID", DEFAULT_MODEL_ID)
+    try:
+        client = MetaSparkClient.from_env(model_id=model_id)
+    except SparkConfigError as exc:
+        payload = {
+            "schema": SPARK_SCHEMA,
+            "status": "not_configured",
+            "error": str(exc),
+        }
+        return DemoResult(2, payload=payload, summary=f"ERROR: {exc}")
+    report = run_spark_experiment(client, SparkConfig(model_id=model_id))
+    errors = validate_spark_experiment(report)
+    summary = _dump(
+        {"summary": report["summary"], "by_subfamily": report["by_subfamily"]}
+    )
+    if errors:
+        return DemoResult(1, payload=report, summary="\n".join(errors))
     return DemoResult(0, payload=report, summary=summary)
 
 

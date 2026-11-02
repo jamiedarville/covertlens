@@ -67,6 +67,7 @@ _COMMAND_HELP: list[tuple[str, str]] = [
     ("geometric-demo", "quantization + structure tests (CL-40)"),
     ("vector-demo", "vector source verdict binding (CL-41)"),
     ("geo-benchmark-demo", "geometric benchmark (CL-42)"),
+    ("spark-demo", "live Muse Spark agents experiment (CL-58)"),
 ]
 _POSITIONALS: dict[str, tuple[str, str]] = {
     "validate-manifest": ("path", "manifest path (default: shipped)"),
