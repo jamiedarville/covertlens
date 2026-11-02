@@ -7,6 +7,20 @@ from covertlens.lsb import analyze_lsb_bytes
 from tests.test_parsing import filtered_png
 
 
+def test_requested_numpy_falls_back_when_extra_is_missing(monkeypatch):
+    from covertlens import acceleration
+
+    def missing_extra(name):
+        assert name == "numpy"
+        raise ModuleNotFoundError("NumPy extra is not installed")
+
+    monkeypatch.setenv("COVERTLENS_FAST_PATH", "numpy")
+    monkeypatch.setattr(acceleration, "import_module", missing_extra)
+    assert acceleration.numpy_backend() is None
+    assert sample_counts(b"\x00\x01\x01")[:3] == [1, 2, 0]
+    assert unfilter_row(bytearray([1, 2, 3]), bytearray(3), 3, 1) is None
+
+
 def test_numpy_filters_and_histograms_match_reference(monkeypatch):
     pytest.importorskip("numpy")
     for width, height in [(1, 8), (17, 9), (31, 16)]:

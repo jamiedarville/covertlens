@@ -7,6 +7,7 @@ The default remains the standard-library reference implementation.
 from __future__ import annotations
 
 import os
+from importlib import import_module
 from typing import Any
 
 
@@ -14,10 +15,11 @@ def numpy_backend() -> Any:
     if os.environ.get("COVERTLENS_FAST_PATH") != "numpy":
         return None
     try:
-        import numpy
+        # Load the optional extra at runtime so the dependency-free build
+        # can also be type checked without NumPy installed.
+        return import_module("numpy")
     except ImportError:
         return None
-    return numpy
 
 
 def sample_counts(samples: bytes) -> list[int]:
