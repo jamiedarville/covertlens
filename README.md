@@ -510,9 +510,9 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
   lookup, and default cache lookup with ambiguous-configuration protection.
 - **CL-57:** bounded SOF/DHT/SOS parsing, component Huffman selectors,
   baseline subsampling, 2,000-case schema-valid mutation campaign, and optional
-  NumPy PNG unfiltering/histograms (`pip install -e ".[fast]"`,
-  `COVERTLENS_FAST_PATH=numpy`). **The end-to-end large-JPEG 2 s target remains
-  unmet**, so CL-57 is awaiting review; see the
+  NumPy PNG/JPEG reconstruction, histograms and segmentation acceleration
+  (`pip install -e ".[fast]"`, `COVERTLENS_FAST_PATH=numpy`). The CL-29
+  large-JPEG fast-path P95 is **1.6631 s**, meeting the 2 s target; see the
   [validation record](docs/reviews/cl-55-57-validation.json).
 
 ## Development quickstart

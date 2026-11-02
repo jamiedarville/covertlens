@@ -571,6 +571,9 @@ class _BitReader:
             )
         self._data = scan.replace(b"\xff\x00", b"\xff")
         self._pos = 0
+        self._buffer = 0
+        self._remaining = 0
+        self._length = len(self._data)
         self._fast: dict[int, list[tuple[int, int] | None]] = {}
         for table in (tables or {}).values():
             lookup: list[tuple[int, int] | None] = [None] * 512
@@ -581,28 +584,32 @@ class _BitReader:
                         lookup[base + i] = (symbol, length)
             self._fast[id(table)] = lookup
 
+    def _fill(self, size: int) -> None:
+        # Keep a small integer reservoir; never construct an input-sized int.
+        while self._remaining < size and self._pos < self._length:
+            self._buffer = (self._buffer << 8) | self._data[self._pos]
+            self._pos += 1
+            self._remaining += 8
+
     def _read(self, size: int) -> int:
-        if size == 0:
-            return 0
-        if self._pos + size > len(self._data) * 8:
-            raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG entropy data")
-        byte, offset = divmod(self._pos, 8)
-        count = (offset + size + 7) // 8
-        value = int.from_bytes(self._data[byte : byte + count], "big")
-        value = (value >> (count * 8 - offset - size)) & ((1 << size) - 1)
-        self._pos += size
+        if self._remaining < size:
+            self._fill(size)
+            if self._remaining < size:
+                raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG entropy data")
+        self._remaining -= size
+        value = self._buffer >> self._remaining
+        self._buffer &= (1 << self._remaining) - 1
         return value
 
     def read_code(self, table: dict[tuple[int, int], int]) -> int:
         lookup = self._fast.get(id(table))
-        if lookup is not None and self._pos + 9 <= len(self._data) * 8:
-            byte, offset = divmod(self._pos, 8)
-            prefix = ((self._data[byte] << 8) | self._data[byte + 1]) >> (
-                7 - offset
-            ) & 511
-            entry = lookup[prefix]
+        if self._remaining < 9:
+            self._fill(9)
+        if lookup is not None and self._remaining >= 9:
+            entry = lookup[self._buffer >> (self._remaining - 9)]
             if entry is not None:
-                self._pos += entry[1]
+                self._remaining -= entry[1]
+                self._buffer &= (1 << self._remaining) - 1
                 return entry[0]
         code = 0
         for length in range(1, 17):

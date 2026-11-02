@@ -21,8 +21,11 @@ from __future__ import annotations
 
 import math
 import struct
+from typing import Any
 
-from .parsing import _ZIGZAG, _parse_huffman
+from .acceleration import numpy_backend
+from .ids import content_hash
+from .parsing import _ZIGZAG, AnalysisResult, AnalysisStatus, _parse_huffman
 
 _SOF_MARKERS = (
     0xC0,
@@ -71,6 +74,26 @@ def _idct_block(coeffs: list[int]) -> list[int]:
             for v in range(8):
                 total += _C[v] * tmp[v * 8 + x] * _COS[v][y]
             out[y * 8 + x] = max(0, min(255, int(round(total / 4.0)) + 128))
+    return out
+
+
+def _idct_blocks_numpy(coeffs: Any, np: Any) -> Any:
+    """Batched separable IDCT with the reference's arithmetic/rounding order.
+
+    Explicit eight-term sums avoid BLAS reassociation at half-integer ties.
+    Temporary arrays scale with the bounded pixel count, never input values.
+    """
+    tmp = np.zeros_like(coeffs)
+    out = np.zeros_like(coeffs)
+    for u in range(8):
+        tmp += (_C[u] * coeffs[:, :, u])[:, :, None] * np.asarray(_COS[u])
+    for v in range(8):
+        out += (_C[v] * tmp[:, v, :])[:, None, :] * np.asarray(_COS[v])[None, :, None]
+    out = np.clip(np.rint(out / 4.0) + 128, 0, 255)
+    dc_only = ~np.any(coeffs.reshape(-1, 64)[:, 1:], axis=1)
+    out[dc_only] = np.clip(np.rint(coeffs[dc_only, 0, 0] / 8.0) + 128, 0, 255)[
+        :, None, None
+    ]
     return out
 
 
@@ -197,7 +220,7 @@ def _parse_quant_tables(body: bytes) -> dict[int, list[int]]:
 
 
 def decode_jpeg_rgb(
-    data: bytes, *, max_pixels: int = 2_000_000
+    data: bytes, *, max_pixels: int = 2_000_000, parsed: AnalysisResult | None = None
 ) -> tuple[bytes, int, int]:
     """Decode a baseline Huffman JPEG to (RGB pixels, width, height)."""
     if len(data) < 4 or not data.startswith(b"\xff\xd8"):
@@ -302,12 +325,26 @@ def decode_jpeg_rgb(
     if frame_comps is None or scan_start is None:
         raise JpegDecodeError("JPEG missing frame or scan")
 
+    # Reuse only a successful parse of these exact bytes. Header/table validation
+    # still runs above; coefficients are in MCU/scan-component order.
+    cached = None
+    if (
+        parsed is not None
+        and parsed.status is AnalysisStatus.PARSED
+        and parsed.media_kind == "jpeg"
+        and parsed.content_hash == content_hash(data)
+        and not restart_interval
+    ):
+        cached = parsed.coefficients
+    cached_blocks = iter(cached) if cached is not None else None
+    np = numpy_backend()
     width, height, comps = frame_w, frame_h, frame_comps
     hmax = max(c["h"] for c in comps)
     vmax = max(c["v"] for c in comps)
     mcus_x = (width + 8 * hmax - 1) // (8 * hmax)
     mcus_y = (height + 8 * vmax - 1) // (8 * vmax)
     planes: list[list[int]] = []
+    coefficient_planes = []
     plane_dims: list[tuple[int, int, int, int]] = []  # samples w/h, blocks w/h
     for comp in comps:
         samples_w = (width * comp["h"] + hmax - 1) // hmax
@@ -315,7 +352,11 @@ def decode_jpeg_rgb(
         blocks_w = mcus_x * comp["h"]
         blocks_h = mcus_y * comp["v"]
         plane_dims.append((samples_w, samples_h, blocks_w, blocks_h))
-        planes.append([128] * (blocks_w * 8 * blocks_h * 8))
+        planes.append([128] * (blocks_w * 8 * blocks_h * 8) if np is None else [])
+        if np is not None:
+            coefficient_planes.append(
+                np.empty((blocks_h, blocks_w, 64), dtype=np.float64)
+            )
 
     def decode_block(reader: _ScanBits, comp_idx: int, prev: list[int]) -> list[int]:
         comp = comps[comp_idx]
@@ -328,6 +369,13 @@ def decode_jpeg_rgb(
         qtable = quant.get(comp["q"])
         if qtable is None:
             raise JpegDecodeError("JPEG missing quantisation table")
+        if cached_blocks is not None:
+            try:
+                values = next(cached_blocks)
+            except StopIteration:
+                raise JpegDecodeError("cached JPEG block count mismatch") from None
+            dequantized = [values[i] * qtable[i] for i in range(64)]
+            return dequantized if np is not None else _idct_block(dequantized)
         coeffs = [0] * 64
         size = reader.read_code(dc_table)
         if size > 11:
@@ -352,9 +400,14 @@ def decode_jpeg_rgb(
                 raise JpegDecodeError("JPEG AC run overflows block")
             coeffs[_ZIGZAG[k]] = reader.read_value(sz)
             k += 1
-        return _idct_block([coeffs[i] * qtable[i] for i in range(64)])
+        dequantized = [coeffs[i] * qtable[i] for i in range(64)]
+        return dequantized if np is not None else _idct_block(dequantized)
 
-    segments = _split_scan(data[scan_start:], restart_interval)
+    segments = (
+        [b""]
+        if cached_blocks is not None
+        else _split_scan(data[scan_start:], restart_interval)
+    )
     total_mcus = mcus_x * mcus_y
     expected_segments = (
         (total_mcus - 1) // restart_interval + 1 if restart_interval else 1
@@ -384,6 +437,9 @@ def decode_jpeg_rgb(
                         block = decode_block(reader, ci, prev)
                         ox = (mcu_x * comp["h"] + bx) * 8
                         oy = (mcu_y * comp["v"] + by) * 8
+                        if np is not None:
+                            coefficient_planes[ci][oy // 8, ox // 8] = block
+                            continue
                         for row in range(8):
                             base = (oy + row) * plane_w + ox
                             plane[base : base + 8] = block[row * 8 : row * 8 + 8]
@@ -393,8 +449,41 @@ def decode_jpeg_rgb(
     if mcu_index < total_mcus:
         raise JpegDecodeError("truncated JPEG scan")
 
-    pixels = bytearray(width * height * 3)
+    if cached_blocks is not None and next(cached_blocks, None) is not None:
+        raise JpegDecodeError("cached JPEG block count mismatch")
     direct_rgb = adobe_transform == 0 or [c["id"] for c in comps] == [82, 71, 66]
+    if np is not None:
+        samples = []
+        for ci, coefficients in enumerate(coefficient_planes):
+            sw, sh, bw, bh = plane_dims[ci]
+            blocks = _idct_blocks_numpy(coefficients.reshape(-1, 8, 8), np)
+            plane = (
+                blocks.reshape(bh, bw, 8, 8)
+                .transpose(0, 2, 1, 3)
+                .reshape(bh * 8, bw * 8)
+            )
+            # Nearest-neighbour chroma expansion matches the reference decoder.
+            samples.append(
+                plane[:sh, :sw]
+                .repeat(vmax // comps[ci]["v"], axis=0)
+                .repeat(hmax // comps[ci]["h"], axis=1)[:height, :width]
+            )
+        if len(samples) == 1:
+            rgb = np.stack(samples * 3, axis=-1)
+        elif direct_rgb:
+            rgb = np.stack(samples, axis=-1)
+        else:
+            lum, cb, cr = (a.astype(np.float64) for a in samples)
+            rgb = np.stack(
+                (
+                    lum + 1.402 * (cr - 128),
+                    lum - 0.344136 * (cb - 128) - 0.714136 * (cr - 128),
+                    lum + 1.772 * (cb - 128),
+                ),
+                axis=-1,
+            )
+        return np.clip(np.rint(rgb), 0, 255).astype(np.uint8).tobytes(), width, height
+    pixels = bytearray(width * height * 3)
     for y in range(height):
         for x in range(width):
             samples = []

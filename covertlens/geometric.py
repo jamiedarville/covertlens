@@ -869,9 +869,9 @@ def detect_geometric(
         return None
     if result.media_kind not in ("png", "jpeg"):
         return None
-    return analyze_geometric_bytes(data, declared_context=declared_context).get(
-        "finding"
-    )
+    return analyze_geometric_bytes(
+        data, declared_context=declared_context, parsed=result
+    ).get("finding")
 
 
 def analyze_geometric_bytes(
@@ -879,9 +879,11 @@ def analyze_geometric_bytes(
     config: GeometricConfig | None = None,
     declared_grid: dict[str, dict[str, Any]] | None = None,
     declared_context: dict[str, Any] | None = None,
+    *,
+    parsed: AnalysisResult | None = None,
 ) -> dict[str, Any]:
     """Segment original bytes and run both geometric tests."""
-    seg = segment_image(data)
+    seg = segment_image(data, parsed=parsed)
     report = analyze_geometric(seg, config, declared_grid, declared_context)
     report["segmentation"] = seg.to_dict()
     return report

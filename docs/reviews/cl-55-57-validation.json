@@ -7,6 +7,37 @@
     "command": "COVERTLENS_FAST_PATH=numpy python -c \"from covertlens.latency import measure_class; print(measure_class('jpeg',1024,768,repetitions=5))\"",
     "python": "3.12.15",
     "backend": "numpy",
+    "measured_at_utc": "2026-11-02T14:19:13.956382+00:00",
+    "media": "jpeg",
+    "width": 1024,
+    "height": 768,
+    "megapixels": 0.786,
+    "input_bytes": 1584549,
+    "n": 5,
+    "p50_s": 1.5958,
+    "p95_s": 1.6631,
+    "max_s": 1.6631,
+    "statuses": {
+      "parsed": 5
+    },
+    "timeout_rate": 0.0,
+    "meets_proposal": true,
+    "target_s": 2.0,
+    "scope": "CL-29 large-JPEG sequential class; not a universal size/concurrency claim",
+    "numpy_version": "2.5.4",
+    "platform": "Linux-7.3.0-4-cachyos-x86_64-with-glibc2.44"
+  },
+  "fuzz": {
+    "cases": 2000,
+    "seed": 57,
+    "exceptions": 0,
+    "schema_validation": true
+  },
+  "previous_performance_acceptance": {
+    "ticket": "CL-57",
+    "command": "COVERTLENS_FAST_PATH=numpy python -c \"from covertlens.latency import measure_class; print(measure_class('jpeg',1024,768,repetitions=5))\"",
+    "python": "3.12.15",
+    "backend": "numpy",
     "media": "jpeg",
     "width": 1024,
     "height": 768,
@@ -23,10 +54,46 @@
     "meets_proposal": false,
     "merge_eligible": false
   },
-  "fuzz": {
-    "cases": 2000,
-    "seed": 57,
-    "exceptions": 0,
-    "schema_validation": true
+  "concurrent_medium_jpeg": {
+    "command": "COVERTLENS_FAST_PATH=numpy python -c \"from covertlens.latency import measure_concurrent; print(measure_concurrent())\"",
+    "media": "jpeg",
+    "width": 512,
+    "height": 384,
+    "workers": 4,
+    "tasks": 12,
+    "wall_s": 4.3574,
+    "n": 12,
+    "p50_s": 1.41,
+    "p95_s": 1.8783,
+    "max_s": 1.8783,
+    "statuses": {
+      "parsed": 12
+    },
+    "timeout_rate": 0.0,
+    "meets_proposal": true
+  },
+  "large_jpeg_findings_and_decision_exact_match": true,
+  "regression_validation": {
+    "full_suite": {
+      "command": "python -m pytest -q -m 'not slow'",
+      "passed": 408,
+      "deselected": 7
+    },
+    "fast_path_focused": {
+      "passed": 49,
+      "includes_2000_case_fuzz": true
+    },
+    "no_numpy_focused": {
+      "passed": 29,
+      "skipped_numpy_only": 16
+    },
+    "lint": "passed",
+    "format": "passed",
+    "dev_only_mypy": "passed",
+    "latency_regression": {
+      "command": "python -m pytest tests/test_latency.py -k numpy_large -q",
+      "passed": 1,
+      "deselected": 5
+    }
   }
 }
