@@ -13,7 +13,7 @@ claims, they never improve them.
 |---|---|
 | Adaptive reduced-rate LSB (2/4/8 B) | `evaded_below_enforcement` — triage at best, never withheld |
 | Adaptive allowed-keyword metadata (Description/Title) | `evaded` — score 0 by CL-23 design; a policy change, not recalibration, closes it |
-| Low-signal sequence (6 × 8 B, one sender) | nothing withheld; repetition visible only in the CL-30 weak-signal view |
+| Repeated reduced-rate artifacts (6 × 8 B, one sender) | individually scored; the report counts individually flagged artifacts; no sequence detector is invoked |
 | Unseen JPEG quality 50 / 75 | `detected` (fail_run) at probed rates |
 | Unseen cover pattern `blocks` | `evaded` — texture shift drops the same payload below triage |
 | Unseen cover pattern `smooth` | `confounded_unresolved` — clean control fails identically (CL-28), no claim possible |
@@ -36,4 +36,12 @@ claims, they never improve them.
 
 `python -m covertlens robustness-demo` prints experiment outcomes;
 `tests/test_robustness.py` asserts the separation flags, the
-evasions, the confounded case, and the low-signal sequence.
+evasions, the confounded case, and the repeated-artifact probe.
+
+CL-56 report version 1.1.0 renames this experiment to
+`adaptive_repeated_reduced_rate_artifacts`, kind `repeated_artifact_probe`.
+The former `low_signal_sequence` label overstated the experiment. The flag
+reference comes from the loaded frozen configuration, and confounding is
+computed from actual withheld controls. Notes and coverage counts come from
+the measured experiment rows; an empty unresolved list is valid when no probe
+is confounded.

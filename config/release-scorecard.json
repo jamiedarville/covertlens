@@ -2,41 +2,53 @@
   "decision": {
     "decision_owner": "MVP release owner",
     "limitations": [
-      "Detection coverage is limited to calibrated payload bands (low/medium) and densities on gradient_noise covers; the high band rests on 1-2 held-out positives per family.",
-      "Clean smooth/blocks covers fall outside the stability claim (smooth clean PNGs false-fail; blocks JPEGs occasionally withhold).",
-      "JPEG latency misses the 2 s proposal at >=~1 MP and at concurrency 4; the 20 MP JPEG envelope is unmeasured.",
-      "Adaptive reduced-rate, larger-image, blocks-cover and allowed-keyword-metadata attempts evade enforcement (CL-34); allowed-keyword evasion needs a policy change.",
-      "Held-out samples are tiny: targets are met on point estimates with wide Wilson intervals (CL-28).",
-      "R-06 preview derivatives have no dedicated gate API; derivative enforcement is procedural (CL-32).",
-      "Context/sequence evidence is a triage aid only: combined scoring dilutes image evidence (CL-31).",
-      "The geometric family has frozen synthetic-scene points (CL-54): quantization alone permits delivery, structure claims rest on declared codes only, and no general geometric coverage is claimed from any single subfamily."
+      "Held-out positives exist only in the high payload band; low/medium recall is validated on CL-27 development data only, so the recall claim does not extend to held-out low/medium evidence.",
+      "Held-out samples are tiny (1-2 positives per family); Wilson intervals are wide and the targets are met on point estimates, not on interval lower bounds.",
+      "Clean smooth-PNG covers false-fail at rate 0.5 and blocks-JPEG covers at 0.0 under the frozen points; the clean-run stability claim is narrowed to gradient_noise covers, the calibrated distribution. Low-texture covers need recalibration before any enforcement claim.",
+      "Triage flag rate on clean in-coverage runs is 0.096875: flags permit delivery and create review volume, not run failures.",
+      "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg.",
+      "Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.",
+      "Concurrency 4: P95 14.2496 s; unauthorized serves 0.",
+      "Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
+      "Adaptive and unseen results stay separate from the frozen benchmark.",
+      "14 adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.",
+      "1 configurations are confounded by withheld clean controls.",
+      "Probe sizes range from 1 to 6 attempts; these are not population estimates.",
+      "R-06 has no dedicated gate derivative API: derivatives are generated only from gate-served bytes in this audit, while ArtifactStore.register_derivative remains an ungated internal call \u2014 enforcement is procedural, not structural.",
+      "Sequence AUC: image=0.940741, combined=0.466667.",
+      "Geometric universal claim: False; evidence is scoped to measured synthetic scenes."
     ],
     "rationale": [
-      "Frozen enforcement is correct where claimed: gate, trace, export and prevention invariants hold with zero unauthorized serves and zero blocked transfers.",
-      "Detection targets are met only inside narrowed, measured coverage; the misses (JPEG latency, low-density/adaptive evasion, low-texture covers) are documented with target revisions rather than waived.",
-      "An unqualified release would overstate the evidence; no-release would discard a working, auditable enforcement core."
+      "recall: met",
+      "precision: met",
+      "clean_stability: met",
+      "latency: missed or narrowed",
+      "gate_trace: met",
+      "route_coverage: missed or narrowed",
+      "exports: met",
+      "prevention: met",
+      "geometric: met",
+      "sequence_value: missed or narrowed",
+      "pilot: missed or narrowed",
+      "robustness: missed or narrowed",
+      "infrastructure: met"
     ],
-    "recorded_in": "CL-35 (this scorecard) and the CL-35 Jira decision comment",
+    "recorded_in": "CL-56 computed assessment from source reports",
     "target_revisions": [
       {
-        "reason": "CL-28 probes: clean smooth PNGs false-fail, blocks JPEGs occasionally withhold.",
-        "revision": "Scoped to gradient_noise covers; low-texture covers need detector recalibration first.",
-        "target": "Clean-run false failures <=1% (universal covers)"
+        "reason": "Held-out positives exist only in the high payload band; low/medium recall is validated on CL-27 development data only, so the recall claim does not extend to held-out low/medium evidence.; Held-out samples are tiny (1-2 positives per family); Wilson intervals are wide and the targets are met on point estimates, not on interval lower bounds.; Clean smooth-PNG covers false-fail at rate 0.5 and blocks-JPEG covers at 0.0 under the frozen points; the clean-run stability claim is narrowed to gradient_noise covers, the calibrated distribution. Low-texture covers need recalibration before any enforcement claim.; Triage flag rate on clean in-coverage runs is 0.096875: flags permit delivery and create review volume, not run failures.",
+        "revision": "Scoped to measured evidence; see source report.",
+        "target": "Detection coverage"
       },
       {
-        "reason": "CL-29 measurements: large/concurrent JPEG reaches the explicit 2 s deadline.",
-        "revision": "Holds for PNG (incl. 20 MP) and JPEG up to medium sequential; JPEG >=1 MP and the 20 MP JPEG envelope deferred pending a faster JPEG path or a re-frozen runtime limit.",
-        "target": "P95 <=2 s for <=10 MB/20 MP at concurrency 4"
+        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 14.2496 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
+        "revision": "Scoped to measured evidence; see source report.",
+        "target": "Latency <=2 s"
       },
       {
-        "reason": "CL-28 held-out is high-band only; CL-34 adaptive/larger-image probes evade.",
-        "revision": "Claimed only within calibrated bands and suite-like payload densities; reduced-rate and larger-image attempts are out of claim.",
-        "target": ">=95% recall per family"
-      },
-      {
-        "reason": "CL-34 adaptive probe scores 0 under Description/Title keywords (CL-23 design).",
-        "revision": "Declared-keyword payloads only; allowed-keyword payloads require a policy change before any enforcement claim.",
-        "target": "Metadata payload detection"
+        "reason": "Adaptive and unseen results stay separate from the frozen benchmark.; 14 adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.; 1 configurations are confounded by withheld clean controls.; Probe sizes range from 1 to 6 attempts; these are not population estimates.",
+        "revision": "Scoped to measured evidence; see source report.",
+        "target": "Adaptive robustness"
       }
     ],
     "value": "release_with_limitations"
@@ -46,7 +58,7 @@
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
-  "scorecard_version": "1.3.0",
+  "scorecard_version": "1.4.0",
   "sections": {
     "detection_frozen_benchmark": {
       "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",
@@ -129,6 +141,7 @@
       "routes_exempt_verified": [
         "R-08"
       ],
+      "routes_failed": [],
       "routes_partial": [
         "R-06"
       ],
@@ -142,7 +155,8 @@
       ],
       "source_doc": "docs/contracts/route-trace-audit.md",
       "source_schema": "covertlens.route-trace-audit",
-      "trace_links_all_explained": true
+      "trace_links_all_explained": true,
+      "unauthorized_served": 0
     },
     "geometric": {
       "attacker_grid": {
@@ -157,6 +171,20 @@
         "benign_scene": 0,
         "chart": 0,
         "skyline": 0
+      },
+      "coverage_checks": {
+        "all_five_subfamilies_reported": true,
+        "attacker_grid_encoded_quantized": true,
+        "attacker_grid_rows_present": true,
+        "benign_controls_cover_kinds": true,
+        "benign_present_each_subfamily": true,
+        "chart_declared_channel_logs": true,
+        "chart_undeclared_is_triage": true,
+        "encoded_present_each_subfamily": true,
+        "height_or_size_alone_never_enforces": true,
+        "no_benign_structure_false_claims": true,
+        "structured_recall_at_least_0.8_each_subfamily": true,
+        "structured_undeclared_claimed": true
       },
       "enforceable": true,
       "family": "geometric",
@@ -507,26 +535,26 @@
     "latency_reliability": {
       "classes_met": [
         "envelope/png",
-        "large/png",
-        "medium/jpeg",
         "medium/png",
         "small/jpeg",
         "small/png"
       ],
       "classes_missed": [
-        "large/jpeg"
+        "large/jpeg",
+        "large/png",
+        "medium/jpeg"
       ],
       "concurrency_access_clean": true,
-      "concurrent_p95_s": 2.1074,
+      "concurrent_p95_s": 14.2496,
       "limits_explicit_and_withholding": true,
       "p95_by_class": {
-        "envelope/png": 1.5185,
-        "large/jpeg": 2.0125,
-        "large/png": 0.0672,
-        "medium/jpeg": 0.7303,
-        "medium/png": 0.0171,
-        "small/jpeg": 0.184,
-        "small/png": 0.0043
+        "envelope/png": 1.5357,
+        "large/jpeg": 10.4055,
+        "large/png": 2.8976,
+        "medium/jpeg": 2.5999,
+        "medium/png": 0.6767,
+        "small/jpeg": 0.6278,
+        "small/png": 0.1601
       },
       "proposal": {
         "agreed_concurrency": 4,
@@ -565,8 +593,8 @@
     "robustness_bounds": {
       "outcomes": {
         "adaptive_allowed_keyword_metadata": "evaded",
-        "adaptive_low_signal_sequence": "evaded_below_enforcement",
         "adaptive_reduced_rate_lsb": "evaded_below_enforcement",
+        "adaptive_repeated_reduced_rate_artifacts": "evaded_below_enforcement",
         "unseen_cover_pattern_blocks": "evaded",
         "unseen_cover_pattern_smooth": "confounded_unresolved",
         "unseen_jpeg_quality_50": "detected",
@@ -579,7 +607,7 @@
       "unresolved": [
         {
           "experiment": "unseen_cover_pattern_smooth",
-          "reason": "Confounded: the clean smooth control fails the run exactly like the attempt (CL-28), so no detection claim is possible \u2014 unresolved."
+          "reason": "1/1 attempts withheld; 1/1 controls withheld; outcome: confounded_unresolved."
         }
       ]
     },
@@ -587,10 +615,25 @@
       "combined_auc": 0.466667,
       "context_only_auc": 0.433333,
       "image_only_auc": 0.940741,
-      "interpretation": "enforcement stays image-led; context is a triage aid (CL-31)",
+      "interpretation": "Image-only AUC 0.940741; combined AUC 0.466667.",
       "source_doc": "docs/contracts/ablations-prevention.md",
       "source_schema": "covertlens.ablations-prevention"
     }
+  },
+  "targets": {
+    "clean_stability": true,
+    "exports": true,
+    "gate_trace": true,
+    "geometric": true,
+    "infrastructure": true,
+    "latency": false,
+    "pilot": false,
+    "precision": true,
+    "prevention": true,
+    "recall": true,
+    "robustness": false,
+    "route_coverage": false,
+    "sequence_value": false
   },
   "universal_claim": false
 }

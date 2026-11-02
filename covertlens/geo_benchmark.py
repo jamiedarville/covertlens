@@ -8,8 +8,8 @@ false-claim rates separately, with Wilson intervals and prevalence.
 
 Guards (GEO-05/GEO-06, C-09):
 - height or size alone never triggers anything: the detector is
-  log-only triage with unfrozen thresholds, and this benchmark never
-  marks it enforceable;
+  frozen ladder is exercised on every non-structure finding and the
+  guard is computed from its delivery decisions;
 - a *false claim* means a benign item classified
   ``structure_claimed``; weaker triage signals on benign items are
   reported, not hidden;
@@ -233,9 +233,19 @@ def run_geo_benchmark(
 
     encoded: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
     benign: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
+    quantization_deliveries: list[str] = []
+    from .calibration import load_frozen_thresholds
+    from .verdicts import decide_verdict
+
+    frozen, _ = load_frozen_thresholds()
     continuous: dict[str, list[str]] = {name: [] for name in SUBFAMILIES}
     for fixture in fixtures:
-        classification = _classify(fixture.data)
+        report = analyze_geometric_bytes(fixture.data)
+        classification = report["classification"]
+        if report.get("finding") is not None and classification != SIGNAL_STRUCTURE:
+            quantization_deliveries.append(
+                decide_verdict([report["finding"]], frozen).delivery
+            )
         if fixture.role == "encoded":
             encoded[fixture.subfamily].append(classification)
         else:  # clean + negative roles are benign for scoring
@@ -430,7 +440,8 @@ def run_geo_benchmark(
             for kind in ("skyline", "chart", "abstract", "benign_scene")
         ),
         "no_benign_structure_false_claims": false_claims_total == 0,
-        "height_or_size_alone_never_enforces": True,  # log-only detector
+        "height_or_size_alone_never_enforces": bool(quantization_deliveries)
+        and all(d == "permit" for d in quantization_deliveries),
         "chart_declared_channel_logs": bool(chart_declared)
         and all(c == SIGNAL_DECLARED for c in chart_declared),
         "chart_undeclared_is_triage": bool(chart_undeclared)

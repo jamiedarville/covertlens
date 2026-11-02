@@ -229,23 +229,12 @@ def run_ablations() -> dict[str, Any]:
         },
         "replay_cross_check": replay["by_condition"],
     }
+    auc_summary = ", ".join(f"{arm}={arms[arm]['auc']}" for arm in ARMS)
     findings = [
-        "Context-only evidence is weak on this pilot: repetition "
-        "pressure alone does not separate attempts from controls "
-        "(see its AUC/confusion), so context must never withhold "
-        "by itself.",
-        "Combined scoring raises recall (0.87 vs 0.53 at the "
-        "operating points) but its AUC falls below image-only: "
-        "prior sender scores lift later clean traces, trading many "
-        "false positives — enforcement therefore stays image-led "
-        "and context remains a triage aid, not a withhold input.",
-        "Prevention blocks the high-band attempts the frozen ladder "
-        "withholds; delivered low/medium attempts remain recoverable "
-        "and are the observed transfers — blocked artifacts "
-        "contribute zero transfers by construction.",
-        "Legitimate task success is tracked separately from "
-        "recovery: clean controls succeed exactly when delivered, "
-        "and withholding a control is the collateral cost.",
+        f"AUC by arm: {auc_summary}.",
+        f"Combined versus image-only recall: {arms['combined']['recall']} versus {arms['image_only']['recall']}; false positives: {arms['combined']['fp']} versus {arms['image_only']['fp']}.",
+        f"Withheld attempts: {len(withheld_attempts)}; blocked counted as transfer: {prevention['attempts']['blocked_counted_as_transfer']}.",
+        f"Clean-control legitimate task success: {prevention['clean_controls']['legitimate_task_successes']}/{len(controls)}; observed transfers: {prevention['attempts']['observed_successful_transfers']}.",
     ]
     return {
         "schema": ABLATION_SCHEMA,

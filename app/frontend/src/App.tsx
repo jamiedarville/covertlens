@@ -3,6 +3,8 @@ import Landing from "./pages/Landing";
 import Analyze from "./pages/Analyze";
 import Generate from "./pages/Generate";
 import LiveGate from "./pages/LiveGate";
+import Benchmarks from "./pages/Benchmarks";
+import Scorecard from "./pages/Scorecard";
 import { fetchVersionLine } from "./api";
 
 function usePath(): [string, (to: string) => void] {
@@ -30,7 +32,11 @@ export default function App() {
         ? "generate"
         : path === "/gate"
           ? "gate"
-          : "landing";
+          : path === "/benchmarks"
+            ? "benchmarks"
+            : path === "/scorecard"
+              ? "scorecard"
+              : "landing";
 
   useEffect(() => {
     document.title =
@@ -40,7 +46,11 @@ export default function App() {
           ? "Generate — CovertLens"
           : page === "gate"
             ? "Live Gate — CovertLens"
-            : "CovertLens";
+            : page === "benchmarks"
+              ? "Benchmarks — CovertLens"
+              : page === "scorecard"
+                ? "Scorecard — CovertLens"
+                : "CovertLens";
   }, [page]);
 
   useEffect(() => {
@@ -68,14 +78,40 @@ export default function App() {
           CovertLens
         </a>
         <nav aria-label="Primary">
-          <a href="/analyze" onClick={go("/analyze")} aria-current={page === "analyze" ? "page" : undefined}>
+          <a
+            href="/analyze"
+            onClick={go("/analyze")}
+            aria-current={page === "analyze" ? "page" : undefined}
+          >
             Analyze
           </a>
-          <a href="/generate" onClick={go("/generate")} aria-current={page === "generate" ? "page" : undefined}>
+          <a
+            href="/generate"
+            onClick={go("/generate")}
+            aria-current={page === "generate" ? "page" : undefined}
+          >
             Generate
           </a>
-          <a href="/gate" onClick={go("/gate")} aria-current={page === "gate" ? "page" : undefined}>
+          <a
+            href="/gate"
+            onClick={go("/gate")}
+            aria-current={page === "gate" ? "page" : undefined}
+          >
             Live Gate
+          </a>
+          <a
+            href="/benchmarks"
+            onClick={go("/benchmarks")}
+            aria-current={page === "benchmarks" ? "page" : undefined}
+          >
+            Benchmarks
+          </a>
+          <a
+            href="/scorecard"
+            onClick={go("/scorecard")}
+            aria-current={page === "scorecard" ? "page" : undefined}
+          >
+            Scorecard
           </a>
           <a href="/docs">API docs</a>
         </nav>
@@ -87,18 +123,25 @@ export default function App() {
           <Generate navigate={navigate} />
         ) : page === "gate" ? (
           <LiveGate />
+        ) : page === "benchmarks" ? (
+          <Benchmarks />
+        ) : page === "scorecard" ? (
+          <Scorecard />
         ) : (
           <Landing navigate={navigate} />
         )}
       </main>
       <footer className="site-footer">
         <p>
-          Scores are evidence, never accusations. A withheld image is
-          recorded as not observed, never as a successful hidden transfer.
+          Scores are evidence, never accusations. A withheld image is recorded
+          as not observed, never as a successful hidden transfer.
         </p>
         <p>
           {versionLine ? `${versionLine} · ` : ""}
-          <a href="/docs">OpenAPI</a> · <a href="/api/scorecard">Release scorecard</a>
+          <a href="/docs">OpenAPI</a> ·{" "}
+          <a href="/scorecard" onClick={go("/scorecard")}>
+            Release scorecard
+          </a>
         </p>
       </footer>
     </>

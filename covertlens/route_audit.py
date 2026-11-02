@@ -34,7 +34,13 @@ from typing import Any
 from . import ids
 from .events import Event, EventType, ParseStatus, Verdict
 from .fixtures import build_pair
-from .gate import InterceptionContext, InterceptionGate
+from .gate import (
+    InterceptionContext,
+    InterceptionGate,
+    PendingDeliveryError,
+    ReviewerAccessError,
+    WithheldError,
+)
 from .routes import ROUTES, Route
 from .store import ArtifactStore
 from .trace_join import join_trace
@@ -47,7 +53,13 @@ RUN_ID = "run_audit"
 def _denied(fn: Callable[[], Any]) -> bool:
     try:
         fn()
-    except Exception:
+    except (
+        PendingDeliveryError,
+        WithheldError,
+        ReviewerAccessError,
+        PermissionError,
+        ValueError,
+    ):
         return True
     return False
 
@@ -124,7 +136,10 @@ def _route_checks(route: Route, data: bytes) -> dict[str, Any]:
             e.event_type is EventType.ARTIFACT_PARSED for e in gate.events(RUN_ID)
         )
     checks["unauthorized_served"] = gate.access_attempt_report()["unauthorized_served"]
-    passed = all(v for v in checks.values() if isinstance(v, bool))
+    passed = (
+        all(v for v in checks.values() if isinstance(v, bool))
+        and checks["unauthorized_served"] == 0
+    )
     return {"checks": checks, "passed": passed, "gate": gate}
 
 
@@ -267,7 +282,7 @@ def run_route_audit() -> dict[str, Any]:
         status = "pass" if outcome["passed"] else "failed"
         gaps = []
         if route.route_id == "R-06":
-            status = "partial"
+            status = "partial" if outcome["passed"] else "failed"
             gaps.append(
                 "R-06 has no dedicated gate derivative API: derivatives "
                 "are generated only from gate-served bytes in this audit, "
@@ -308,7 +323,8 @@ def run_route_audit() -> dict[str, Any]:
         },
         "trace": trace,
         "gaps": gaps,
-        "full_coverage_claimed": False,
+        "full_coverage_claimed": not gaps
+        and all(r["status"] in ("pass", "exempt_verified") for r in routes),
         "equated_with_collusion": False,
     }
 

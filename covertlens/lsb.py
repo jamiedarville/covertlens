@@ -28,6 +28,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from .acceleration import sample_counts
 from .fixtures import Fixture
 from .parsing import (
     AnalysisResult,
@@ -84,9 +85,7 @@ def _pov_statistics(
     samples: bytes, config: LsbConfig
 ) -> tuple[float, dict[str, Any], int]:
     """Return (score, evidence, pairs_used) for raw sample bytes."""
-    counts = [0] * 256
-    for value in samples:
-        counts[value] += 1
+    counts = sample_counts(samples)
     total = len(samples)
     chi_square = 0.0
     pairs_used = 0
@@ -379,6 +378,22 @@ def benchmark_lsb(
         band_positive = [float(r["score"]) for r in band_rows if r["label"] == 1]
         band_negative = [float(r["score"]) for r in band_rows if r["label"] == 0]
         by_band[band] = {
+            "sweep": [
+                {
+                    "threshold": round(t, 6),
+                    "recall": _wilson(
+                        sum(
+                            r["label"] == 1 and float(r["score"]) >= t
+                            for r in band_rows
+                        ),
+                        len(band_positive),
+                    ),
+                    "false_positive_rate": _wilson(
+                        sum(score >= t for score in negative), len(negative)
+                    ),
+                }
+                for t in sweep_thresholds
+            ],
             "fixture_count": len(band_rows),
             "positive_count": len(band_positive),
             "negative_count": len(band_negative),

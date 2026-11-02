@@ -14,7 +14,8 @@ hash drift is detectable, and a validated channel-finding schema
 Declared parser subset (anything outside it returns
 ``unsupported_encoding`` with the limitation recorded instead of a
 guessed parse): 8-bit non-interlaced PNG (all colour types) and 8-bit
-baseline sequential DCT JPEG with 4:4:4 sampling (3 components).
+baseline sequential DCT JPEG with grayscale or 4:4:4 / 4:2:2 / 4:2:0
+sampling, using per-component Huffman selectors.
 Thresholds stay unfrozen (CL-27); this module fixes no detector scores.
 """
 
@@ -28,13 +29,14 @@ from enum import StrEnum
 from typing import Any
 
 from . import ids
+from .acceleration import unfilter_row
 from .manifest import FAMILIES
 from .store import ArtifactStore
 
 RESULT_SCHEMA = "covertlens.analysis-result"
 RESULT_SCHEMA_VERSION = 1
 PARSER_NAME = "covertlens.bounded-parser"
-PARSER_VERSION = "1.0.0"
+PARSER_VERSION = "1.1.0"
 LIMITS_VERSION = "1.0.0"
 FINDING_SCHEMA_VERSION = "1.0.0"
 
@@ -382,6 +384,11 @@ def _parse_png(
                 "color_type": color,
                 "interlace": interlace,
             }
+            if _comp != 0 or _filt != 0:
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    "unsupported PNG compression/filter method",
+                )
             if depth != 8:
                 raise _Fail(
                     AnalysisStatus.UNSUPPORTED_ENCODING,
@@ -434,8 +441,8 @@ def _parse_png(
         raise
     except zlib.error as exc:
         raise _Fail(AnalysisStatus.CORRUPT, f"PNG inflate failed: {exc}") from exc
-    if len(raw) < expected:
-        raise _Fail(AnalysisStatus.CORRUPT, "truncated PNG pixel data")
+    if not engine.eof or len(raw) != expected:
+        raise _Fail(AnalysisStatus.CORRUPT, "incomplete or invalid PNG pixel stream")
     rows: list[bytes] = []
     prev = bytearray(stride)
     for y in range(height):
@@ -445,7 +452,10 @@ def _parse_png(
         line = bytearray(raw[base + 1 : base + 1 + stride])
         if len(line) != stride:
             raise _Fail(AnalysisStatus.CORRUPT, "short PNG row")
-        if ftype == 0:
+        accelerated = unfilter_row(line, prev, channels, ftype)
+        if accelerated is not None:
+            line = accelerated
+        elif ftype == 0:
             pass
         elif ftype == 1:
             for i in range(channels, stride):
@@ -546,52 +556,67 @@ _ZIGZAG = (
 
 
 class _BitReader:
-    """Bounded scan reader: unstuffs FF00 and stops cleanly at markers."""
+    """Byte-backed entropy reader with a nine-bit Huffman lookup.
 
-    def __init__(self, scan: bytes) -> None:
-        self._bits: list[int] = []
-        i = 0
-        while i < len(scan):
-            byte = scan[i]
-            if byte == 0xFF and i + 1 < len(scan):
-                nxt = scan[i + 1]
-                if nxt == 0x00:
-                    self._bits.extend((byte >> s) & 1 for s in range(7, -1, -1))
-                    i += 2
-                    continue
-                if 0xD0 <= nxt <= 0xD9:
-                    raise _Fail(
-                        AnalysisStatus.CORRUPT,
-                        "restart/EOI marker inside entropy data "
-                        "(restart intervals outside declared subset)",
-                    )
-            self._bits.extend((byte >> s) & 1 for s in range(7, -1, -1))
-            i += 1
+    Avoids materializing eight Python integers per input byte. The fallback
+    still checks every code length and never pads a truncated symbol/value.
+    """
+
+    def __init__(self, scan: bytes, tables: dict | None = None) -> None:
+        import re
+
+        if re.search(b"\\xff(?!\\x00)", scan):
+            raise _Fail(
+                AnalysisStatus.CORRUPT, "unexpected marker in JPEG entropy data"
+            )
+        self._data = scan.replace(b"\xff\x00", b"\xff")
         self._pos = 0
+        self._fast: dict[int, list[tuple[int, int] | None]] = {}
+        for table in (tables or {}).values():
+            lookup: list[tuple[int, int] | None] = [None] * 512
+            for (code, length), symbol in table.items():
+                if length <= 9:
+                    base = code << (9 - length)
+                    for i in range(1 << (9 - length)):
+                        lookup[base + i] = (symbol, length)
+            self._fast[id(table)] = lookup
+
+    def _read(self, size: int) -> int:
+        if size == 0:
+            return 0
+        if self._pos + size > len(self._data) * 8:
+            raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG entropy data")
+        byte, offset = divmod(self._pos, 8)
+        count = (offset + size + 7) // 8
+        value = int.from_bytes(self._data[byte : byte + count], "big")
+        value = (value >> (count * 8 - offset - size)) & ((1 << size) - 1)
+        self._pos += size
+        return value
 
     def read_code(self, table: dict[tuple[int, int], int]) -> int:
+        lookup = self._fast.get(id(table))
+        if lookup is not None and self._pos + 9 <= len(self._data) * 8:
+            byte, offset = divmod(self._pos, 8)
+            prefix = ((self._data[byte] << 8) | self._data[byte + 1]) >> (
+                7 - offset
+            ) & 511
+            entry = lookup[prefix]
+            if entry is not None:
+                self._pos += entry[1]
+                return entry[0]
         code = 0
         for length in range(1, 17):
-            if self._pos >= len(self._bits):
-                raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG entropy data")
-            code = (code << 1) | self._bits[self._pos]
-            self._pos += 1
-            if (code, length) in table:
-                return table[(code, length)]
+            code = (code << 1) | self._read(1)
+            symbol = table.get((code, length))
+            if symbol is not None:
+                return symbol
         raise _Fail(AnalysisStatus.CORRUPT, "invalid JPEG Huffman code")
 
     def read_value(self, size: int) -> int:
         if size == 0:
             return 0
-        if self._pos + size > len(self._bits):
-            raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG entropy data")
-        value = 0
-        for _ in range(size):
-            value = (value << 1) | self._bits[self._pos]
-            self._pos += 1
-        if value < (1 << (size - 1)):
-            value -= (1 << size) - 1
-        return value
+        value = self._read(size)
+        return value - ((1 << size) - 1) if value < (1 << (size - 1)) else value
 
 
 def _parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
@@ -601,6 +626,8 @@ def _parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
         class_id = body[i]
         if i + 17 > len(body):
             raise _Fail(AnalysisStatus.CORRUPT, "truncated DHT segment")
+        if class_id >> 4 not in (0, 1) or class_id & 15 > 3:
+            raise _Fail(AnalysisStatus.CORRUPT, "invalid DHT class or table ID")
         counts = body[i + 1 : i + 17]
         total = sum(counts)
         symbols = body[i + 17 : i + 17 + total]
@@ -609,6 +636,8 @@ def _parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
         decode: dict[tuple[int, int], int] = {}
         code, k = 0, 0
         for length in range(1, 17):
+            if code + counts[length - 1] > (1 << length):
+                raise _Fail(AnalysisStatus.CORRUPT, "oversubscribed Huffman table")
             for _ in range(counts[length - 1]):
                 decode[(code, length)] = symbols[k]
                 k += 1
@@ -622,7 +651,7 @@ def _parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
 def _parse_jpeg(
     data: bytes, limits: ParserLimits, start: float
 ) -> tuple[dict[str, Any], dict[str, Any], tuple[tuple[int, ...], ...]]:
-    """Parse an 8-bit baseline 4:4:4 JPEG; return image, coverage, blocks."""
+    """Parse an 8-bit baseline 4:4:4 / 4:2:2 / 4:2:0 or grayscale JPEG; return image, coverage, blocks."""
     _check_deadline(start, limits)
     if len(data) < 4 or not data.startswith(b"\xff\xd8"):
         raise _Fail(AnalysisStatus.UNSUPPORTED_FORMAT, "not JPEG bytes")
@@ -631,10 +660,15 @@ def _parse_jpeg(
     tables: dict[int, dict[tuple[int, int], int]] = {}
     has_dqt = False
     scan: bytes | None = None
+    components: list[tuple[int, int, int]] = []
+    selectors: list[tuple[int, int, int]] = []
     while pos < len(data):
         if data[pos] != 0xFF:
             raise _Fail(AnalysisStatus.CORRUPT, "corrupt JPEG marker stream")
         marker = data[pos + 1] if pos + 1 < len(data) else 0
+        if marker == 0xFF:  # marker fill byte
+            pos += 1
+            continue
         if marker == 0xD9:  # EOI
             break
         if marker == 0x01 or 0xD0 <= marker <= 0xD7:
@@ -646,7 +680,15 @@ def _parse_jpeg(
         if length < 2 or pos + 2 + length > len(data):
             raise _Fail(AnalysisStatus.CORRUPT, "truncated JPEG segment body")
         body = data[pos + 4 : pos + 2 + length]
-        if marker == 0xDB:
+        if marker == 0xDD:
+            if len(body) != 2:
+                raise _Fail(AnalysisStatus.CORRUPT, "invalid JPEG restart interval")
+            if body != b"\x00\x00":
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    "restart intervals outside coefficient parser subset",
+                )
+        elif marker == 0xDB:
             has_dqt = True
         elif marker == 0xC4:
             tables.update(_parse_huffman(body))
@@ -681,16 +723,29 @@ def _parse_jpeg(
                     AnalysisStatus.UNSUPPORTED_ENCODING,
                     f"JPEG precision {precision} outside declared 8-bit subset",
                 )
-            if ncomp != 3:
+            if len(body) != 6 + ncomp * 3:
+                raise _Fail(AnalysisStatus.CORRUPT, "invalid SOF0 component length")
+            if ncomp not in (1, 3):
                 raise _Fail(
                     AnalysisStatus.UNSUPPORTED_ENCODING,
-                    f"JPEG with {ncomp} components outside declared 4:4:4 subset",
+                    "only grayscale and three-component JPEG supported",
                 )
-            sampling = [body[6 + i * 3 + 1] for i in range(ncomp)]
-            if any(s != 0x11 for s in sampling):
+            components = [
+                (body[6 + i * 3], body[7 + i * 3] >> 4, body[7 + i * 3] & 15)
+                for i in range(ncomp)
+            ]
+            sampling = [(h, v) for _, h, v in components]
+            if len({c for c, _, _ in components}) != ncomp:
+                raise _Fail(AnalysisStatus.CORRUPT, "duplicate frame component")
+            if sampling not in (
+                [(1, 1)],
+                [(1, 1)] * 3,
+                [(2, 1), (1, 1), (1, 1)],
+                [(2, 2), (1, 1), (1, 1)],
+            ):
                 raise _Fail(
                     AnalysisStatus.UNSUPPORTED_ENCODING,
-                    f"JPEG sampling {sampling} outside declared 4:4:4 subset",
+                    f"unsupported JPEG sampling {sampling}",
                 )
             _check_dimensions(width, height, limits)
             sof = {
@@ -698,7 +753,13 @@ def _parse_jpeg(
                 "height": height,
                 "precision": precision,
                 "components": ncomp,
-                "sampling": "4:4:4",
+                "sampling": "grayscale"
+                if ncomp == 1
+                else "4:2:0"
+                if sampling[0] == (2, 2)
+                else "4:2:2"
+                if sampling[0] == (2, 1)
+                else "4:4:4",
             }
         elif marker == 0xDA:
             if sof is None:
@@ -708,6 +769,30 @@ def _parse_jpeg(
                     AnalysisStatus.CORRUPT,
                     "JPEG scan without quantisation/Huffman tables",
                 )
+            if not body or len(body) != 1 + 2 * body[0] + 3:
+                raise _Fail(AnalysisStatus.CORRUPT, "invalid SOS length")
+            if body[0] != sof["components"] or body[-3:] != b"\x00\x3f\x00":
+                raise _Fail(
+                    AnalysisStatus.UNSUPPORTED_ENCODING,
+                    "only single interleaved sequential scan supported",
+                )
+            by_id = {cid: i for i, (cid, _, _) in enumerate(components)}
+            seen = set()
+            for i in range(body[0]):
+                cid, table_ids = body[1 + i * 2 : 3 + i * 2]
+                dc, ac = table_ids >> 4, 0x10 | (table_ids & 15)
+                if (
+                    cid not in by_id
+                    or cid in seen
+                    or dc not in tables
+                    or ac not in tables
+                ):
+                    raise _Fail(
+                        AnalysisStatus.CORRUPT,
+                        "invalid SOS component or missing Huffman table",
+                    )
+                seen.add(cid)
+                selectors.append((by_id[cid], dc, ac))
             scan = data[pos + 2 + length :]
             break
         pos += 2 + length
@@ -718,40 +803,58 @@ def _parse_jpeg(
     # End the scan at EOI (entropy data byte-stuffs FF, so a bare FFD9
     # can only be the marker); bytes after EOI are not image data.
     eoi = scan.find(b"\xff\xd9")
-    if eoi != -1:
-        scan = scan[:eoi]
+    if eoi == -1:
+        raise _Fail(AnalysisStatus.CORRUPT, "JPEG missing EOI")
+    scan = scan[:eoi]
     _check_deadline(start, limits)
     width, height = int(sof["width"]), int(sof["height"])
-    mcus_x, mcus_y = (width + 7) // 8, (height + 7) // 8
-    if 0x00 not in tables or 0x10 not in tables:
-        raise _Fail(AnalysisStatus.CORRUPT, "JPEG missing DC/AC Huffman tables")
-    reader = _BitReader(scan)
-    dc_table, ac_table = tables[0x00], tables[0x10]
-    prev = [0, 0, 0]
+    max_h = max(h for _, h, _ in components)
+    max_v = max(v for _, _, v in components)
+    mcus_x, mcus_y = (
+        (width + 8 * max_h - 1) // (8 * max_h),
+        (height + 8 * max_v - 1) // (8 * max_v),
+    )
+    reader = _BitReader(scan, tables)
+    prev = [0] * len(components)
     blocks: list[tuple[int, ...]] = []
     for mcu in range(mcus_x * mcus_y):
         if mcu % 16 == 0:
             _check_deadline(start, limits)
-        for comp in range(3):
-            coeffs = [0] * 64
-            size = reader.read_code(dc_table)
-            prev[comp] += reader.read_value(size)
-            coeffs[0] = prev[comp]
-            k = 1
-            while k < 64:
-                rs = reader.read_code(ac_table)
-                run, sz = rs >> 4, rs & 0x0F
-                if rs == 0x00:
-                    break
-                if rs == 0xF0:
-                    k += 16
-                    continue
-                k += run
-                if k >= 64:
-                    raise _Fail(AnalysisStatus.CORRUPT, "JPEG AC run overflows block")
-                coeffs[_ZIGZAG[k]] = reader.read_value(sz)
-                k += 1
-            blocks.append(tuple(coeffs))
+        for comp, dc, ac in selectors:
+            dc_table, ac_table = tables[dc], tables[ac]
+            _, h, v = components[comp]
+            for _ in range(h * v):
+                coeffs = [0] * 64
+                size = reader.read_code(dc_table)
+                if size > 11:
+                    raise _Fail(AnalysisStatus.CORRUPT, "invalid baseline DC category")
+                prev[comp] += reader.read_value(size)
+                coeffs[0] = prev[comp]
+                k = 1
+                while k < 64:
+                    rs = reader.read_code(ac_table)
+                    run, sz = rs >> 4, rs & 0x0F
+                    if rs == 0:
+                        break
+                    if rs == 0xF0:
+                        k += 16
+                        if k > 64:
+                            raise _Fail(
+                                AnalysisStatus.CORRUPT, "JPEG zero run overflows block"
+                            )
+                        continue
+                    if sz == 0 or sz > 10:
+                        raise _Fail(
+                            AnalysisStatus.CORRUPT, "invalid baseline AC category"
+                        )
+                    k += run
+                    if k >= 64:
+                        raise _Fail(
+                            AnalysisStatus.CORRUPT, "JPEG AC run overflows block"
+                        )
+                    coeffs[_ZIGZAG[k]] = reader.read_value(sz)
+                    k += 1
+                blocks.append(tuple(coeffs))
     coverage = {"blocks_parsed": len(blocks), "coefficients_parsed": len(blocks) * 64}
     return sof, coverage, tuple(blocks)
 
@@ -830,7 +933,7 @@ def analyze_bytes(
             coverage=coverage,
             coefficients=blocks,
             limitations=(
-                "parser subset: 8-bit baseline 4:4:4 JPEG, quantized "
+                "parser subset: 8-bit baseline 4:4:4 / 4:2:2 / 4:2:0 or grayscale JPEG, quantized "
                 "coefficient domain; metadata scored separately (CL-23)",
             ),
         )

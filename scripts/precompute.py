@@ -17,19 +17,64 @@ stripped), served by ``GET /api/comparison``.
 from __future__ import annotations
 
 import argparse
-import json
 import os
+import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import covertlens
 
+REPORT_COMMANDS = {
+    "lsb": "benchmark-lsb",
+    "dct": "benchmark-dct",
+    "metadata": "metadata-demo",
+    "frozen": "frozen-demo",
+    "geometric": "geo-benchmark-demo",
+    "ablations": "ablation-demo",
+    "latency": "latency-demo",
+    "robustness": "robustness-demo",
+    "scorecard": "scorecard-demo",
+}
+
 
 def cache_key() -> dict[str, str]:
+    from covertlens.acceleration import numpy_backend
+    from covertlens.calibration import load_frozen_thresholds
+    from covertlens.parsing import PARSER_VERSION
+
+    backend = numpy_backend()
     return {
         "library_version": covertlens.__version__,
         "git_sha": os.environ.get("GIT_SHA", "unknown"),
+        "config_version": load_frozen_thresholds()[0].version,
+        "parser_version": PARSER_VERSION,
+        "fast_path": "numpy" if backend is not None else "python",
+        "numpy_version": backend.__version__ if backend is not None else "absent",
+        "cache_version": "2",
     }
+
+
+def write_json(path: Path, body: Any) -> None:
+    """Readers see either a complete old document or a complete new one."""
+    from covertlens.cli import _payload_json
+
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as f:
+        f.write(_payload_json(body))
+        temporary = Path(f.name)
+    temporary.replace(path)
+
+
+def build_report(name: str) -> Any:
+    """Use the actual CLI handlers, preserving their complete payloads."""
+    from covertlens import demos
+
+    command = REPORT_COMMANDS[name]
+    handler = getattr(demos, "cmd_" + command.replace("-", "_"))
+    result = handler(argparse.Namespace())
+    if result.exit_code:
+        raise ValueError(f"{command} failed validation: {result.exit_code}")
+    return result.payload
 
 
 def _worker_analyze():
@@ -72,21 +117,21 @@ def build_comparison() -> dict[str, Any]:
 
 def precompute(cache_dir: Path) -> dict[str, Any]:
     """Write benchmark, scorecard and comparison caches. Returns the key."""
-    from covertlens.geo_benchmark import run_geo_benchmark
-    from covertlens.scorecard import load_scorecard
-
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = cache_key()
-    (cache_dir / "geometric.json").write_text(
-        json.dumps(run_geo_benchmark(), sort_keys=True)
-    )
-    (cache_dir / "scorecard.json").write_text(
-        json.dumps(load_scorecard(), sort_keys=True)
-    )
-    (cache_dir / "comparison.json").write_text(
-        json.dumps(build_comparison(), sort_keys=True)
-    )
-    (cache_dir / "key.json").write_text(json.dumps(key, sort_keys=True))
+    provenance = {}
+    write_json(cache_dir / "comparison.json", build_comparison())
+    for name, command in REPORT_COMMANDS.items():
+        report = build_report(name)
+        write_json(cache_dir / f"{name}.json", report)
+        provenance[name] = {
+            **key,
+            "command": command,
+            "computed_at": datetime.now(UTC).isoformat(),
+            "source": "published scorecard" if name == "scorecard" else "CLI handler",
+        }
+    write_json(cache_dir / "provenance.json", provenance)
+    write_json(cache_dir / "key.json", key)
     return key
 
 

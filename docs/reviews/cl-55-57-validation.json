@@ -1,0 +1,32 @@
+{
+  "scope": "CL-55\u2013CL-57",
+  "library_version": "0.1.0",
+  "parser_version": "1.1.0",
+  "performance_acceptance": {
+    "ticket": "CL-57",
+    "command": "COVERTLENS_FAST_PATH=numpy python -c \"from covertlens.latency import measure_class; print(measure_class('jpeg',1024,768,repetitions=5))\"",
+    "python": "3.12.15",
+    "backend": "numpy",
+    "media": "jpeg",
+    "width": 1024,
+    "height": 768,
+    "input_bytes": 1584549,
+    "n": 5,
+    "p50_s": 10.3086,
+    "p95_s": 10.3298,
+    "max_s": 10.3298,
+    "statuses": {
+      "parsed": 5
+    },
+    "timeout_rate": 0.0,
+    "target_s": 2.0,
+    "meets_proposal": false,
+    "merge_eligible": false
+  },
+  "fuzz": {
+    "cases": 2000,
+    "seed": 57,
+    "exceptions": 0,
+    "schema_validation": true
+  }
+}

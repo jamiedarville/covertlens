@@ -72,7 +72,9 @@ jobs:
 
       - name: Typecheck and build frontend
         working-directory: app/frontend
-        run: npm run build
+        run: |
+          npm run build
+          npm test
 
   test:
     name: test
@@ -103,7 +105,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install dev dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,web,fast]"
 
       # `slow` tests assert wall-clock bounds (CL-29 latency) and
       # flake on a loaded runner; they run in plain local pytest

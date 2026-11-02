@@ -299,6 +299,22 @@ def benchmark_metadata(
         band_rows = [r for r in scored if r["payload_band"] == band]
         band_pos = [float(r["score"]) for r in band_rows if r["label"] == 1]
         by_band[band] = {
+            "sweep": [
+                {
+                    "threshold": round(t, 6),
+                    "recall": _wilson(
+                        sum(
+                            r["label"] == 1 and float(r["score"]) >= t
+                            for r in band_rows
+                        ),
+                        len(band_pos),
+                    ),
+                    "false_positive_rate": _wilson(
+                        sum(score >= t for score in negative), len(negative)
+                    ),
+                }
+                for t in sweep_thresholds
+            ],
             "fixture_count": len(band_rows),
             "positive_count": len(band_pos),
             "negative_count": len(band_rows) - len(band_pos),

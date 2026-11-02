@@ -33,24 +33,25 @@ Detail that does not fit the table:
   unresolved unseeded) are published in the `pilot_adjudication`
   section.
 
-## Owner decision
+## Computed assessment (CL-56)
 
-**`release_with_limitations`** — recorded by the MVP release owner
-in the scorecard artifact and the CL-35 Jira comment.
+The builder computes `targets` and `decision` from section evidence. Failed
+safety invariants (gate/trace, exports, prevention or infrastructure handling)
+produce `no_release`; unresolved limitations or missed/narrowed targets produce
+`release_with_limitations`; only an assessment meeting every target with no
+limitations can produce `release`.
 
-- Limitations: seven items in `decision.limitations` (coverage
-  bands/densities, low-texture covers, JPEG latency envelope,
-  adaptive evasion incl. allowed-keyword metadata, tiny held-out
-  n, R-06 procedural derivatives, context-as-triage-only).
-- Target revisions: four items in `decision.target_revisions`,
-  each with the measured reason (clean-run scope, latency
-  envelope, recall scope, metadata keyword policy).
-- An unqualified `release` is structurally barred while
-  limitations are unresolved (`validate_scorecard`).
+The validator recomputes target checks from section values rather than trusting
+the published target booleans. It rejects unqualified release with any missed
+target or limitation, and rejects `release_with_limitations` without limitations.
+Handoff reads the published scorecard's decision instead of asserting its own.
 
-## Verification
+Limitations and target revisions cite the measured source narratives. Volatile
+latency figures also change the narratives derived from them; deterministic
+source sections must match the published artifact exactly. The scorecard remains
+a scoped assessment, not evidence of collusion or a universal detection claim.
 
-`python -m covertlens scorecard-demo` prints the decision summary;
-`tests/test_scorecard.py` rebuilds the scorecard and asserts all
-sections, the decision record, and that the published artifact
-matches (latency timings excepted — machine-volatile).
+Verification: `python -m covertlens scorecard-demo`, `tests/test_scorecard.py`
+and `tests/test_report_conclusions.py`. A planted `TypeError` in gate methods
+must escape the route, latency, pilot and handoff audits; only the documented
+denial exception classes count as successful denial.

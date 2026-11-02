@@ -40,7 +40,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 # Test stage: library test-suite inside the image (CI build-image job).
 FROM runtime AS test
 USER root
-RUN pip install --no-cache-dir "pytest>=8"
+RUN pip install --no-cache-dir "pytest>=8" "jsonschema>=4.23"
 COPY tests/ ./tests/
 COPY pyproject.toml ./
 USER appuser

@@ -49,7 +49,7 @@ PAYLOAD_BANDS = ("none", "low", "medium", "high")
 
 _LIMITATIONS = (
     "quantized coefficient domain only (parser subset: 8-bit baseline "
-    "4:4:4 JPEG); no IDCT or pixel-domain evidence is used",
+    "4:4:4 / 4:2:2 / 4:2:0 or grayscale JPEG); no IDCT or pixel-domain evidence is used",
     "global magnitude pairs-of-values chi-square; embedding that "
     "preserves coefficient histograms (e.g. +/-1 matching, adaptive "
     "selection) may evade it",
