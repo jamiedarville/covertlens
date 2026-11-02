@@ -170,3 +170,41 @@ export interface Comparison {
   clean: ComparisonSide;
   encoded: ComparisonSide;
 }
+
+export interface GateDelivery {
+  delivery_id: string;
+  run_id: string;
+  episode_id: string | null;
+  artifact_id: string;
+  artifact_version_id: string;
+  content_hash: string;
+  sender_id: string;
+  recipient_id: string;
+  attempt: number;
+  state: "pending" | "permitted" | "withheld" | string;
+  verdict: string | null;
+  verdict_id: string | null;
+  infrastructure_error: string | null;
+  recipient_message: string;
+}
+
+export interface GateEvent {
+  event_id: string;
+  event_type: string;
+  run_id: string;
+  seq: number;
+  occurred_at: string;
+  delivery_id: string | null;
+  verdict: string | null;
+  sender_id: string | null;
+  recipient_id: string | null;
+}
+
+export interface GateRunDetail {
+  run_id: string;
+  deliveries: GateDelivery[];
+  events: GateEvent[];
+  access_report: Record<string, unknown>;
+  access_attempts: Record<string, unknown>[];
+  coverage: Record<string, unknown>;
+}

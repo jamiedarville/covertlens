@@ -1,4 +1,10 @@
-import type { AnalyzePayload, Comparison, FixtureEntry } from "./types";
+import type {
+  AnalyzePayload,
+  Comparison,
+  FixtureEntry,
+  GateDelivery,
+  GateRunDetail,
+} from "./types";
 
 // Same-origin API client. The Analyze overlay renders from the
 // single POST /api/analyze response; the only other reads are the
@@ -94,6 +100,92 @@ export async function generateImage(
     throw new ApiError(response.status, `Generation failed (${response.status}).`);
   }
   return body as unknown as GenerateResult;
+}
+
+// -- Live Gate (CL-53) ------------------------------------------------
+
+export async function createGateRun(runId?: string): Promise<string> {
+  const response = await fetch("/api/gate/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(runId ? { run_id: runId } : {}),
+  });
+  if (!response.ok) throw new ApiError(response.status, "Could not create the run.");
+  const body = (await readJson(response)) as Record<string, unknown>;
+  return String(body.run_id);
+}
+
+export async function postGateDelivery(params: {
+  file: File;
+  runId: string;
+  senderId: string;
+  recipientId: string;
+  routeId: string;
+  episodeId?: string;
+}): Promise<GateDelivery> {
+  const form = new FormData();
+  form.append("file", params.file);
+  form.append("run_id", params.runId);
+  form.append("sender_id", params.senderId);
+  form.append("recipient_id", params.recipientId);
+  form.append("route_id", params.routeId);
+  if (params.episodeId) form.append("episode_id", params.episodeId);
+  const response = await fetch("/api/gate/deliveries", { method: "POST", body: form });
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Delivery failed."));
+  }
+  return body as unknown as GateDelivery;
+}
+
+export async function fetchGateRun(runId: string): Promise<GateRunDetail> {
+  const response = await fetch(`/api/gate/runs/${encodeURIComponent(runId)}`);
+  if (!response.ok) throw new ApiError(response.status, "Could not load the run.");
+  return (await readJson(response)) as unknown as GateRunDetail;
+}
+
+export async function analyzeGateDelivery(
+  deliveryId: string,
+): Promise<{ suggested_verdict: string; decision: Record<string, unknown> }> {
+  const response = await fetch(
+    `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/analyze`,
+    { method: "POST" },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Analysis failed."));
+  }
+  return body as unknown as {
+    suggested_verdict: string;
+    decision: Record<string, unknown>;
+  };
+}
+
+export async function recordGateVerdict(
+  deliveryId: string,
+  verdict: string,
+): Promise<GateDelivery> {
+  const response = await fetch(
+    `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/verdict`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ verdict }),
+    },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Verdict failed."));
+  }
+  return body as unknown as GateDelivery;
+}
+
+export function recipientImageUrl(deliveryId: string): string {
+  return `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/recipient-image`;
+}
+
+export function reviewerImageUrl(deliveryId: string): string {
+  return `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/reviewer-image?actor_id=researcher-1`;
 }
 
 export async function fetchGeneratedFile(imageUrl: string, name: string): Promise<File> {

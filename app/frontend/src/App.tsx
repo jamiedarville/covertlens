@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Landing from "./pages/Landing";
 import Analyze from "./pages/Analyze";
 import Generate from "./pages/Generate";
+import LiveGate from "./pages/LiveGate";
 import { fetchVersionLine } from "./api";
 
 function usePath(): [string, (to: string) => void] {
@@ -22,7 +23,14 @@ function usePath(): [string, (to: string) => void] {
 export default function App() {
   const [path, navigate] = usePath();
   const [versionLine, setVersionLine] = useState<string | null>(null);
-  const page = path === "/analyze" ? "analyze" : path === "/generate" ? "generate" : "landing";
+  const page =
+    path === "/analyze"
+      ? "analyze"
+      : path === "/generate"
+        ? "generate"
+        : path === "/gate"
+          ? "gate"
+          : "landing";
 
   useEffect(() => {
     document.title =
@@ -30,7 +38,9 @@ export default function App() {
         ? "Analyze — CovertLens"
         : page === "generate"
           ? "Generate — CovertLens"
-          : "CovertLens";
+          : page === "gate"
+            ? "Live Gate — CovertLens"
+            : "CovertLens";
   }, [page]);
 
   useEffect(() => {
@@ -64,6 +74,9 @@ export default function App() {
           <a href="/generate" onClick={go("/generate")} aria-current={page === "generate" ? "page" : undefined}>
             Generate
           </a>
+          <a href="/gate" onClick={go("/gate")} aria-current={page === "gate" ? "page" : undefined}>
+            Live Gate
+          </a>
           <a href="/docs">API docs</a>
         </nav>
       </header>
@@ -72,6 +85,8 @@ export default function App() {
           <Analyze />
         ) : page === "generate" ? (
           <Generate navigate={navigate} />
+        ) : page === "gate" ? (
+          <LiveGate />
         ) : (
           <Landing navigate={navigate} />
         )}

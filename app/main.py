@@ -41,8 +41,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 import covertlens
 from covertlens.manifest import load_manifest
@@ -58,6 +58,9 @@ CACHE_DIR = DATA_DIR / "cache"
 GENERATED_DIR = DATA_DIR / "generated"
 RED_TEAM_INDEX = DATA_DIR / "red-team" / "index.jsonl"
 RED_TEAM_STORE_DIR = DATA_DIR / "red-team" / "store"
+# Live Gate (CL-53): persistent gate over a file-backed store.
+GATE_STORE_DIR = DATA_DIR / "gate" / "store"
+GATE_REVIEWER_IDS = {"researcher-1", "reviewer"}
 MAX_GENERATE_BODY_BYTES = 16 * 1024
 _GENERATED_NAME = re.compile(r"^[0-9a-f]{64}\.(png|jpg)$")
 # The Docker image copies the Vite build to app/static (CL-47);
@@ -363,6 +366,296 @@ def generated_image(filename: str) -> Response:
     return FileResponse(target)
 
 
+# -- Live Gate (CL-53) -------------------------------------------------
+
+_gate_instance: Any = None
+_gate_lock = threading.Lock()
+
+
+def _gate() -> Any:
+    """Persistent gate singleton over the file-backed store."""
+    global _gate_instance
+    with _gate_lock:
+        if _gate_instance is None:
+            from covertlens.gate import InterceptionGate
+            from covertlens.store import ArtifactStore
+
+            GATE_STORE_DIR.mkdir(parents=True, exist_ok=True)
+            _gate_instance = InterceptionGate(ArtifactStore(GATE_STORE_DIR))
+        return _gate_instance
+
+
+def _reset_gate_for_tests() -> None:
+    global _gate_instance
+    with _gate_lock:
+        _gate_instance = None
+
+
+def _delivery_payload(record: Any) -> dict[str, Any]:
+    verdict = record.verdict.value if record.verdict is not None else None
+    if record.state == "permitted":
+        recipient_message = "delivered"
+    elif record.state == "withheld":
+        if record.infrastructure_error:
+            reason = f"infrastructure error: {record.infrastructure_error}"
+        elif verdict:
+            reason = f"{verdict} verdict"
+        else:
+            reason = "withheld by the gate"
+        recipient_message = f"withheld — {reason}"
+    else:
+        recipient_message = "pending — awaiting analysis and verdict"
+    return {
+        "delivery_id": record.delivery_id,
+        "run_id": record.run_id,
+        "episode_id": record.episode_id,
+        "artifact_id": record.artifact_id,
+        "artifact_version_id": record.artifact_version_id,
+        "content_hash": record.content_hash,
+        "sender_id": record.sender_id,
+        "recipient_id": record.recipient_id,
+        "attempt": record.attempt,
+        "state": record.state,
+        "verdict": verdict,
+        "verdict_id": record.verdict_id,
+        "infrastructure_error": record.infrastructure_error,
+        "recipient_message": recipient_message,
+    }
+
+
+def _gate_error(exc: Exception) -> JSONResponse:
+    from covertlens.gate import (
+        PendingDeliveryError,
+        ReviewerAccessError,
+        UnknownDeliveryError,
+        WithheldError,
+    )
+
+    if isinstance(exc, UnknownDeliveryError):
+        return JSONResponse({"detail": "delivery_not_found"}, status_code=404)
+    if isinstance(exc, PendingDeliveryError):
+        return JSONResponse(
+            {"detail": "withheld — pending: awaiting a verdict; no bytes served"},
+            status_code=409,
+        )
+    if isinstance(exc, WithheldError):
+        return JSONResponse(
+            {"detail": "withheld — delivery was withheld; no bytes served"},
+            status_code=403,
+        )
+    if isinstance(exc, ReviewerAccessError):
+        return JSONResponse({"detail": "reviewer access denied"}, status_code=403)
+    if isinstance(exc, ValueError):
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    raise exc
+
+
+@app.get("/api/gate/runs")
+def gate_runs() -> dict[str, Any]:
+    gate = _gate()
+    return {"runs": gate.runs()}
+
+
+@app.post("/api/gate/runs")
+async def gate_create_run(request: Request) -> JSONResponse:
+    try:
+        body = json.loads((await request.body()) or b"{}")
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    run_id = str(body.get("run_id") or "").strip()
+    if not run_id:
+        import uuid
+
+        run_id = f"run_{uuid.uuid4().hex[:16]}"
+    return JSONResponse({"run_id": run_id, "known_runs": _gate().runs()})
+
+
+@app.post("/api/gate/deliveries")
+async def gate_create_delivery(
+    file: UploadFile = File(...),
+    run_id: str = Form(...),
+    sender_id: str = Form("agent-a"),
+    recipient_id: str = Form("agent-b"),
+    route_id: str = Form("R-01"),
+    episode_id: str | None = Form(None),
+) -> JSONResponse:
+    from covertlens.gate import InterceptionContext
+
+    gate = _gate()
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        return JSONResponse({"detail": "upload_too_large"}, status_code=413)
+    ctx = InterceptionContext(
+        run_id=run_id.strip(),
+        sender_id=sender_id.strip() or "agent-a",
+        episode_id=episode_id.strip() if episode_id and episode_id.strip() else None,
+    )
+    if not ctx.run_id:
+        return JSONResponse({"detail": "run_id is required"}, status_code=400)
+    try:
+        handle = gate.intercept_bytes(route_id.strip(), data, ctx)
+        record = gate.attempt_delivery(
+            handle, recipient_id=recipient_id.strip() or "agent-b"
+        )
+    except Exception as exc:  # noqa: BLE001 - mapped to explicit API errors
+        return _gate_error(exc)
+    return JSONResponse(_delivery_payload(record))
+
+
+@app.get("/api/gate/runs/{run_id}")
+def gate_run_detail(run_id: str) -> JSONResponse:
+    gate = _gate()
+    deliveries = [_delivery_payload(r) for r in gate.deliveries(run_id)]
+    events = [e.to_dict() for e in gate.events(run_id)]
+    return JSONResponse(
+        {
+            "run_id": run_id,
+            "deliveries": deliveries,
+            "events": events,
+            "access_report": gate.access_attempt_report(),
+            "access_attempts": gate.access_attempts(),
+            "coverage": gate.coverage_report(),
+        }
+    )
+
+
+@app.post("/api/gate/deliveries/{delivery_id}/analyze")
+def gate_analyze_delivery(delivery_id: str) -> JSONResponse:
+    """Analyse a pending delivery's bytes; stays pending (CL-53)."""
+    gate = _gate()
+    try:
+        record = gate.get_delivery(delivery_id)
+    except Exception as exc:  # noqa: BLE001
+        return _gate_error(exc)
+    if record.state != "pending":
+        return JSONResponse(
+            {"detail": f"delivery already decided ({record.state})"},
+            status_code=409,
+        )
+    try:
+        data = gate.store.get_original(
+            record.artifact_version_id,
+            actor_id="gate-analyzer",
+            purpose="analysis",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _gate_error(exc)
+    from covertlens.metadata import analyze_all_bytes
+    from covertlens.verdicts import decide_verdict
+
+    result = analyze_all_bytes(data)
+    decision = decide_verdict(result.findings)
+    return JSONResponse(
+        {
+            "delivery": _delivery_payload(record),
+            "analysis": result.to_dict(),
+            "decision": decision.to_dict(),
+            "suggested_verdict": decision.to_dict()["verdict"],
+        }
+    )
+
+
+@app.post("/api/gate/deliveries/{delivery_id}/verdict")
+async def gate_record_verdict(delivery_id: str, request: Request) -> JSONResponse:
+    gate = _gate()
+    try:
+        body = json.loads((await request.body()) or b"{}")
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    verdict_value = str((body or {}).get("verdict") or "").strip()
+    from covertlens.events import Verdict
+
+    try:
+        verdict = Verdict(verdict_value)
+    except ValueError:
+        return JSONResponse(
+            {"detail": "verdict must be log, flag, quarantine or fail_run"},
+            status_code=400,
+        )
+    try:
+        record = gate.record_verdict(delivery_id, verdict)
+    except Exception as exc:  # noqa: BLE001
+        return _gate_error(exc)
+    return JSONResponse(_delivery_payload(record))
+
+
+@app.get("/api/gate/deliveries/{delivery_id}/recipient-image")
+def gate_recipient_image(delivery_id: str) -> Response:
+    """Recipient view: bytes only after a permitting verdict."""
+    gate = _gate()
+    try:
+        record = gate.get_delivery(delivery_id)
+        data = gate.recipient_access(delivery_id, via_route="R-04")
+    except Exception as exc:  # noqa: BLE001
+        # Withheld/pending responses carry the gate's reason and no bytes.
+        try:
+            record = gate.get_delivery(delivery_id)
+            payload = _delivery_payload(record)
+            detail = payload["recipient_message"]
+        except Exception:  # noqa: BLE001
+            detail = "withheld — delivery not available to the recipient"
+            return JSONResponse({"detail": detail}, status_code=404)
+        from covertlens.gate import PendingDeliveryError, WithheldError
+
+        if isinstance(exc, PendingDeliveryError):
+            return JSONResponse({"detail": detail}, status_code=409)
+        if isinstance(exc, WithheldError):
+            return JSONResponse({"detail": detail}, status_code=403)
+        return _gate_error(exc)
+    media = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+    return Response(content=data, media_type=media)
+
+
+@app.get("/api/gate/deliveries/{delivery_id}/reviewer-image")
+def gate_reviewer_image(delivery_id: str, actor_id: str = "researcher-1") -> Response:
+    """Reviewer view (R-08): audited read for authorized reviewers."""
+    gate = _gate()
+    try:
+        data = gate.reviewer_access(
+            delivery_id, actor_id=actor_id, reviewer_ids=GATE_REVIEWER_IDS
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _gate_error(exc)
+    media = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+    return Response(content=data, media_type=media)
+
+
+@app.get("/api/gate/runs/{run_id}/events/stream")
+async def gate_event_stream(run_id: str, request: Request) -> StreamingResponse:
+    """SSE timeline for one run (CL-53): replay, then poll for new seqs."""
+    gate = _gate()
+
+    async def generate() -> Any:
+        sent = -1
+        # Replay existing events, then poll briefly for new ones.
+        # The stream ends after ~5s idle; browsers reconnect and
+        # replay, which keeps the timeline live without holding a
+        # request open indefinitely.
+        idle_polls = 0
+        while idle_polls < 50:
+            if await request.is_disconnected():
+                break
+            events = gate.events(run_id)
+            fresh = [e for e in events if e.seq > sent]
+            for event in fresh:
+                sent = event.seq
+                yield f"data: {json.dumps(event.to_dict())}\n\n"
+            if fresh:
+                idle_polls = 0
+                continue
+            idle_polls += 1
+            yield ": keep-alive\n\n"
+            await asyncio.sleep(0.1)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/api/benchmarks/{name}")
 def benchmark(name: str) -> JSONResponse:
     if name != "geometric":
@@ -426,6 +719,15 @@ def analyze_page() -> Response:
 @app.get("/generate")
 def generate_page() -> Response:
     """SPA route for the Generate / red-team page (CL-51)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/gate")
+def gate_page() -> Response:
+    """SPA route for the Live Gate page (CL-53)."""
     response = _index_response()
     if response is not None:
         return response
