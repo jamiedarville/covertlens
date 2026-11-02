@@ -69,7 +69,8 @@ def test_raster_fallback_records_limitations_and_combines(dataset):
     assert fallback["combined_classification"] == "quantized_without_structure"
     combined = analyze_with_source(fixture, build_vector_source(fixture))
     assert combined["vector_classification"] == "quantized_without_structure"
-    assert combined["cleared"] is False
+    assert combined["cleared"] is True
+    assert combined["decision"]["delivery"] == "permit"
     # Corrupt sources are explicit, never silently raster-cleared.
     corrupt = analyze_with_source(fixture, {"schema": "nope"})
     assert corrupt["vector_status"] == "corrupt_source"

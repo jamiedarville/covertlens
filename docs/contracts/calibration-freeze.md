@@ -1,7 +1,7 @@
 # Calibration and threshold freeze contract (CL-27)
 
 Implements: CL-27. Owners: detection research (thresholds),
-evaluation (acceptance targets). Status: `frozen-1.0.0` in
+evaluation (acceptance targets). Status: `frozen-1.1.0` in
 [config/frozen-thresholds.json](../../config/frozen-thresholds.json)
 (schema: [schemas/calibration.schema.json](../../schemas/calibration.schema.json)).
 
@@ -35,3 +35,34 @@ evaluation (acceptance targets). Status: `frozen-1.0.0` in
 `python -m covertlens calibrate-demo` prints the calibration report
 recomputed from development fixtures; a test asserts it reproduces
 the shipped frozen artifact exactly.
+
+## Geometric extension (CL-54)
+
+The four-family freeze adds geometric development fixtures from
+`geometric_calibration_dataset`, assigned with `assign_geo_splits` by scene
+lineage. Both structured and random encoded symbol sequences count as
+positives. The corpus and selection are fixed before held-out evaluation;
+held-out inputs raise before detector scoring. Content hashes and lineage
+checks prevent cross-split overlap. The original three families retain their
+CL-27 points. Geometric payload coverage is `symbol_sequence`, independent of
+byte payload density bands (low/medium/high remain uncalibrated).
+
+Detector 2.2.0 / config 2.1.0 maps supported undeclared structure to
+`0.75 + 0.2 * quantization_score`, quantized/weak signals to
+`0.5 * quantization_score`, and declared/no-signal classifications to zero.
+This preserves quantization as triage and prevents chart height alone from
+withholding delivery. Candidate-derived triage and quarantine points are
+frozen; fail-run is reserved at unreachable 1.0 until severity calibration
+exists. The score maximum is 0.95.
+
+`evaluate_geometric_held_out` reports per-subfamily triage, structure and
+enforcement recall with Wilson intervals, plus independent chart controls
+under declared and undeclared contexts. It asserts disjointness from the
+freeze's development IDs. `universal_claim` is false: these small synthetic
+PNG samples share structured words and codes and do not test unseen
+vocabulary, codebooks, JPEG, or natural-image performance.
+
+Vector binding uses `decide_verdict` over raster and parsed source findings:
+log/flag permit, quarantine/fail-run withhold. Missing or corrupt source
+interception still refuses clearance (C-10). Parse failures never clear an
+artifact solely because no finding was produced.

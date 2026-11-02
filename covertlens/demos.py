@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .ablations import run_ablations
-from .calibration import calibrate_thresholds
+from .calibration import calibrate_thresholds, development_calibration_data
 from .dct import analyze_dct_bytes, benchmark_dct
 from .events import REQUIRED_FAMILIES, Event, EventType, ParseStatus, Verdict
 from .fixtures import build_dataset, build_pair, write_dataset
@@ -511,12 +511,7 @@ def cmd_pinning_demo(args: argparse.Namespace) -> DemoResult:
 
 def cmd_calibrate_demo(args: argparse.Namespace) -> DemoResult:
     del args
-    fixtures: list[Any] = []
-    assignments: dict[str, str] = {}
-    for dataset in (build_dataset(), build_metadata_dataset()):
-        split = assign_splits(dataset)
-        assignments.update(split)
-        fixtures.extend(f for f in dataset if split[f.fixture_id] != "held_out")
+    fixtures, assignments = development_calibration_data()
     report = calibrate_thresholds(fixtures, assignments)
     summary = _dump(
         {

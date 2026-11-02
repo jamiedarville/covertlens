@@ -116,7 +116,7 @@ def test_published_scorecard_has_geometric_section_per_subfamily():
         "angle_tilt",
     }
     assert geometric["general_geometric_coverage_claimed"] is False
-    assert geometric["enforceable"] is False
+    assert geometric["enforceable"] is True
     for block in geometric["per_subfamily"].values():
         assert block["encoded_recall_any_signal"] is not None
         assert block["benign_false_structure_claim_rate"] == 0.0
