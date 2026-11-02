@@ -40,8 +40,11 @@ limitation recorded rather than a guessed parse:
 - **PNG:** 8-bit, non-interlaced, colour types 0/2/3/4/6. All five row
   filters are unfiltered in place. Coverage reports `rows_parsed` and
   `pixels_parsed`; `pixels` holds the unfiltered sample bytes.
-- **JPEG:** 8-bit baseline sequential DCT (SOF0), 3 components with
-  4:4:4 sampling. Entropy data is decoded in the quantized coefficient
+- **JPEG (parser 1.1.0, CL-57):** 8-bit baseline sequential DCT (SOF0),
+  grayscale or 3 components with 4:4:4, 4:2:2 or 4:2:0 sampling.
+  Each scan component selects its own DC/AC Huffman tables. SOF/SOS/DHT
+  lengths, component IDs, table availability and entropy categories are
+  validated before indexing. Entropy data is decoded in the quantized coefficient
   domain (no IDCT, no pixel reconstruction). Coverage reports
   `blocks_parsed` and `coefficients_parsed`; `coefficients` holds the
   64-coefficient blocks in raster MCU order. Restart intervals are
@@ -72,3 +75,36 @@ Thresholds stay unfrozen until CL-27.
 
 Detector scoring (CL-14/CL-15/CL-23), trace joining (CL-16) and run
 failure handling (CL-19) consume these results but are separate tasks.
+
+## Optional acceleration and measured limit (CL-57)
+
+Install `.[fast]` and set `COVERTLENS_FAST_PATH=numpy` to enable exact NumPy
+None/Sub/Up PNG unfiltering, sample/coefficient histograms, batched JPEG IDCT,
+chroma/RGB conversion and segmentation morphology/attributes. Average/Paeth filters use
+the reference loops. Missing NumPy falls back to the standard-library path.
+The default remains the pure-Python implementation. Tests compare reconstructed
+pixels and findings exactly across paths. JPEG entropy decoding uses a byte
+bounded bit reservoir and nine-bit Huffman lookup without materializing
+individual bits. Geometry reuses coefficient blocks only from a successful
+parse with the same content hash, while still validating frame/quantisation
+metadata. Standalone decoding and missing-extra fallback remain supported.
+The batched IDCT preserves scalar summation order and ties-to-even rounding;
+component traversal and modal-colour tie breaking match the reference.
+
+A seeded 2,000-case CI fuzz campaign truncates/flips bytes across procedural,
+geometric and committed real/codec fixtures. Every result must validate against
+the result schema. Independent libjpeg-turbo 4:2:0 and optimized-Huffman files
+must produce DCT coefficients. Progressive JPEG and restart intervals remain
+outside the integrated coefficient parser subset.
+
+The CL-29 **end-to-end** large-JPEG fast-path re-run (1024×768, five samples)
+meets the 2 s target: P95 1.6631 s, all five parsed, zero timeouts. The agreed
+four-worker workload (512×384 JPEG, 12 tasks) also meets it at P95 1.8783 s.
+These measurements are machine/workload-specific, not a universal 20 MP or
+large-JPEG-at-four-workers claim. The default pure-Python path is retained
+for reference and is not covered by this fast-path latency claim. The parser's
+2 s deadline still only bounds parsing, not the subsequent detector stages.
+See the before/after evidence and reproducible commands in the
+[validation record](../reviews/cl-55-57-validation.json). The opt-in wall-clock
+regression runs with `python -m pytest tests/test_latency.py -k numpy_large`;
+like other latency tests it is excluded from required CI on loaded runners.

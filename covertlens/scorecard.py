@@ -8,9 +8,8 @@ figure to its source report schema and contract doc. Figures are
 extracted from those reports at build time, never recomputed by
 different code, so the scorecard cannot drift from its evidence.
 
-The owner decision is recorded as data: `release_with_limitations`
-for this MVP, with the limitations and the target revisions they
-force. A scorecard with unresolved limitations may not record an
+The release assessment is computed from section evidence and the
+limitations and target revisions it produces. A scorecard with unresolved limitations may not record an
 unqualified `release`. Nothing in the scorecard equates a detector
 outcome with collusion (C-02).
 """
@@ -22,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
-SCORECARD_VERSION = "1.3.0"
+SCORECARD_VERSION = "1.4.0"
 SCORECARD_PATH = (
     Path(__file__).resolve().parent.parent / "config" / "release-scorecard.json"
 )
@@ -91,63 +90,30 @@ def build_scorecard() -> dict[str, Any]:
     latency_classes = latency["classes"]
     prevention = ablations["prevention"]
     limitations = [
-        "Detection coverage is limited to calibrated payload bands "
-        "(low/medium) and densities on gradient_noise covers; the "
-        "high band rests on 1-2 held-out positives per family.",
-        "Clean smooth/blocks covers fall outside the stability "
-        "claim (smooth clean PNGs false-fail; blocks JPEGs "
-        "occasionally withhold).",
-        "JPEG latency misses the 2 s proposal at >=~1 MP and at "
-        "concurrency 4; the 20 MP JPEG envelope is unmeasured.",
-        "Adaptive reduced-rate, larger-image, blocks-cover and "
-        "allowed-keyword-metadata attempts evade enforcement "
-        "(CL-34); allowed-keyword evasion needs a policy change.",
-        "Held-out samples are tiny: targets are met on point "
-        "estimates with wide Wilson intervals (CL-28).",
-        "R-06 preview derivatives have no dedicated gate API; "
-        "derivative enforcement is procedural (CL-32).",
-        "Context/sequence evidence is a triage aid only: combined "
-        "scoring dilutes image evidence (CL-31).",
-        "The geometric family has frozen synthetic-scene points (CL-54): "
-        "quantization alone permits delivery, structure claims rest on "
-        "declared codes only, and no general geometric coverage "
-        "is claimed from any single subfamily.",
+        *frozen["tradeoffs"],
+        *latency["tradeoffs"],
+        *robustness["coverage_limitations"],
     ]
+    limitations.extend(audit["gaps"])
+    limitations.append(
+        f"Sequence AUC: image={ablations['arms']['image_only']['auc']}, combined={ablations['arms']['combined']['auc']}."
+    )
+    limitations.append(
+        f"Geometric universal claim: {geometric_frozen['universal_claim']}; evidence is scoped to measured synthetic scenes."
+    )
     target_revisions = [
         {
-            "target": "Clean-run false failures <=1% (universal covers)",
-            "revision": "Scoped to gradient_noise covers; low-texture "
-            "covers need detector recalibration first.",
-            "reason": "CL-28 probes: clean smooth PNGs false-fail, "
-            "blocks JPEGs occasionally withhold.",
-        },
-        {
-            "target": "P95 <=2 s for <=10 MB/20 MP at concurrency 4",
-            "revision": "Holds for PNG (incl. 20 MP) and JPEG up to "
-            "medium sequential; JPEG >=1 MP and the "
-            "20 MP JPEG envelope deferred pending a "
-            "faster JPEG path or a re-frozen runtime limit.",
-            "reason": "CL-29 measurements: large/concurrent JPEG "
-            "reaches the explicit 2 s deadline.",
-        },
-        {
-            "target": ">=95% recall per family",
-            "revision": "Claimed only within calibrated bands and "
-            "suite-like payload densities; reduced-rate "
-            "and larger-image attempts are out of claim.",
-            "reason": "CL-28 held-out is high-band only; CL-34 "
-            "adaptive/larger-image probes evade.",
-        },
-        {
-            "target": "Metadata payload detection",
-            "revision": "Declared-keyword payloads only; allowed-"
-            "keyword payloads require a policy change "
-            "before any enforcement claim.",
-            "reason": "CL-34 adaptive probe scores 0 under "
-            "Description/Title keywords (CL-23 design).",
-        },
+            "target": name,
+            "revision": "Scoped to measured evidence; see source report.",
+            "reason": reason,
+        }
+        for name, reason in (
+            ("Detection coverage", "; ".join(frozen["tradeoffs"])),
+            ("Latency <=2 s", "; ".join(latency["tradeoffs"])),
+            ("Adaptive robustness", "; ".join(robustness["coverage_limitations"])),
+        )
     ]
-    return {
+    card = {
         "schema": SCORECARD_SCHEMA,
         "schema_version": 1,
         "scorecard_version": SCORECARD_VERSION,
@@ -220,6 +186,10 @@ def build_scorecard() -> dict[str, Any]:
                 "gate_trace",
                 {
                     "routes_passed": audit["routes_passed"],
+                    "routes_failed": audit["routes_failed"],
+                    "unauthorized_served": sum(
+                        row["checks"]["unauthorized_served"] for row in audit["routes"]
+                    ),
                     "routes_partial": audit["routes_partial"],
                     "routes_exempt_verified": audit["routes_exempt_verified"],
                     "coverage_covered": audit["coverage"]["covered"],
@@ -266,8 +236,7 @@ def build_scorecard() -> dict[str, Any]:
                     "image_only_auc": ablations["arms"]["image_only"]["auc"],
                     "context_only_auc": ablations["arms"]["context_only"]["auc"],
                     "combined_auc": ablations["arms"]["combined"]["auc"],
-                    "interpretation": "enforcement stays image-led; "
-                    "context is a triage aid (CL-31)",
+                    "interpretation": f"Image-only AUC {ablations['arms']['image_only']['auc']}; combined AUC {ablations['arms']['combined']['auc']}.",
                 },
             ),
             "prevention": _section(
@@ -295,8 +264,10 @@ def build_scorecard() -> dict[str, Any]:
                 {
                     "family": "geometric",
                     "thresholds_status": "frozen",
-                    "enforceable": True,
+                    "enforceable": geometric_frozen["threshold_config_version"]
+                    == frozen["frozen_config_version"],
                     "held_out_evaluation": geometric_frozen,
+                    "coverage_checks": geo["coverage_checks"],
                     "per_subfamily": {
                         name: {
                             "encoded_recall_any_signal": block["encoded"][
@@ -334,27 +305,92 @@ def build_scorecard() -> dict[str, Any]:
             ),
         },
         "decision": {
-            "value": "release_with_limitations",
             "decision_owner": "MVP release owner",
-            "recorded_in": "CL-35 (this scorecard) and the CL-35 Jira decision comment",
-            "rationale": [
-                "Frozen enforcement is correct where claimed: gate, "
-                "trace, export and prevention invariants hold with "
-                "zero unauthorized serves and zero blocked transfers.",
-                "Detection targets are met only inside narrowed, "
-                "measured coverage; the misses (JPEG latency, "
-                "low-density/adaptive evasion, low-texture covers) "
-                "are documented with target revisions rather than "
-                "waived.",
-                "An unqualified release would overstate the "
-                "evidence; no-release would discard a working, "
-                "auditable enforcement core.",
-            ],
+            "recorded_in": "CL-56 computed assessment from source reports",
+            "rationale": [],
             "limitations": limitations,
             "target_revisions": target_revisions,
         },
         "equated_with_collusion": False,
         "universal_claim": False,
+    }
+
+    targets = scorecard_targets(card)
+    safety = all(
+        targets[name]
+        for name in ("gate_trace", "exports", "prevention", "infrastructure")
+    )
+    card["targets"] = targets
+    card["decision"]["value"] = (
+        "no_release"
+        if not safety
+        else "release_with_limitations"
+        if limitations or not all(targets.values())
+        else "release"
+    )
+    card["decision"]["rationale"] = [
+        f"{name}: {'met' if met else 'missed or narrowed'}"
+        for name, met in targets.items()
+    ]
+    return card
+
+
+def scorecard_targets(card: dict[str, Any]) -> dict[str, bool]:
+    """Recompute targets from section evidence, including during validation."""
+    sections = card.get("sections") or {}
+    detection = sections.get("detection_frozen_benchmark") or {}
+    families = detection.get("per_family") or {}
+    latency = sections.get("latency_reliability") or {}
+    gate = sections.get("gate_and_trace") or {}
+    exports = sections.get("evidence_exports") or {}
+    prevention = sections.get("prevention") or {}
+    return {
+        "recall": bool(families)
+        and all(
+            row.get("recall_at_triage") is not None and row["recall_at_triage"] >= 0.95
+            for row in families.values()
+        ),
+        "precision": bool(families)
+        and all(
+            row.get("enforcement_precision") is not None
+            and row["enforcement_precision"] >= 0.99
+            for row in families.values()
+        ),
+        "clean_stability": detection.get("clean_run_failure_rate") is not None
+        and detection["clean_run_failure_rate"] <= 0.01
+        and detection.get("clean_runs", 0) >= 300,
+        "latency": bool(latency.get("classes_met"))
+        and not latency.get("classes_missed")
+        and latency.get("concurrent_p95_s", float("inf"))
+        <= latency.get("proposal", {}).get("p95_at_most_s", 2),
+        "gate_trace": gate.get("trace_links_all_explained") is True
+        and gate.get("unauthorized_served") == 0
+        and gate.get("routes_failed") == [],
+        "route_coverage": bool(gate.get("routes_passed"))
+        and not gate.get("routes_partial")
+        and not gate.get("gaps"),
+        "exports": exports.get("package_valid") is True
+        and exports.get("audit_chain_valid") is True
+        and bool(exports.get("denials"))
+        and all(exports["denials"].values()),
+        "prevention": prevention.get("attempts", {}).get("blocked_counted_as_transfer")
+        == 0
+        and prevention.get("withheld_demonstrated_transfers") == 0,
+        "geometric": bool(sections.get("geometric", {}).get("coverage_checks"))
+        and all(sections["geometric"]["coverage_checks"].values()),
+        "sequence_value": sections.get("sequence_value", {}).get("combined_auc", -1)
+        >= sections.get("sequence_value", {}).get("image_only_auc", 1),
+        "pilot": sections.get("pilot_adjudication", {}).get("seeded_attempts_delivered")
+        == 0
+        and sections.get("pilot_adjudication", {}).get("seeded_clean_controls_withheld")
+        == 0,
+        "robustness": bool(sections.get("robustness_bounds", {}).get("outcomes"))
+        and all(
+            outcome == "detected"
+            for outcome in sections["robustness_bounds"]["outcomes"].values()
+        ),
+        "infrastructure": latency.get("limits_explicit_and_withholding") is True
+        and latency.get("concurrency_access_clean") is True,
     }
 
 
@@ -397,11 +433,16 @@ def validate_scorecard(scorecard: dict[str, Any]) -> list[str]:
     need(
         decision.get("value") in DECISIONS, "decision.value must be a recorded decision"
     )
-    need(bool(decision.get("limitations")), "decision.limitations are required")
+    if decision.get("value") == "release_with_limitations":
+        need(bool(decision.get("limitations")), "decision.limitations are required")
     need(
         bool(decision.get("target_revisions")), "decision.target_revisions are required"
     )
     if decision.get("value") == "release":
+        need(
+            all(scorecard_targets(scorecard).values()),
+            "release requires every section target to be met",
+        )
         need(
             not decision.get("limitations"),
             "an unqualified release may not carry unresolved limitations",

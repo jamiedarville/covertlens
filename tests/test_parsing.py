@@ -195,16 +195,14 @@ def test_unsupported_format_and_encodings_have_explicit_results():
     assert depth16.limitations
     interlaced = analyze_bytes(minimal_png_header(interlace=1))
     assert interlaced.status == AnalysisStatus.UNSUPPORTED_ENCODING
-    # Progressive JPEG (SOF2) and subsampled JPEG sit outside the subset.
+    # Progressive JPEG remains outside the baseline subset.
     fixture = jpeg_fixture().data
     progressive = fixture.replace(b"\xff\xc0", b"\xff\xc2", 1)
     assert analyze_bytes(progressive).status == AnalysisStatus.UNSUPPORTED_ENCODING
     subsampled = bytearray(fixture)
     sof = fixture.index(b"\xff\xc0")
     subsampled[sof + 9] = 0x22  # first component sampling 2x2
-    assert (
-        analyze_bytes(bytes(subsampled)).status == AnalysisStatus.UNSUPPORTED_ENCODING
-    )
+    assert analyze_bytes(bytes(subsampled)).status == AnalysisStatus.CORRUPT
     for result in (depth16, interlaced):
         assert result.errors and result.findings == ()
         assert validate_result(result) == []

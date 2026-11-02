@@ -37,11 +37,18 @@ from typing import Any
 from .calibration import load_frozen_thresholds
 from .events import Verdict
 from .fixtures import build_dataset
-from .gate import InterceptionContext, InterceptionGate
+from .gate import (
+    InterceptionContext,
+    InterceptionGate,
+    PendingDeliveryError,
+    ReviewerAccessError,
+    WithheldError,
+)
 from .latency import limit_behavior_checks
 from .pinning import build_pin, pin_differences, verify_reproducibility
 from .replay import run_replay
 from .runtime import AuditLog, DatasetRetirement, EvidenceGateway, Principal
+from .scorecard import load_scorecard
 from .store import ArtifactStore
 from .verdicts import DEFAULT_CONFIG, decide_verdict
 
@@ -97,7 +104,13 @@ def _quarantine_handling() -> dict[str, Any]:
     def denied(fn) -> bool:
         try:
             fn()
-        except Exception:
+        except (
+            PendingDeliveryError,
+            WithheldError,
+            ReviewerAccessError,
+            PermissionError,
+            ValueError,
+        ):
             return True
         return False
 
@@ -192,7 +205,7 @@ def run_handoff_verification() -> dict[str, Any]:
         "schema_version": 1,
         "handoff_version": HANDOFF_VERSION,
         "runbook": RUNBOOK_PATH,
-        "release_decision": "release_with_limitations",
+        "release_decision": load_scorecard()["decision"]["value"],
         "threshold_operations": _threshold_ops(fixtures),
         "quarantine_handling": _quarantine_handling(),
         "infrastructure_errors": {

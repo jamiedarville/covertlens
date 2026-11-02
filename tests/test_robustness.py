@@ -46,10 +46,15 @@ def test_confounded_and_low_signal_results_stay_unresolved(report):
     assert any(
         u["experiment"] == "unseen_cover_pattern_smooth" for u in report["unresolved"]
     )
-    sequence = _by_name(report, "adaptive_low_signal_sequence")
-    assert sequence["kind"] == "low_signal_sequence"
+    sequence = _by_name(report, "adaptive_repeated_reduced_rate_artifacts")
+    assert sequence["kind"] == "repeated_artifact_probe"
     assert sequence["sequence_view"]["any_withheld"] is False
     assert sequence["attempts"]["n"] == 6
+    assert sequence["sequence_view"]["sequence_detector_invoked"] is False
+    assert (
+        sequence["sequence_view"]["individually_flagged"]
+        == sequence["attempts"]["at_triage"]
+    )
 
 
 def test_limitations_documented(report):

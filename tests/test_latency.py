@@ -66,3 +66,11 @@ def test_reliability_report_shape_and_narrowed_claim():
     assert report["assessment"]["proposal_met_for_jpeg_envelope"] is False
     assert report["concurrent"]["workers"] == 4
     assert len(report["tradeoffs"]) >= 3
+
+
+def test_numpy_large_jpeg_meets_latency_target(monkeypatch):
+    pytest.importorskip("numpy")
+    monkeypatch.setenv("COVERTLENS_FAST_PATH", "numpy")
+    row = measure_class("jpeg", 1024, 768, repetitions=5)
+    assert row["statuses"] == {"parsed": 5}
+    assert row["meets_proposal"] is True, row

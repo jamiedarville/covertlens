@@ -104,7 +104,7 @@ class AnalysisCache:
         *,
         detector_name: str,
         detector_version: str,
-        config_version: str = "",
+        config_version: str | None = None,
     ) -> Finding | None:
         """Return the cached finding for these bytes/detector, or compute it.
 
@@ -141,11 +141,26 @@ class AnalysisCache:
         *,
         detector_name: str,
         detector_version: str,
-        config_version: str = "",
+        config_version: str | None = None,
     ) -> Finding | None:
-        key = (result.content_hash, detector_name, detector_version, config_version)
+        """Look up an explicit configuration, or the unique stored one.
+
+        With no version, ambiguity is a miss. Callers changing an active
+        detector configuration must pass its version to get_or_score.
+        """
+        key = (
+            result.content_hash,
+            detector_name,
+            detector_version,
+            config_version or "",
+        )
         with self._lock:
-            cached = self._scores.get(key)
+            if config_version is None:
+                candidates = [v for k, v in self._scores.items() if k[:3] == key[:3]]
+                # Never guess between different cached configurations.
+                cached = candidates[0] if len(candidates) == 1 else None
+            else:
+                cached = self._scores.get(key)
             if cached is None:
                 self._score_stats.misses += 1
             else:

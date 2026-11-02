@@ -473,7 +473,7 @@ criterion to code, contract doc, schema, and tests. History in
 |---|---|
 | Segment real renderings with expected element count ±1 | Five committed images with independent counts, location annotations, hashes and licence/provenance notes in [tests/data/real/](tests/data/real/README.md); offline `tests/test_real_images.py` |
 | Replace exact-colour foreground detection and record tolerances | Segmenter 1.1.0: bucketed perimeter background, gradient flood, RGB distance thresholds, coherent near-background elements and 3×3 morphological open/close; detector 2.1.0 distinguishes replay pins; [segmentation contract](docs/contracts/segmentation.md) and [schema](schemas/segmentation.schema.json) |
-| Accept JPEG geometry with a fidelity limitation | Baseline pixel reconstruction in `covertlens/jpeg_pixels.py`; finding/segmentation fidelity notes; JPEG web-overlay and pixel-cap tests. The integrated pipeline retains the CL-13 baseline 4:4:4 parser subset; direct geometry additionally handles 4:2:2/4:2:0, grayscale and restart intervals. Manifest 1.2.0 declares JPEG geometry. |
+| Accept JPEG geometry with a fidelity limitation | Baseline pixel reconstruction in `covertlens/jpeg_pixels.py`; finding/segmentation fidelity notes; JPEG web-overlay and pixel-cap tests. The integrated pipeline now supports baseline grayscale / 4:4:4 / 4:2:2 / 4:2:0 (CL-57); direct geometry additionally handles 4:2:2/4:2:0, grayscale and restart intervals. Manifest 1.2.0 declares JPEG geometry. |
 | Preserve the geometric benchmark and verify decoders independently | Existing geometric benchmark plus `tests/test_png_pixels.py`, `tests/test_jpeg_pixels.py` and committed libjpeg reference outputs; no codec/network dependency in tests |
 
 ### CL-53 deliverables
@@ -498,6 +498,22 @@ false-structure / false-enforcement rates with Wilson intervals. These are
 small procedural PNG scene samples, with repeated structured words; they do
 not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 `universal_claim` remains false. See [the freeze contract](docs/contracts/calibration-freeze.md).
+
+### CL-55–CL-57 deliverables
+
+- **CL-55:** `/benchmarks` and `/scorecard`, CLI-identical cached reports,
+  ROC/Wilson curves by family/band, geometric three-row tables, ablations,
+  latency and separate robustness views, version/config/date provenance.
+  [Contract](docs/contracts/benchmark-pages.md).
+- **CL-56:** measured report conclusions and scorecard target validation,
+  specific audit denial exceptions with planted-error tests, handoff decision
+  lookup, and default cache lookup with ambiguous-configuration protection.
+- **CL-57:** bounded SOF/DHT/SOS parsing, component Huffman selectors,
+  baseline subsampling, 2,000-case schema-valid mutation campaign, and optional
+  NumPy PNG/JPEG reconstruction, histograms and segmentation acceleration
+  (`pip install -e ".[fast]"`, `COVERTLENS_FAST_PATH=numpy`). The CL-29
+  large-JPEG fast-path P95 is **1.6631 s**, meeting the 2 s target; see the
+  [validation record](docs/reviews/cl-55-57-validation.json).
 
 ## Development quickstart
 

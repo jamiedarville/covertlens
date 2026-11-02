@@ -15,8 +15,9 @@ Three experiment families under the shipped `frozen-1.0.0`:
 - **Unseen configurations:** JPEG qualities 50/75 (calibration used
   90), `blocks`/`smooth` cover patterns, and 128×96 images at the
   same payload sizes (lower payload density).
-- **Low-signal sequences:** per-artifact verdicts stay weak; only
-  the sequence view (CL-30 weak signals) sees repetition.
+- **Repeated artifacts:** reduced-rate images are scored independently;
+  the report counts how many individually reach triage. No sequence
+  detector is invoked and no sequence-only detection is claimed.
 
 Outcomes are named per experiment — `detected`, `evaded`,
 `mixed`, or `confounded_unresolved` (where clean controls fail
@@ -37,7 +38,7 @@ from .metadata_fixtures import encode_metadata_png
 from .verdicts import ThresholdConfig, decide_verdict
 
 ROBUSTNESS_SCHEMA = "covertlens.robustness-evaluation"
-ROBUSTNESS_VERSION = "1.0.0"
+ROBUSTNESS_VERSION = "1.1.0"
 FROZEN_BENCHMARK_SCHEMA = "covertlens.frozen-benchmark"
 
 
@@ -56,9 +57,6 @@ def _experiment(
     attempts: list[tuple[str, bytes]],
     controls: list[tuple[str, bytes]],
     config: ThresholdConfig,
-    *,
-    confounded: bool = False,
-    note: str = "",
 ) -> dict[str, Any]:
     def summarize(rows: list[tuple[str, bytes]]) -> dict[str, Any]:
         verdicts = []
@@ -77,7 +75,7 @@ def _experiment(
 
     attempt_block = summarize(attempts)
     control_block = summarize(controls)
-    if confounded:
+    if control_block["withheld"] > 0:
         outcome = "confounded_unresolved"
     elif attempt_block["withheld"] == attempt_block["n"]:
         outcome = "detected"
@@ -94,7 +92,7 @@ def _experiment(
         "attempts": attempt_block,
         "controls": control_block,
         "outcome": outcome,
-        "note": note,
+        "note": f"{attempt_block['withheld']}/{attempt_block['n']} attempts withheld; {control_block['withheld']}/{control_block['n']} controls withheld; outcome: {outcome}.",
     }
 
 
@@ -128,8 +126,6 @@ def run_robustness() -> dict[str, Any]:
             tiny_attempts,
             [],
             config,
-            note="Adaptive rate reduction drops attempts to triage level "
-            "or below: none are withheld by enforcement.",
         )
     )
 
@@ -158,9 +154,6 @@ def run_robustness() -> dict[str, Any]:
             keyword_attempts,
             [],
             config,
-            note="Known evasion by design: payloads under allowed "
-            "keywords score 0. Mitigation requires a policy change "
-            "(CL-23 limitation), not a threshold change.",
         )
     )
 
@@ -174,8 +167,8 @@ def run_robustness() -> dict[str, Any]:
         )
         sequence_attempts.append((f"low_signal_{i}", encoded.data))
     seq = _experiment(
-        "adaptive_low_signal_sequence",
-        "low_signal_sequence",
+        "adaptive_repeated_reduced_rate_artifacts",
+        "repeated_artifact_probe",
         {
             "family": "spatial_lsb",
             "payload_bytes": 8,
@@ -185,20 +178,19 @@ def run_robustness() -> dict[str, Any]:
         sequence_attempts,
         [],
         config,
-        note="Each artifact stays at/below triage; the signal exists "
-        "only as repetition (CL-30 weak-signal view).",
     )
     weak = sum(
         1
         for row in seq["attempts"]["rows"]
-        if row["scores"].get("spatial_lsb", 0) >= 0.8 * 0.224715
+        if row["scores"].get("spatial_lsb", 0)
+        >= 0.8 * float(config.for_family("spatial_lsb").triage_flag_at or 0)
     )
     seq["sequence_view"] = {
         "weak_signals_at_or_above_80pct_of_flag": weak,
         "any_withheld": seq["attempts"]["withheld"] > 0,
-        "interpretation": "sequence repetition is a researcher "
-        "triage signal only; it never withholds "
-        "by itself (CL-31).",
+        "individually_flagged": seq["attempts"]["at_triage"],
+        "sequence_detector_invoked": False,
+        "interpretation": f"{seq['attempts']['at_triage']} of {seq['attempts']['n']} artifacts individually reach triage; {seq['attempts']['withheld']} withheld. This is a repeated-artifact probe, not evidence of sequence-only detection.",
     }
     experiments.append(seq)
 
@@ -226,7 +218,6 @@ def run_robustness() -> dict[str, Any]:
                 [("encoded", encoded.data)],
                 [("clean", clean.data)],
                 config,
-                note="Unseen JPEG quality remains detectable at these rates.",
             )
         )
 
@@ -249,8 +240,6 @@ def run_robustness() -> dict[str, Any]:
             [("encoded", encoded.data)],
             [("clean", clean.data)],
             config,
-            note="Unseen cover texture evades: block covers shift the "
-            "LSB statistic below triage for the same payload.",
         )
     )
 
@@ -273,10 +262,6 @@ def run_robustness() -> dict[str, Any]:
             [("encoded", encoded.data)],
             [("clean", clean.data)],
             config,
-            confounded=True,
-            note="Confounded: the clean smooth control fails the run "
-            "exactly like the attempt (CL-28), so no detection "
-            "claim is possible — unresolved.",
         )
     )
 
@@ -304,8 +289,6 @@ def run_robustness() -> dict[str, Any]:
             attempts,
             controls,
             config,
-            note="Payload density, not payload size, drives the score: "
-            "both families fall below triage at 128x96.",
         )
     )
 
@@ -318,18 +301,10 @@ def run_robustness() -> dict[str, Any]:
         if e["outcome"] in ("confounded_unresolved",)
     ]
     limitations = [
-        "Adaptive and unseen results are reported separately and "
-        "never merge into the CL-28 frozen benchmark claim.",
-        "Reduced-rate and larger-image attempts evade enforcement "
-        "(some reach only triage): the frozen coverage claim is "
-        "bounded to suite-like payload densities.",
-        "Allowed-keyword metadata payloads evade by CL-23 design; "
-        "closing this needs a detector/policy change, not "
-        "recalibration.",
-        "Smooth-cover results are confounded (clean controls fail "
-        "identically) and stay unresolved; blocks covers evade.",
-        "Each unseen configuration is a small probe (1-6 cases), "
-        "not a benchmark: rates are directional, not estimates.",
+        "Adaptive and unseen results stay separate from the frozen benchmark.",
+        f"{sum(e['attempts']['delivered'] for e in experiments)} adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.",
+        f"{len(unresolved)} configurations are confounded by withheld clean controls.",
+        f"Probe sizes range from {min(e['attempts']['n'] for e in experiments)} to {max(e['attempts']['n'] for e in experiments)} attempts; these are not population estimates.",
     ]
     return {
         "schema": ROBUSTNESS_SCHEMA,
@@ -374,8 +349,11 @@ def validate_robustness(report: dict[str, Any]) -> list[str]:
     need(
         "unseen_configuration" in kinds, "unseen-configuration experiments are required"
     )
-    need("low_signal_sequence" in kinds, "low-signal sequence experiments are required")
-    need(bool(report.get("unresolved")), "unresolved results must be documented")
+    need("repeated_artifact_probe" in kinds, "repeated-artifact probe is required")
+    need(
+        isinstance(report.get("unresolved"), list),
+        "unresolved results must be documented",
+    )
     need(
         bool(report.get("coverage_limitations")),
         "coverage limitations must be documented",

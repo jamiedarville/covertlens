@@ -133,7 +133,9 @@ def _fixture_entries() -> list[dict[str, Any]]:
 
 
 def _cache_key() -> dict[str, str]:
-    return {"library_version": covertlens.__version__, "git_sha": GIT_SHA}
+    from scripts.precompute import cache_key
+
+    return {**cache_key(), "git_sha": GIT_SHA}
 
 
 def _precompute() -> None:
@@ -151,9 +153,12 @@ def _precompute() -> None:
 
 
 def _cache_ready() -> bool:
-    return (CACHE_DIR / "geometric.json").exists() and (
-        CACHE_DIR / "comparison.json"
-    ).exists()
+    from scripts.precompute import REPORT_COMMANDS
+
+    return all(
+        (CACHE_DIR / f"{name}.json").exists()
+        for name in (*REPORT_COMMANDS, "provenance", "comparison")
+    )
 
 
 def _start_precompute() -> None:
@@ -657,12 +662,19 @@ async def gate_event_stream(run_id: str, request: Request) -> StreamingResponse:
 
 
 @app.get("/api/benchmarks/{name}")
-def benchmark(name: str) -> JSONResponse:
-    if name != "geometric":
+def benchmark(name: str) -> Response:
+    from scripts.precompute import REPORT_COMMANDS
+
+    if name not in (*REPORT_COMMANDS, "provenance"):
         return JSONResponse({"detail": "benchmark_not_found"}, status_code=404)
-    cache_file = CACHE_DIR / "geometric.json"
-    if cache_file.exists():
-        return JSONResponse(json.loads(cache_file.read_text()))
+    cache_file = CACHE_DIR / f"{name}.json"
+    key_file = CACHE_DIR / "key.json"
+    try:
+        current = json.loads(key_file.read_text())
+    except (OSError, json.JSONDecodeError):
+        current = None
+    if current == _cache_key() and cache_file.exists():
+        return Response(cache_file.read_bytes(), media_type="application/json")
     _start_precompute()
     return JSONResponse({"status": "computing", "benchmark": name}, status_code=202)
 

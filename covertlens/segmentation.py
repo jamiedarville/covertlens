@@ -59,8 +59,10 @@ import struct
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .acceleration import numpy_backend
 from .geometric_fixtures import GRIDS
 from .jpeg_pixels import JpegDecodeError, decode_jpeg_rgb, probe_jpeg_size
+from .parsing import AnalysisResult
 from .png_pixels import PngDecodeError, decode_png_rgb
 
 SEGMENTER_NAME = "geometric-segmenter"
@@ -212,30 +214,84 @@ def _components(
     mask: list[bool], width: int, height: int, min_pixels: int
 ) -> list[list[int]]:
     """4-connected foreground components (iterative flood fill)."""
-    seen = bytearray(len(mask))
+    # A zero border removes neighbour boundary branches from the flood-fill
+    # hot loop. Keep the reference neighbour/DFS order: colour
+    # ties downstream are resolved by first occurrence in that order.
+    stride = width + 2
+    remaining = bytearray(stride * (height + 2))
+    for y in range(height):
+        remaining[(y + 1) * stride + 1 : (y + 1) * stride + width + 1] = bytes(
+            mask[y * width : (y + 1) * width]
+        )
     components: list[list[int]] = []
-    for start, filled in enumerate(mask):
-        if not filled or seen[start]:
+    for start in range(stride, stride * (height + 1)):
+        if not remaining[start]:
             continue
         stack = [start]
-        seen[start] = 1
+        remaining[start] = 0
         points: list[int] = []
         while stack:
             idx = stack.pop()
-            points.append(idx)
-            x, y = idx % width, idx // width
-            for nidx in (
-                idx - 1 if x else -1,
-                idx + 1 if x < width - 1 else -1,
-                idx - width if y else -1,
-                idx + width if y < height - 1 else -1,
-            ):
-                if nidx >= 0 and mask[nidx] and not seen[nidx]:
-                    seen[nidx] = 1
+            points.append((idx // stride - 1) * width + idx % stride - 1)
+            for nidx in (idx - 1, idx + 1, idx - stride, idx + stride):
+                if remaining[nidx]:
+                    remaining[nidx] = 0
                     stack.append(nidx)
         if len(points) >= min_pixels:
             components.append(points)
     return components
+
+
+def _thin_components_numpy(
+    mask: list[bool], width: int, height: int, min_pixels: int, np: Any
+) -> list[list[int]]:
+    """Find thin components via row runs, without flooding large filled areas.
+
+    Only used for restoring thin elements after morphology. Point order has
+    no effect there: the decision uses a colour count, not a modal-colour tie.
+    """
+    raster = np.asarray(mask, dtype=bool).reshape(height, width)
+    edges = np.diff(np.pad(raster, ((0, 0), (1, 1))).astype(np.int8), axis=1)
+    starts_y, starts_x = np.nonzero(edges == 1)
+    ends_x = np.nonzero(edges == -1)[1]
+    starts = starts_x.tolist()
+    ends = ends_x.tolist()
+    ys = starts_y.tolist()
+    parent = list(range(len(starts)))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    offsets = np.searchsorted(starts_y, np.arange(height + 1)).tolist()
+    for y in range(1, height):
+        above = offsets[y - 1]
+        for current in range(offsets[y], offsets[y + 1]):
+            while above < offsets[y] and ends[above] <= starts[current]:
+                above += 1
+            other = above
+            while other < offsets[y] and starts[other] < ends[current]:
+                a, b = root(current), root(other)
+                if a != b:
+                    parent[a] = b
+                other += 1
+    groups: dict[int, list[int]] = {}
+    for i in range(len(starts)):
+        groups.setdefault(root(i), []).append(i)
+    result = []
+    for runs in groups.values():
+        left = min(starts[i] for i in runs)
+        right = max(ends[i] for i in runs)
+        top, bottom = ys[runs[0]], ys[runs[-1]]
+        if right - left >= 3 and bottom - top + 1 >= 3:
+            continue
+        if sum(ends[i] - starts[i] for i in runs) >= min_pixels:
+            result.append(
+                [ys[i] * width + x for i in runs for x in range(starts[i], ends[i])]
+            )
+    return result
 
 
 def _reading_order(
@@ -305,6 +361,27 @@ def _dilate(mask: list[bool], width: int, height: int) -> list[bool]:
 
 def _open_close(mask: list[bool], width: int, height: int) -> list[bool]:
     """Morphological open then close (despeckle, fill pinholes)."""
+    np = numpy_backend()
+    if np is not None:
+        raster = np.asarray(mask, dtype=bool).reshape(height, width)
+
+        def morph(source: Any, erode: bool) -> Any:
+            padded = np.pad(source, 1, constant_values=False)
+            result = np.ones_like(source) if erode else np.zeros_like(source)
+            for dy in range(3):
+                for dx in range(3):
+                    view = padded[dy : dy + height, dx : dx + width]
+                    if erode:
+                        result &= view
+                    else:
+                        result |= view
+            return result
+
+        return (
+            morph(morph(morph(morph(raster, True), False), False), True)
+            .ravel()
+            .tolist()
+        )
     opened = _dilate(_erode(mask, width, height), width, height)
     return _erode(_dilate(opened, width, height), width, height)
 
@@ -409,7 +486,7 @@ def _background_region(
 
 
 def _decode_raster(
-    data: bytes, active: SegmenterConfig
+    data: bytes, active: SegmenterConfig, parsed: AnalysisResult | None = None
 ) -> tuple[bytes, int, int, str] | SegmentationResult:
     """Decode original bytes, or return the failure result."""
     if data.startswith(_JPEG_MAGIC):
@@ -429,7 +506,9 @@ def _decode_raster(
                 config=active,
             )
         try:
-            pixels, width, height = decode_jpeg_rgb(data, max_pixels=active.max_pixels)
+            pixels, width, height = decode_jpeg_rgb(
+                data, max_pixels=active.max_pixels, parsed=parsed
+            )
         except JpegDecodeError as exc:
             message = str(exc)
             unsupported = (
@@ -477,7 +556,10 @@ def _decode_raster(
 
 
 def segment_image(
-    data: bytes, config: SegmenterConfig | None = None
+    data: bytes,
+    config: SegmenterConfig | None = None,
+    *,
+    parsed: AnalysisResult | None = None,
 ) -> SegmentationResult:
     """Segment repeated elements in original bytes (reading order)."""
     active = config or SegmenterConfig()
@@ -485,7 +567,7 @@ def segment_image(
         return SegmentationResult(
             "limit_exceeded", detail="input bytes over limit", config=active
         )
-    decoded = _decode_raster(data, active)
+    decoded = _decode_raster(data, active, parsed)
     if isinstance(decoded, SegmentationResult):
         return decoded
     pixels, width, height, media_kind = decoded
@@ -513,19 +595,38 @@ def segment_image(
     tolerance_sq = active.background_distance_tolerance**2
     floor_sq = active.background_distance_floor**2
     br, bg, bb = background
-    dist_sq: list[float] = []
-    mask = []
-    for i in range(0, width * height * 3, 3):
-        dr = pixels[i] - br
-        dg = pixels[i + 1] - bg
-        db = pixels[i + 2] - bb
-        d2 = float(dr * dr + dg * dg + db * db)
-        dist_sq.append(d2)
-        mask.append(d2 > floor_sq and not region[i // 3])
+    np = numpy_backend()
+    dist_sq: list[float]
+    if np is not None:
+        delta = np.frombuffer(pixels, dtype=np.uint8).reshape(-1, 3).astype(
+            np.int32
+        ) - np.asarray(background)
+        distance = (delta * delta).sum(axis=1)
+        dist_sq = distance.tolist()
+        mask = (
+            (distance > floor_sq) & ~np.frombuffer(region, dtype=np.uint8).astype(bool)
+        ).tolist()
+    else:
+        dist_sq = []
+        mask = []
+        for i in range(0, width * height * 3, 3):
+            dr = pixels[i] - br
+            dg = pixels[i + 1] - bg
+            db = pixels[i + 2] - bb
+            d2 = float(dr * dr + dg * dg + db * db)
+            dist_sq.append(d2)
+            mask.append(d2 > floor_sq and not region[i // 3])
     if active.morphology:
         cleaned = _open_close(mask, width, height)
         if active.preserve_thin_components:
-            for points in _components(mask, width, height, active.min_component_pixels):
+            thin_candidates = (
+                _thin_components_numpy(
+                    mask, width, height, active.min_component_pixels, np
+                )
+                if np is not None
+                else _components(mask, width, height, active.min_component_pixels)
+            )
+            for points in thin_candidates:
                 xs = [p % width for p in points]
                 ys = [p // width for p in points]
                 if min(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1) >= 3:
@@ -555,10 +656,27 @@ def segment_image(
         xs = [p % width for p in points]
         ys = [p // width for p in points]
         colours: dict[tuple[int, int, int], int] = {}
-        for point in points:
-            c = (pixels[point * 3], pixels[point * 3 + 1], pixels[point * 3 + 2])
-            colours[c] = colours.get(c, 0) + 1
-        colour = max(colours, key=lambda c: colours[c])
+        if np is not None:
+            selected = (
+                np.frombuffer(pixels, dtype=np.uint8)
+                .reshape(-1, 3)[points]
+                .astype(np.int32)
+            )
+            packed = (selected[:, 0] << 16) | (selected[:, 1] << 8) | selected[:, 2]
+            values, first, counts = np.unique(
+                packed, return_index=True, return_counts=True
+            )
+            # np.unique sorts colours; restore first-encounter tie breaking.
+            winners = np.flatnonzero(counts == counts.max())
+            winner = int(winners[np.argmin(first[winners])])
+            value = int(values[winner])
+            colour = (value >> 16, (value >> 8) & 255, value & 255)
+            colours[colour] = int(counts[winner])
+        else:
+            for point in points:
+                c = (pixels[point * 3], pixels[point * 3 + 1], pixels[point * 3 + 2])
+                colours[c] = colours.get(c, 0) + 1
+            colour = max(colours, key=lambda c: colours[c])
         # Two-threshold decision: a component is an element when it
         # contains a strongly non-background pixel, or when it is a
         # coherent flat region away from the border (lit-window
@@ -574,12 +692,21 @@ def segment_image(
             coherent = colours[colour] / len(points) >= active.coherent_colour_fraction
             if touches_border or not coherent:
                 continue
-        rows: dict[int, list[int]] = {}
-        for point in points:
-            rows.setdefault(point // width, []).append(point % width)
-        ordered_y = sorted(rows)
+        if np is not None:
+            # Integer sums remain exact; keep the scalar row regression order.
+            row_counts = np.bincount(ys, minlength=height)
+            row_sums = np.zeros(height, dtype=np.int64)
+            np.add.at(row_sums, ys, xs)
+            ordered_y = np.flatnonzero(row_counts).tolist()
+            row_centres = {y: int(row_sums[y]) / int(row_counts[y]) for y in ordered_y}
+        else:
+            rows: dict[int, list[int]] = {}
+            for point in points:
+                rows.setdefault(point // width, []).append(point % width)
+            ordered_y = sorted(rows)
+            row_centres = {y: sum(rows[y]) / len(rows[y]) for y in ordered_y}
         mean_y = sum(ordered_y) / len(ordered_y)
-        num = sum((y - mean_y) * (sum(rows[y]) / len(rows[y])) for y in ordered_y)
+        num = sum((y - mean_y) * row_centres[y] for y in ordered_y)
         den = sum((y - mean_y) ** 2 for y in ordered_y) or 1.0
         palette_index = min(
             range(len(active.colour_palette)),

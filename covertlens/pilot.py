@@ -32,7 +32,13 @@ from typing import Any
 from .calibration import load_frozen_thresholds
 from .events import ParseStatus
 from .fixtures import Fixture, _save_png, build_dataset, build_pair, generate_cover
-from .gate import InterceptionContext, InterceptionGate
+from .gate import (
+    InterceptionContext,
+    InterceptionGate,
+    PendingDeliveryError,
+    ReviewerAccessError,
+    WithheldError,
+)
 from .metadata import analyze_all_bytes
 from .metadata_fixtures import build_metadata_dataset, encode_metadata_png
 from .pinning import build_pin
@@ -160,7 +166,13 @@ def _run_mode(
         try:
             gate.recipient_access(delivery.delivery_id)
             delivered = True
-        except Exception:
+        except (
+            PendingDeliveryError,
+            WithheldError,
+            ReviewerAccessError,
+            PermissionError,
+            ValueError,
+        ):
             delivered = False
         gate.record_parse(
             delivery.delivery_id,

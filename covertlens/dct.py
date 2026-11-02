@@ -25,6 +25,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from .acceleration import numpy_backend
 from .fixtures import Fixture
 from .lsb import _bootstrap_interval, _roc_auc, _score_summary, _wilson
 from .parsing import (
@@ -49,7 +50,7 @@ PAYLOAD_BANDS = ("none", "low", "medium", "high")
 
 _LIMITATIONS = (
     "quantized coefficient domain only (parser subset: 8-bit baseline "
-    "4:4:4 JPEG); no IDCT or pixel-domain evidence is used",
+    "4:4:4 / 4:2:2 / 4:2:0 or grayscale JPEG); no IDCT or pixel-domain evidence is used",
     "global magnitude pairs-of-values chi-square; embedding that "
     "preserves coefficient histograms (e.g. +/-1 matching, adaptive "
     "selection) may evade it",
@@ -97,13 +98,26 @@ def _coefficient_statistics(
     magnitudes: dict[int, int] = {}
     ac_examined = 0
     carriers = 0
-    for block in coefficients:
-        for value in block[1:]:  # index 0 is DC; payload lives in AC terms
-            ac_examined += 1
-            magnitude = abs(int(value))
-            if magnitude >= config.carrier_min_magnitude:
-                carriers += 1
-                magnitudes[magnitude] = magnitudes.get(magnitude, 0) + 1
+    np = numpy_backend()
+    carrier_fraction = None
+    if np is not None and coefficients:
+        ac = np.abs(np.asarray(coefficients, dtype=np.int64)[:, 1:])
+        ac_examined = int(ac.size)
+        selected = ac[ac >= config.carrier_min_magnitude]
+        carriers = int(selected.size)
+        values, counts = np.unique(selected, return_counts=True)
+        magnitudes = dict(zip(values.tolist(), counts.tolist(), strict=True))
+        carrier_fraction = (
+            round(int((selected & 1).sum()) / carriers, 6) if carriers else 0.0
+        )
+    else:
+        for block in coefficients:
+            for value in block[1:]:  # DC is never a carrier
+                ac_examined += 1
+                magnitude = abs(int(value))
+                if magnitude >= config.carrier_min_magnitude:
+                    carriers += 1
+                    magnitudes[magnitude] = magnitudes.get(magnitude, 0) + 1
     chi_square = 0.0
     pairs_used = 0
     imbalance = 0
@@ -130,7 +144,9 @@ def _coefficient_statistics(
         "degrees_of_freedom": degrees,
         "chi_square_per_df": (round(chi_square / degrees, 6) if degrees else 0.0),
         "pairs_used": pairs_used,
-        "carrier_lsb_one_fraction": _carrier_lsb_fraction(coefficients, config),
+        "carrier_lsb_one_fraction": carrier_fraction
+        if carrier_fraction is not None
+        else _carrier_lsb_fraction(coefficients, config),
         "magnitude_pov_imbalance": (
             round(imbalance / carriers, 6) if carriers else 0.0
         ),

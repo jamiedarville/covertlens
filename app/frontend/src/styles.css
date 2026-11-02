@@ -332,3 +332,14 @@ td.num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none; animation: none; }
 }
+
+/* Cached reports (CL-55). */
+.report-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0; }
+.report-tabs button[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+.table-scroll { overflow-x: auto; }
+.source-values { max-height: 32rem; overflow: auto; white-space: pre; font-size: .8rem; }
+select { font: inherit; margin: .4rem; padding: .3rem; }
+
+.report-tabs + section { min-width: 0; }
+.report-tabs + section table { display: block; max-width: 100%; overflow-x: auto; }
+.site-header nav { flex-wrap: wrap; }

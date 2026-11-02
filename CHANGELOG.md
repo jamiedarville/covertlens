@@ -7,6 +7,10 @@ its acceptance criteria, code, contract doc, schema, and tests.
 
 ## Unreleased
 
+- **CL-55** — Add Benchmarks and Scorecard pages with CLI-identical caches, ROC/band/Wilson views, geometric rows, ablation/latency/robustness charts and provenance. Robustness remains separate from frozen results.
+- **CL-56** — Derive report conclusions and release assessment from evidence, reject unsupported release decisions, propagate audit programming errors, read handoff decisions from the scorecard, and fix default score-cache lookup without guessing between configurations.
+- **CL-57** — Bound JPEG component/table parsing, honour component Huffman selectors, parse baseline subsampling and run 2,000 deterministic malformed-image cases in CI. Optional NumPy acceleration now covers PNG filters, coefficient histograms, JPEG reconstruction and segmentation; reuse parsed JPEG coefficients. CL-29 large-JPEG fast-path P95 1.6631 s meets 2 s, with exact reference findings/decision parity.
+
 - **CL-54** — Freeze four-family `frozen-1.1.0` thresholds from development-only data; reserve geometric enforcement for supported undeclared structure, publish lineage-held-out subfamily/chart rates with Wilson intervals, and derive vector clearance from the verdict ladder. Geometric run failure remains reserved pending severity calibration. Fixture PNGs are now written with stored deflate blocks so fixture IDs and pinned dataset hashes are identical under classic zlib and zlib-ng (CI failed on a zlib-ng runner); thresholds and measured results are unchanged.
 
 - **CL-53** — Persist gate state in SQLite under the store root (deliveries, access attempts, trace events; store access history out of `index.json`, derivatives persisted), compute `unauthorized_served` from recorded attempts, and add the Live Gate page (`/gate` + `/api/gate/*` with SSE timeline; recipient pane never renders withheld bytes).
