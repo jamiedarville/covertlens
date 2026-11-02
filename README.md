@@ -476,6 +476,14 @@ criterion to code, contract doc, schema, and tests. History in
 | Accept JPEG geometry with a fidelity limitation | Baseline pixel reconstruction in `covertlens/jpeg_pixels.py`; finding/segmentation fidelity notes; JPEG web-overlay and pixel-cap tests. The integrated pipeline retains the CL-13 baseline 4:4:4 parser subset; direct geometry additionally handles 4:2:2/4:2:0, grayscale and restart intervals. Manifest 1.2.0 declares JPEG geometry. |
 | Preserve the geometric benchmark and verify decoders independently | Existing geometric benchmark plus `tests/test_png_pixels.py`, `tests/test_jpeg_pixels.py` and committed libjpeg reference outputs; no codec/network dependency in tests |
 
+### CL-53 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Restarting the container mid-run leaves the run, deliveries and trace intact | SQLite (stdlib) under the store root: gate deliveries, access attempts and trace events in `gate.sqlite3`, store access history and derivatives in `covertlens.sqlite3`; `InterceptionGate` restores state on construction · [live-gate contract](docs/contracts/live-gate.md) · `tests/test_live_gate.py` restart tests |
+| `unauthorized_served` is computed and is 0 in every test | `InterceptionGate.access_attempt_report` counts recipient serves whose delivery state at serve time was not `permitted` (was hard-coded 0); synthetic withheld serve counts 1 in tests, every real suite reports 0 |
+| Recipient pane shows "withheld" with the gate's reason for quarantine and `fail_run` verdicts | `/gate` Live Gate page (`app/frontend/src/pages/LiveGate.tsx`) over `/api/gate/*`: create a run, sender posts via R-01…R-07, pending → analysed → verdict → delivered/withheld, SSE timeline, recipient/reviewer panes and access-attempt audit; recipient image serves only after a permitting verdict, withheld returns the `recipient_message` reason with no bytes |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.

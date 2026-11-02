@@ -18,6 +18,8 @@ module equates an error with collusion (C-02).
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -108,8 +110,12 @@ class ArtifactStore:
 
     With ``root=None`` the store is in-memory (tests, contract checks).
     With a directory ``root`` blobs are written once as
-    ``blobs/<sha256hex>`` and metadata to ``index.json``; reopening the
-    directory restores versions, verdict bindings and access history.
+    ``blobs/<sha256hex>``, version/verdict metadata to ``index.json``,
+    and access history plus derivatives to SQLite
+    (``covertlens.sqlite3`` under the root, CL-53); reopening the
+    directory restores versions, verdict bindings, access history
+    and derivatives. Access history no longer lives in ``index.json``:
+    served reads append one SQLite row instead of rewriting the index.
     """
 
     def __init__(self, root: str | Path | None = None) -> None:
@@ -121,9 +127,54 @@ class ArtifactStore:
         self._verdicts: dict[str, str] = {}  # verdict_id -> version_id
         self._invalidated: set[str] = set()  # verdict_ids superseded
         self._derivatives: dict[str, Derivative] = {}
+        self._db: sqlite3.Connection | None = None
+        self._db_lock = threading.RLock()
         if self._root is not None:
             (self._root / "blobs").mkdir(parents=True, exist_ok=True)
+            self._init_db()
             self._load()
+
+    @property
+    def root(self) -> Path | None:
+        return self._root
+
+    @property
+    def db_path(self) -> Path | None:
+        if self._root is None:
+            return None
+        return self._root / "covertlens.sqlite3"
+
+    def _init_db(self) -> None:
+        if self._root is None:
+            return
+        db_path = self._root / "covertlens.sqlite3"
+        self._db = sqlite3.connect(
+            str(db_path), check_same_thread=False, isolation_level=None
+        )
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")
+        self._db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS store_access (
+                access_id TEXT PRIMARY KEY,
+                artifact_version_id TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                accessed_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_store_access_version
+                ON store_access(artifact_version_id);
+            CREATE TABLE IF NOT EXISTS store_derivatives (
+                derivative_id TEXT PRIMARY KEY,
+                parent_version_id TEXT NOT NULL,
+                transform TEXT NOT NULL,
+                content_hash TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_store_derivatives_parent
+                ON store_derivatives(parent_version_id);
+            """
+        )
 
     # -- ingest ---------------------------------------------------------
 
@@ -193,6 +244,7 @@ class ArtifactStore:
 
         Derivatives live apart from originals: registering one can never
         overwrite, re-version or otherwise mutate the parent bytes.
+        File-backed stores persist the record to SQLite (CL-53).
         """
         if parent_version_id not in self._versions:
             raise UnknownVersionError(parent_version_id)
@@ -204,7 +256,41 @@ class ArtifactStore:
             content_hash=digest,
         )
         self._derivatives[derivative.derivative_id] = derivative
+        self._persist_derivative(derivative)
         return derivative
+
+    def derivatives(
+        self, parent_version_id: str | None = None
+    ) -> tuple[Derivative, ...]:
+        if parent_version_id is None:
+            return tuple(self._derivatives.values())
+        return tuple(
+            d
+            for d in self._derivatives.values()
+            if d.parent_version_id == parent_version_id
+        )
+
+    def get_derivative(self, derivative_id: str) -> Derivative:
+        try:
+            return self._derivatives[derivative_id]
+        except KeyError:
+            raise UnknownVersionError(derivative_id) from None
+
+    def _persist_derivative(self, derivative: Derivative) -> None:
+        if self._db is None:
+            return
+        with self._db_lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO store_derivatives"
+                " (derivative_id, parent_version_id, transform, content_hash)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    derivative.derivative_id,
+                    derivative.parent_version_id,
+                    derivative.transform,
+                    derivative.content_hash,
+                ),
+            )
 
     # -- reads ------------------------------------------------------------
 
@@ -227,18 +313,35 @@ class ArtifactStore:
             raise HashMismatchError(
                 f"stored bytes for {artifact_version_id} fail hash check"
             )
-        self._access.append(
-            AccessRecord(
-                access_id=f"acc_{len(self._access) + 1:06d}",
-                artifact_version_id=artifact_version_id,
-                content_hash=version.content_hash,
-                actor_id=actor_id,
-                purpose=purpose,
-                accessed_at=occurred_at or _now(),
-            )
+        record = AccessRecord(
+            access_id=f"acc_{len(self._access) + 1:06d}",
+            artifact_version_id=artifact_version_id,
+            content_hash=version.content_hash,
+            actor_id=actor_id,
+            purpose=purpose,
+            accessed_at=occurred_at or _now(),
         )
-        self._save()
+        self._access.append(record)
+        self._persist_access(record)
         return raw
+
+    def _persist_access(self, record: AccessRecord) -> None:
+        if self._db is None:
+            return
+        with self._db_lock:
+            self._db.execute(
+                "INSERT OR IGNORE INTO store_access"
+                " (access_id, artifact_version_id, content_hash, actor_id,"
+                " purpose, accessed_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    record.access_id,
+                    record.artifact_version_id,
+                    record.content_hash,
+                    record.actor_id,
+                    record.purpose,
+                    record.accessed_at,
+                ),
+            )
 
     def verify(self, artifact_version_id: str) -> bool:
         """True when stored bytes still hash to the recorded value."""
@@ -252,6 +355,9 @@ class ArtifactStore:
         return all(self.verify(v) for v in self._versions)
 
     # -- lineage, versions, verdicts, history ----------------------------
+
+    def get_version(self, artifact_version_id: str) -> ArtifactVersion:
+        return self._require(artifact_version_id)
 
     def version_ids(self) -> list[str]:
         return list(self._versions)
@@ -357,9 +463,9 @@ class ArtifactStore:
     def _save(self) -> None:
         if self._root is None:
             return
+        # CL-53: access history lives in SQLite, not in index.json.
         payload = {
             "versions": [asdict(v) for v in self._versions.values()],
-            "access": [asdict(r) for r in self._access],
             "verdicts": self._verdicts,
             "invalidated": sorted(self._invalidated),
         }
@@ -371,16 +477,59 @@ class ArtifactStore:
         if self._root is None:
             return
         index = self._root / "index.json"
-        if not index.exists():
-            return
-        payload = json.loads(index.read_text(encoding="utf-8"))
-        for row in payload.get("versions", []):
-            row["lineage"] = Lineage(**row["lineage"])
-            version = ArtifactVersion(**row)
-            self._versions[version.artifact_version_id] = version
-            self._by_artifact.setdefault(version.artifact_id, []).append(
-                version.artifact_version_id
-            )
-        self._access = [AccessRecord(**row) for row in payload.get("access", [])]
-        self._verdicts = dict(payload.get("verdicts", {}))
-        self._invalidated = set(payload.get("invalidated", []))
+        legacy_access: list[AccessRecord] = []
+        if index.exists():
+            payload = json.loads(index.read_text(encoding="utf-8"))
+            for row in payload.get("versions", []):
+                row["lineage"] = Lineage(**row["lineage"])
+                version = ArtifactVersion(**row)
+                self._versions[version.artifact_version_id] = version
+                self._by_artifact.setdefault(version.artifact_id, []).append(
+                    version.artifact_version_id
+                )
+            # Pre-CL-53 indexes carried access inline; migrate once.
+            legacy_access = [AccessRecord(**row) for row in payload.get("access", [])]
+            self._verdicts = dict(payload.get("verdicts", {}))
+            self._invalidated = set(payload.get("invalidated", []))
+        # Access history and derivatives restore from SQLite (CL-53).
+        if self._db is not None:
+            with self._db_lock:
+                rows = self._db.execute(
+                    "SELECT access_id, artifact_version_id, content_hash,"
+                    " actor_id, purpose, accessed_at FROM store_access"
+                    " ORDER BY rowid"
+                ).fetchall()
+                self._access = [
+                    AccessRecord(
+                        access_id=r[0],
+                        artifact_version_id=r[1],
+                        content_hash=r[2],
+                        actor_id=r[3],
+                        purpose=r[4],
+                        accessed_at=r[5],
+                    )
+                    for r in rows
+                ]
+                drows = self._db.execute(
+                    "SELECT derivative_id, parent_version_id, transform,"
+                    " content_hash FROM store_derivatives"
+                ).fetchall()
+                self._derivatives = {
+                    r[0]: Derivative(
+                        derivative_id=r[0],
+                        parent_version_id=r[1],
+                        transform=r[2],
+                        content_hash=r[3],
+                    )
+                    for r in drows
+                }
+            if legacy_access and not self._access:
+                for record in legacy_access:
+                    self._access.append(record)
+                    self._persist_access(record)
+            elif legacy_access:
+                known = {r.access_id for r in self._access}
+                for record in legacy_access:
+                    if record.access_id not in known:
+                        self._access.append(record)
+                        self._persist_access(record)

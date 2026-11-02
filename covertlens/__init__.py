@@ -232,7 +232,7 @@ from .splits import (
     verify_recovery,
     write_split_dataset,
 )
-from .store import RETENTION_POLICY, ArtifactStore, ArtifactVersion
+from .store import RETENTION_POLICY, ArtifactStore, ArtifactVersion, Derivative
 from .trace_join import (
     JOIN_VERSION as TRACE_JOIN_VERSION,
 )
@@ -274,6 +274,7 @@ __all__ = [
     "AnalysisStatus",
     "ArtifactStore",
     "ArtifactVersion",
+    "Derivative",
     "DEFAULT_LIMITS",
     "Finding",
     "Fixture",
