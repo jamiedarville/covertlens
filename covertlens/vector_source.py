@@ -35,10 +35,12 @@ import math
 from typing import Any
 
 from . import ids
+from .calibration import load_frozen_thresholds
 from .geometric import analyze_geometric, analyze_geometric_bytes
 from .geometric_fixtures import BASE_Y, GeoFixture, scene_plan
 from .segmentation import SegmentationResult, SegmenterConfig, _reading_order
 from .store import ArtifactStore
+from .verdicts import DecisionContext, ThresholdConfig, decide_verdict
 
 VECTOR_SOURCE_SCHEMA = "covertlens.vector-source"
 VECTOR_PARSER_NAME = "geometric-vector-parser"
@@ -236,6 +238,8 @@ def analyze_with_source(
     *,
     source_intercepted: bool = True,
     store: ArtifactStore | None = None,
+    threshold_config: ThresholdConfig | None = None,
+    declared_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combined raster/vector analysis bound to the rendered version.
 
@@ -243,7 +247,18 @@ def analyze_with_source(
     `source_intercepted=False` models an unintercepted source: the
     C-10 guard refuses clearance regardless of the raster result.
     """
-    raster = analyze_geometric_bytes(fixture.data)
+    raster = analyze_geometric_bytes(fixture.data, declared_context=declared_context)
+    active = threshold_config or load_frozen_thresholds()[0]
+    findings = [raster["finding"]] if raster.get("finding") else []
+
+    def apply_decision(report: dict[str, Any]) -> None:
+        decision = decide_verdict(
+            findings, active, context=DecisionContext(content_hash=fixture.content_hash)
+        )
+        report["decision"] = decision.to_dict()
+        report["cleared"] = bool(findings) and decision.delivery == "permit"
+        report["clearance"] = "cleared" if report["cleared"] else "not_cleared"
+
     report: dict[str, Any] = {
         "schema": "covertlens.vector-binding",
         "schema_version": 1,
@@ -258,6 +273,7 @@ def analyze_with_source(
         "limitations": list(RASTER_LIMITATIONS),
         "equated_with_collusion": False,
     }
+    apply_decision(report)
     if store is not None and source is not None:
         report["lineage"] = register_source_lineage(store, fixture, source)
         report["bound_rendered_version_id"] = report["lineage"]["rendered_version_id"]
@@ -277,15 +293,15 @@ def analyze_with_source(
         report["clearance"] = "refused_unparseable_vector_source"
         report["cleared"] = False
         return report
-    vector = analyze_geometric(vector_seg)
+    vector = analyze_geometric(vector_seg, declared_context=declared_context)
+    findings.append(vector["finding"])
     report["vector_classification"] = vector["classification"]
     combined = max(
         (raster["classification"], vector["classification"]),
         key=lambda c: _SEVERITY[c],
     )
     report["combined_classification"] = combined
-    report["cleared"] = combined == "no_signal"
-    report["clearance"] = "cleared" if report["cleared"] else "not_cleared"
+    apply_decision(report)
     return report
 
 

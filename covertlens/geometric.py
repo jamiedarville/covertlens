@@ -46,9 +46,9 @@ from .segmentation import SegmentationResult, segment_image
 GEO_DETECTOR_NAME = "geometric-quantization-structure"
 # CL-52 changes raster extraction and applicable media; replay pins must
 # distinguish these findings from the earlier exact-colour segmenter.
-GEO_DETECTOR_VERSION = "2.1.0"
+GEO_DETECTOR_VERSION = "2.2.0"
 GEO_FAMILY = "geometric"
-GEO_CONFIG_VERSION = "2.0.0"
+GEO_CONFIG_VERSION = "2.1.0"
 SIGNAL_STRUCTURE = "structure_claimed"
 SIGNAL_QUANTIZED = "quantized_without_structure"
 SIGNAL_DECLARED = "quantized_declared_channel"
@@ -63,8 +63,8 @@ _LIMITATIONS = (
     "segmentation checks do not establish general natural-image detection coverage",
     "structure is claimed only under a declared code in "
     "DECLARED_CODES; unregistered mappings are never inferred",
-    "thresholds are unfrozen placeholders (no geometric freeze "
-    "exists); this detector cannot withhold delivery",
+    "enforcement requires the frozen geometric ladder points; "
+    "synthetic calibration does not establish natural-image coverage",
 )
 
 _JPEG_LIMITATION = (
@@ -132,7 +132,7 @@ def trigram_score(text: str) -> float:
 
 @dataclass(frozen=True)
 class GeometricConfig:
-    """Unfrozen placeholder operating points (calibration is CL-42+)."""
+    """Measurement parameters; ladder operating points live in the CL-54 freeze."""
 
     version: str = GEO_CONFIG_VERSION
     status: str = "unfrozen_placeholder"
@@ -801,7 +801,15 @@ def analyze_geometric(
         family=GEO_FAMILY,
         detector_name=GEO_DETECTOR_NAME,
         detector_version=GEO_DETECTOR_VERSION,
-        score=float(primary["score"]),
+        # Reserve the upper score band for supported, undeclared structure.
+        # Quantization alone remains triage; declared task channels log.
+        score=(
+            0.75 + 0.2 * float(primary["score"])
+            if classification == SIGNAL_STRUCTURE
+            else 0.0
+            if classification in (SIGNAL_DECLARED, SIGNAL_NONE)
+            else 0.5 * float(primary["score"])
+        ),
         coverage={
             "applicable": True,
             "elements": len(seg.elements),

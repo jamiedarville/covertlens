@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 from .fixtures import Fixture
+from .geometric import DEFAULT_GEO_CONFIG, GEO_DETECTOR_VERSION
+from .geometric_fixtures import GeoFixture
 from .metadata import analyze_all_bytes
 from .pinning import dataset_hash
 from .splits import SPLITS
@@ -39,13 +41,13 @@ from .verdicts import FamilyThresholds, ThresholdConfig
 
 CALIBRATION_SCHEMA = "covertlens.calibration"
 CALIBRATION_VERSION = "1.0.0"
-FROZEN_CONFIG_VERSION = "frozen-1.0.0"
+FROZEN_CONFIG_VERSION = "frozen-1.1.0"
 FROZEN_PATH = (
     Path(__file__).resolve().parent.parent / "config" / "frozen-thresholds.json"
 )
 RECALL_TARGET = 0.95
 PRECISION_TARGET = 0.99
-FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata")
+FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata", "geometric")
 
 
 def _candidates(scores: list[float]) -> list[float]:
@@ -124,7 +126,7 @@ def calibrate_family(
 
 
 def calibrate_thresholds(
-    fixtures: Iterable[Fixture],
+    fixtures: Iterable[Fixture | GeoFixture],
     assignments: dict[str, str],
     *,
     recall_target: float = RECALL_TARGET,
@@ -161,7 +163,11 @@ def calibrate_thresholds(
                     continue
                 if fixture.role == "encoded":
                     bucket["positive"].append(finding.score)
-                    bands[finding.family].add(fixture.payload_band)
+                    bands[finding.family].add(
+                        "symbol_sequence"
+                        if isinstance(fixture, GeoFixture)
+                        else fixture.payload_band
+                    )
                 elif fixture.role in ("clean", "negative"):
                     bucket["negative"].append(finding.score)
     families: dict[str, Any] = {}
@@ -173,6 +179,16 @@ def calibrate_thresholds(
             recall_target=recall_target,
             precision_target=precision_target,
         )
+        if family == "geometric":
+            # Geometric evidence supports withholding, not a run-failure claim.
+            # Its score is capped below 1; reserve fail_run until severity is calibrated.
+            calibrated["enforcement_fail_run_at"] = 1.0
+            calibrated["at_fail_run"] = _metrics(
+                scores[family]["positive"], scores[family]["negative"], 1.0
+            )
+            calibrated["fail_run_policy"] = (
+                "reserved_unreachable_pending_severity_calibration"
+            )
         families[family] = {
             **calibrated,
             "calibrated_payload_bands": sorted(bands[family]),
@@ -192,6 +208,10 @@ def calibrate_thresholds(
         "schema": CALIBRATION_SCHEMA,
         "schema_version": 1,
         "calibration_version": CALIBRATION_VERSION,
+        "geometric_detector": {
+            "version": GEO_DETECTOR_VERSION,
+            "config": DEFAULT_GEO_CONFIG.to_dict(),
+        },
         "frozen_config_version": FROZEN_CONFIG_VERSION,
         "targets": {
             "triage_recall_at_least": recall_target,
@@ -204,6 +224,25 @@ def calibrate_thresholds(
         "families": families,
         "threshold_config": config.to_dict(),
     }
+
+
+def development_calibration_data() -> tuple[list[Fixture | GeoFixture], dict[str, str]]:
+    """Reproducible four-family development input, excluding held-out rows."""
+    from .fixtures import build_dataset
+    from .geo_calibration import geometric_calibration_dataset
+    from .metadata_fixtures import build_metadata_dataset
+    from .splits import assign_splits
+
+    fixtures: list[Fixture | GeoFixture] = []
+    assignments: dict[str, str] = {}
+    for dataset in (build_dataset(), build_metadata_dataset()):
+        split = assign_splits(dataset)
+        assignments.update(split)
+        fixtures.extend(f for f in dataset if split[f.fixture_id] != "held_out")
+    geo, split = geometric_calibration_dataset()
+    assignments.update(split)
+    fixtures.extend(f for f in geo if split[f.fixture_id] != "held_out")
+    return fixtures, assignments
 
 
 def load_frozen_thresholds(

@@ -7,6 +7,8 @@ its acceptance criteria, code, contract doc, schema, and tests.
 
 ## Unreleased
 
+- **CL-54** — Freeze four-family `frozen-1.1.0` thresholds from development-only data; reserve geometric enforcement for supported undeclared structure, publish lineage-held-out subfamily/chart rates with Wilson intervals, and derive vector clearance from the verdict ladder. Geometric run failure remains reserved pending severity calibration.
+
 - **CL-53** — Persist gate state in SQLite under the store root (deliveries, access attempts, trace events; store access history out of `index.json`, derivatives persisted), compute `unauthorized_served` from recorded attempts, and add the Live Gate page (`/gate` + `/api/gate/*` with SSE timeline; recipient pane never renders withheld bytes).
 - **CL-52** — Segmenter 1.1.0 handles background colour variation with recorded RGB tolerances, gradient-aware border flooding and 3×3 cleanup; PNG/JPEG pixel decoders, explicit JPEG fidelity limitations, five licensed real-image fixtures, independent codec references and JPEG web-overlay regression coverage. Manifest 1.2.0 declares JPEG geometry; integrated analysis retains the CL-13 parser subset.
 - **CL-50** — Add lint, type and schema checks to CI and split the CLI (ruff + mypy at 0, argparse CLI over `covertlens/demos.py`, schema-validation tests, `slow` latency marker).
