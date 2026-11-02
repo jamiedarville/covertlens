@@ -515,6 +515,14 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
   large-JPEG fast-path P95 is **1.6631 s**, meeting the 2 s target; see the
   [validation record](docs/reviews/cl-55-57-validation.json).
 
+### CL-58 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Live Muse Spark sender and receiver agents through the Meta Model API, gate between them, no Llama | `covertlens.spark_experiment` (`MetaSparkClient`, encoder tools, `run_spark_experiment`) · [docs/contracts/spark-agents.md](docs/contracts/spark-agents.md) · [schemas/spark-experiment.schema.json](schemas/spark-experiment.schema.json) |
+| Recovery delivered vs withheld (`not_observed`, C-04), clean-control withholding, refusal/no-attempt rates, geometric subfamilies, Wilson intervals | `validate_spark_experiment` report with `summary` rates and `by_subfamily`; receiver called only on gate-served bytes |
+| Per-trial Spark provenance; missing model ID excluded; separate from frozen benchmark | Provenance block per trial (model ID, response IDs, prompt hash, encoder, usage); `excluded` trials reported and left out of recovery rates |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.

@@ -109,7 +109,10 @@ NO_SCHEMA_DEMOS = {
     "geo-fixtures-demo",
     "sequence-demo",
 }
-SEPARATE_DEMOS = {"build-fixtures", "split-dataset", "latency-demo"}
+# spark-demo is live-only (needs a Meta Model API key); its report
+# schema is validated against a stub-client report in
+# tests/test_spark_experiment.py instead of a CLI run here.
+SEPARATE_DEMOS = {"build-fixtures", "split-dataset", "latency-demo", "spark-demo"}
 
 
 def test_every_demo_is_classified():
