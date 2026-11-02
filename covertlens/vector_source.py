@@ -48,8 +48,8 @@ RASTER_LIMITATIONS = (
     "renderer rasterization quantizes geometry to whole pixels",
     "no resize or recompression is permitted before analysis: "
     "either would shift measured attributes (original bytes only)",
-    "JPEG rasters are unsupported by the segmenter "
-    "(unsupported_media), so raster fallback is PNG-only",
+    "JPEG raster attributes are approximate because the original "
+    "lossy encoding and pixel reconstruction shift measured values",
 )
 _SEVERITY = {
     "no_signal": 0,

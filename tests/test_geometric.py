@@ -81,5 +81,5 @@ def test_bit_packing_structure_and_failed_segmentation(dataset):
     # Failed segmentation yields no finding, not a clean score.
     bad = analyze_geometric_bytes(b"\xff\xd8\xff\xe0" + bytes(32))
     assert bad["finding"] is None
-    assert bad["status"] == "unsupported_media"
+    assert bad["status"] == "corrupt_input"
     assert validate_geometric_report(bad) == []

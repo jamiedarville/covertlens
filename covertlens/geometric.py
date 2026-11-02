@@ -44,7 +44,9 @@ from .parsing import AnalysisResult, AnalysisStatus, Finding
 from .segmentation import SegmentationResult, segment_image
 
 GEO_DETECTOR_NAME = "geometric-quantization-structure"
-GEO_DETECTOR_VERSION = "2.0.0"
+# CL-52 changes raster extraction and applicable media; replay pins must
+# distinguish these findings from the earlier exact-colour segmenter.
+GEO_DETECTOR_VERSION = "2.1.0"
 GEO_FAMILY = "geometric"
 GEO_CONFIG_VERSION = "2.0.0"
 SIGNAL_STRUCTURE = "structure_claimed"
@@ -57,12 +59,18 @@ GEOMETRIC_CHANNELS = ("height", "gap", "lit", "colour", "angle")
 _LIMITATIONS = (
     "quantization alone is not encoding: legitimate charts and "
     "layouts are grid-snapped by design (GEO-05)",
-    "procedural synthetic scenes only; natural-image element "
-    "segmentation is not covered",
+    "detector calibration uses procedural synthetic scenes; five real-image "
+    "segmentation checks do not establish general natural-image detection coverage",
     "structure is claimed only under a declared code in "
     "DECLARED_CODES; unregistered mappings are never inferred",
     "thresholds are unfrozen placeholders (no geometric freeze "
     "exists); this detector cannot withhold delivery",
+)
+
+_JPEG_LIMITATION = (
+    "jpeg input: elements were segmented from a lossy pixel "
+    "reconstruction, so measured attributes are approximate "
+    "(CL-52 fidelity limitation)"
 )
 
 # Committed word list (CL-46): trains the character trigram model
@@ -799,6 +807,7 @@ def analyze_geometric(
             "elements": len(seg.elements),
             "channels_tested": sorted(channels),
             "segmenter": f"{seg.config.name} {seg.config.version}",
+            "media_kind": seg.media_kind,
             "config_version": active.version,
             "config_status": active.status,
         },
@@ -820,7 +829,8 @@ def analyze_geometric(
             else None,
             "height_prior": height_prior,
         },
-        limitations=_LIMITATIONS,
+        limitations=_LIMITATIONS
+        + ((_JPEG_LIMITATION,) if seg.media_kind == "jpeg" else ()),
     )
     return {
         "status": "ok",
@@ -839,16 +849,17 @@ def analyze_geometric(
 def detect_geometric(
     data: bytes, result: AnalysisResult, declared_context: dict[str, Any] | None = None
 ) -> Finding | None:
-    """DET-02 finding for one parsed PNG; None when not applicable.
+    """DET-02 finding for one parsed raster; None when not applicable.
 
     Attached by `analyze_all_bytes` as the fourth channel family
-    (CL-44). JPEG and failed parses get no geometric finding: the
-    segmenter supports PNG rasters only and failures are never
-    converted into clean scores (C-02).
+    (CL-44). PNG is segmented losslessly; baseline JPEG is
+    segmented from a lossy reconstruction with a recorded fidelity
+    limitation (CL-52). Failed parses get no geometric finding:
+    failures are never converted into clean scores (C-02).
     """
     if result.status is not AnalysisStatus.PARSED:
         return None
-    if result.media_kind != "png":
+    if result.media_kind not in ("png", "jpeg"):
         return None
     return analyze_geometric_bytes(data, declared_context=declared_context).get(
         "finding"

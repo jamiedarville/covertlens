@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://covertlens.dev/schemas/segmentation.schema.json",
-  "title": "CovertLens geometric segmentation result (CL-39)",
+  "title": "CovertLens geometric segmentation result (CL-39, CL-52)",
   "type": "object",
   "required": ["schema", "segmenter", "status", "elements", "tolerances"],
   "properties": {
@@ -14,6 +14,19 @@
     "status": {
       "enum": ["ok", "no_foreground", "too_few_elements",
                "unsupported_media", "limit_exceeded", "corrupt_input"]
+    },
+    "media_kind": {"enum": ["png", "jpeg", ""]},
+    "tolerances": {
+      "type": "object",
+      "properties": {
+        "background_distance_tolerance": {"type": "number", "minimum": 0},
+        "background_distance_floor": {"type": "number", "minimum": 0},
+        "coherent_colour_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "background_bucket_shift": {"type": "integer", "minimum": 0, "maximum": 7},
+        "background_step_tolerance": {"type": "number", "minimum": 0},
+        "morphology_3x3_open_close": {"type": "boolean"},
+        "preserve_thin_components": {"type": "boolean"}
+      }
     },
     "elements": {
       "type": "array",

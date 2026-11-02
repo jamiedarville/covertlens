@@ -1,17 +1,37 @@
 """Segment repeated elements and extract attribute sequences (CL-39, GEO-01).
 
 The detector-facing segmentation layer for the geometric family.
-It consumes **original raster bytes**: PNG is decoded losslessly
-and analysed at native resolution — never resized, recompressed
-or resampled before analysis. JPEG input is rejected with an
-explicit `unsupported_media` status (JPEG rasterization would
-blur the exact attribute values this layer must measure; a JPEG
-path needs its own fidelity study, it is not silently degraded).
+It consumes **original raster bytes** at native resolution —
+never resized, recompressed or resampled before analysis. PNG
+is decoded losslessly. JPEG is reconstructed with the baseline
+pixel decoder (CL-52, `covertlens/jpeg_pixels.py`) and measured
+with an explicit fidelity limitation: lossy reconstruction and
+anti-aliasing shift attribute values, so JPEG results record
+`media_kind` and must be read as approximate. Progressive or
+otherwise out-of-subset JPEGs stay `unsupported_media`.
 
 Method (versioned in `SegmenterConfig`):
 
-1. Background is the modal border colour; everything else is
-   foreground.
+1. Background starts from the modal perimeter colour (bucketed
+   vote, `background_bucket_shift`) and grows inward from
+   matching border pixels: a neighbour joins the background
+   region when its colour is within `background_step_tolerance`
+   of the pixel it was reached from, so smooth gradients are
+   background however far they drift in total. Foreground
+   candidates are the remaining pixels farther than
+   `background_distance_floor` (Euclidean RGB) from the modal
+   colour, cleaned by a 3x3 morphological open/close pass so
+   anti-aliased fringes and sensor/JPEG noise do not fuse or
+   speckle components (CL-52). Coherent components thinner than
+   the kernel are restored when `preserve_thin_components` is
+   enabled, retaining chart axes and fine dashes. A component is foreground when
+   any pixel exceeds `background_distance_tolerance`, or when
+   it is a coherent near-background element: at least
+   `coherent_colour_fraction` of its pixels share one colour
+   and it does not touch the image border (the lit-window case:
+   flat grey 235 on a 238 background is a drawn element, while
+   border-connected or variegated near-background regions are
+   background variation and noise).
 2. Repeated elements are 4-connected foreground components of at
    least `min_component_pixels` pixels.
 3. Components are ordered in **reading order**: grouped into rows
@@ -35,14 +55,16 @@ message (C-09).
 from __future__ import annotations
 
 import math
+import struct
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .fixtures import _load_png
 from .geometric_fixtures import GRIDS
+from .jpeg_pixels import JpegDecodeError, decode_jpeg_rgb, probe_jpeg_size
+from .png_pixels import PngDecodeError, decode_png_rgb
 
 SEGMENTER_NAME = "geometric-segmenter"
-SEGMENTER_VERSION = "1.0.0"
+SEGMENTER_VERSION = "1.1.0"
 SEGMENTATION_SCHEMA = "covertlens.segmentation"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _JPEG_MAGIC = b"\xff\xd8\xff"
@@ -50,7 +72,7 @@ _JPEG_MAGIC = b"\xff\xd8\xff"
 FAILURE_MODES: tuple[dict[str, str], ...] = (
     {
         "status": "no_foreground",
-        "meaning": "no pixel differs from the border background",
+        "meaning": "no foreground candidates remain after background-region removal and morphological cleanup",
     },
     {
         "status": "too_few_elements",
@@ -58,13 +80,16 @@ FAILURE_MODES: tuple[dict[str, str], ...] = (
     },
     {
         "status": "unsupported_media",
-        "meaning": "not a PNG raster (JPEG would blur measured attributes)",
+        "meaning": "not a PNG raster or a supported baseline-JPEG raster",
     },
     {
         "status": "limit_exceeded",
         "meaning": "input exceeds byte or pixel limits for this segmenter",
     },
-    {"status": "corrupt_input", "meaning": "bytes claim to be PNG but do not decode"},
+    {
+        "status": "corrupt_input",
+        "meaning": "bytes claim to be PNG/JPEG but do not decode",
+    },
     {
         "status": "corrupt_source",
         "meaning": "a vector source was intercepted but could not be parsed "
@@ -89,6 +114,31 @@ class SegmenterConfig:
     )
     angle_tolerance_deg: float = 3.5
     attribute_tolerance_px: float = 1.6
+    # CL-52 robustness: a component containing any pixel farther
+    # than this Euclidean RGB distance from the modal perimeter
+    # colour is foreground.
+    background_distance_tolerance: float = 24.0
+    # CL-52: pixels farther than this floor distance enter the
+    # candidate mask; weaker variation never can.
+    background_distance_floor: float = 3.0
+    # CL-52: a weaker component still counts as an element when
+    # at least this fraction of its pixels share its modal colour
+    # (and it does not touch the border): flat near-background
+    # elements such as lit windows.
+    coherent_colour_fraction: float = 0.9
+    # CL-52: perimeter background votes are bucketed by dropping
+    # this many low bits per channel before the modal vote, so a
+    # gradient background beats one flat foreground edge colour.
+    background_bucket_shift: int = 4
+    # CL-52: maximum per-step Euclidean RGB change for the
+    # border-seeded background region to grow through a pixel;
+    # absorbs smooth gradients whatever their total drift.
+    background_step_tolerance: float = 4.0
+    # CL-52: 3x3 morphological open/close on the candidate mask.
+    morphology: bool = True
+    # Opening erases coherent components thinner than the kernel (chart
+    # axes, rules and fine dashes). Restore those from the original mask.
+    preserve_thin_components: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         doc = asdict(self)
@@ -105,6 +155,7 @@ class SegmentationResult:
     height: int = 0
     elements: list[dict[str, Any]] = field(default_factory=list)
     detail: str = ""
+    media_kind: str = ""
     config: SegmenterConfig = field(default_factory=SegmenterConfig)
 
     @property
@@ -133,6 +184,7 @@ class SegmentationResult:
             "schema_version": 1,
             "segmenter": {"name": self.config.name, "version": self.config.version},
             "status": self.status,
+            "media_kind": self.media_kind,
             "detail": self.detail,
             "width": self.width,
             "height": self.height,
@@ -143,6 +195,13 @@ class SegmentationResult:
                 "angle_tolerance_deg": self.config.angle_tolerance_deg,
                 "attribute_tolerance_px": self.config.attribute_tolerance_px,
                 "min_component_pixels": self.config.min_component_pixels,
+                "background_distance_tolerance": self.config.background_distance_tolerance,
+                "background_distance_floor": self.config.background_distance_floor,
+                "coherent_colour_fraction": self.config.coherent_colour_fraction,
+                "background_bucket_shift": self.config.background_bucket_shift,
+                "background_step_tolerance": self.config.background_step_tolerance,
+                "morphology_3x3_open_close": self.config.morphology,
+                "preserve_thin_components": self.config.preserve_thin_components,
             },
             "failure_modes": list(FAILURE_MODES),
             "decoded_message": None,
@@ -202,51 +261,293 @@ def _reading_order(
     return ordered
 
 
+def _erode(mask: list[bool], width: int, height: int) -> list[bool]:
+    """3x3 erosion: foreground survives only with all 8 neighbours set."""
+    out = [False] * len(mask)
+    for y in range(1, height - 1):
+        row = y * width
+        for x in range(1, width - 1):
+            i = row + x
+            if (
+                mask[i]
+                and mask[i - 1]
+                and mask[i + 1]
+                and mask[i - width]
+                and mask[i + width]
+                and mask[i - width - 1]
+                and mask[i - width + 1]
+                and mask[i + width - 1]
+                and mask[i + width + 1]
+            ):
+                out[i] = True
+    return out
+
+
+def _dilate(mask: list[bool], width: int, height: int) -> list[bool]:
+    """3x3 dilation: a pixel is set when any of its 8 neighbours is."""
+    out = list(mask)
+    for y in range(height):
+        row = y * width
+        for x in range(width):
+            i = row + x
+            if not mask[i]:
+                continue
+            for dy in (-1, 0, 1):
+                ny = y + dy
+                if not 0 <= ny < height:
+                    continue
+                for dx in (-1, 0, 1):
+                    nx = x + dx
+                    if 0 <= nx < width:
+                        out[ny * width + nx] = True
+    return out
+
+
+def _open_close(mask: list[bool], width: int, height: int) -> list[bool]:
+    """Morphological open then close (despeckle, fill pinholes)."""
+    opened = _dilate(_erode(mask, width, height), width, height)
+    return _erode(_dilate(opened, width, height), width, height)
+
+
+def _background_colour(
+    pixels: bytes, width: int, height: int, shift: int = 4
+) -> tuple[int, int, int]:
+    """Modal colour over the full image perimeter.
+
+    Perimeter colours are first voted into coarse buckets
+    (`shift` low bits dropped per channel) so a smooth gradient
+    background is not out-voted by one flat foreground colour on
+    a single edge; the returned colour is the exact modal colour
+    within the winning bucket (CL-52).
+    """
+    border: dict[tuple[int, int, int], int] = {}
+    buckets: dict[tuple[int, int, int], int] = {}
+
+    def count(x: int, y: int) -> None:
+        base = (y * width + x) * 3
+        c = (pixels[base], pixels[base + 1], pixels[base + 2])
+        border[c] = border.get(c, 0) + 1
+        b = (c[0] >> shift, c[1] >> shift, c[2] >> shift)
+        buckets[b] = buckets.get(b, 0) + 1
+
+    for x in range(width):
+        count(x, 0)
+        count(x, height - 1)
+    for y in range(1, height - 1):
+        count(0, y)
+        count(width - 1, y)
+    winning = max(buckets, key=lambda b: buckets[b])
+    in_bucket = {
+        c: n
+        for c, n in border.items()
+        if (c[0] >> shift, c[1] >> shift, c[2] >> shift) == winning
+    }
+    return max(in_bucket, key=lambda c: in_bucket[c])
+
+
+def _background_region(
+    pixels: bytes,
+    width: int,
+    height: int,
+    background: tuple[int, int, int],
+    shift: int,
+    step_tolerance: float,
+) -> bytearray:
+    """Pixels reachable from background-coloured border pixels.
+
+    Growth is 4-connected; a neighbour joins when its colour is
+    within `step_tolerance` (Euclidean RGB) of the pixel it was
+    reached from, so smooth gradients are absorbed whatever
+    their total drift from the modal colour, while a hard edge
+    (including the 5.2-step into a flat lit element) blocks.
+    Seeds are only border pixels in the modal background bucket,
+    so an element clipped by the frame edge is never seeded.
+    """
+    region = bytearray(width * height)
+    bg_bucket = (
+        background[0] >> shift,
+        background[1] >> shift,
+        background[2] >> shift,
+    )
+    step_sq = step_tolerance**2
+
+    def colour(idx: int) -> tuple[int, int, int]:
+        base = idx * 3
+        return pixels[base], pixels[base + 1], pixels[base + 2]
+
+    stack: list[int] = []
+
+    def seed(idx: int) -> None:
+        c = colour(idx)
+        if (c[0] >> shift, c[1] >> shift, c[2] >> shift) == bg_bucket:
+            region[idx] = 1
+            stack.append(idx)
+
+    for x in range(width):
+        seed(x)
+        seed((height - 1) * width + x)
+    for y in range(1, height - 1):
+        seed(y * width)
+        seed(y * width + width - 1)
+    while stack:
+        idx = stack.pop()
+        x, y = idx % width, idx // width
+        r, g, b = colour(idx)
+        for nidx in (
+            idx - 1 if x else -1,
+            idx + 1 if x < width - 1 else -1,
+            idx - width if y else -1,
+            idx + width if y < height - 1 else -1,
+        ):
+            if nidx < 0 or region[nidx]:
+                continue
+            nr, ng, nb = colour(nidx)
+            if (nr - r) ** 2 + (ng - g) ** 2 + (nb - b) ** 2 <= step_sq:
+                region[nidx] = 1
+                stack.append(nidx)
+    return region
+
+
+def _decode_raster(
+    data: bytes, active: SegmenterConfig
+) -> tuple[bytes, int, int, str] | SegmentationResult:
+    """Decode original bytes, or return the failure result."""
+    if data.startswith(_JPEG_MAGIC):
+        size = probe_jpeg_size(data)
+        if size is None:
+            return SegmentationResult(
+                "corrupt_input", detail="JPEG frame header not found", config=active
+            )
+        width, height = size
+        if width * height > active.max_pixels:
+            return SegmentationResult(
+                "limit_exceeded",
+                detail="pixel count over limit",
+                width=width,
+                height=height,
+                media_kind="jpeg",
+                config=active,
+            )
+        try:
+            pixels, width, height = decode_jpeg_rgb(data, max_pixels=active.max_pixels)
+        except JpegDecodeError as exc:
+            message = str(exc)
+            unsupported = (
+                "outside" in message or "unsupported" in message or "only " in message
+            )
+            return SegmentationResult(
+                "unsupported_media" if unsupported else "corrupt_input",
+                detail=message,
+                width=width,
+                height=height,
+                media_kind="jpeg",
+                config=active,
+            )
+        return pixels, width, height, "jpeg"
+    if not data.startswith(_PNG_MAGIC):
+        return SegmentationResult(
+            "unsupported_media", detail="not a PNG or JPEG raster", config=active
+        )
+    png_width = png_height = 0
+    if len(data) >= 24:
+        png_width, png_height = struct.unpack(">II", data[16:24])
+    if png_width * png_height > active.max_pixels:
+        return SegmentationResult(
+            "limit_exceeded",
+            detail="pixel count over limit",
+            width=png_width,
+            height=png_height,
+            media_kind="png",
+            config=active,
+        )
+    try:
+        pixels, width, height = decode_png_rgb(data, max_pixels=active.max_pixels)
+    except PngDecodeError as exc:
+        message = str(exc)
+        unsupported = "outside supported subset" in message or "unknown" in message
+        return SegmentationResult(
+            "unsupported_media" if unsupported else "corrupt_input",
+            detail=message,
+            width=png_width,
+            height=png_height,
+            media_kind="png",
+            config=active,
+        )
+    return pixels, width, height, "png"
+
+
 def segment_image(
     data: bytes, config: SegmenterConfig | None = None
 ) -> SegmentationResult:
-    """Segment repeated elements in original PNG bytes (reading order)."""
+    """Segment repeated elements in original bytes (reading order)."""
     active = config or SegmenterConfig()
     if len(data) > active.max_input_bytes:
         return SegmentationResult(
             "limit_exceeded", detail="input bytes over limit", config=active
         )
-    if data.startswith(_JPEG_MAGIC):
-        return SegmentationResult(
-            "unsupported_media",
-            detail="JPEG raster would blur measured attributes; PNG required",
-            config=active,
-        )
-    if not data.startswith(_PNG_MAGIC):
-        return SegmentationResult(
-            "unsupported_media", detail="not a PNG raster", config=active
-        )
-    try:
-        pixels, width, height = _load_png(data)
-    except Exception as exc:  # corrupt or non-RGB PNG
-        return SegmentationResult("corrupt_input", detail=str(exc), config=active)
+    decoded = _decode_raster(data, active)
+    if isinstance(decoded, SegmentationResult):
+        return decoded
+    pixels, width, height, media_kind = decoded
     if width * height > active.max_pixels:
         return SegmentationResult(
             "limit_exceeded",
             detail="pixel count over limit",
             width=width,
             height=height,
+            media_kind=media_kind,
             config=active,
         )
 
-    border: dict[tuple[int, int, int], int] = {}
-    for x in range(width):
-        for y in (0, height - 1):
-            base = (y * width + x) * 3
-            c = (pixels[base], pixels[base + 1], pixels[base + 2])
-            border[c] = border.get(c, 0) + 1
-    background = max(border, key=lambda c: border[c])
-    mask = [
-        tuple(pixels[i : i + 3]) != background for i in range(0, width * height * 3, 3)
-    ]
+    background = _background_colour(
+        pixels, width, height, active.background_bucket_shift
+    )
+    region = _background_region(
+        pixels,
+        width,
+        height,
+        background,
+        active.background_bucket_shift,
+        active.background_step_tolerance,
+    )
+    tolerance_sq = active.background_distance_tolerance**2
+    floor_sq = active.background_distance_floor**2
+    br, bg, bb = background
+    dist_sq: list[float] = []
+    mask = []
+    for i in range(0, width * height * 3, 3):
+        dr = pixels[i] - br
+        dg = pixels[i + 1] - bg
+        db = pixels[i + 2] - bb
+        d2 = float(dr * dr + dg * dg + db * db)
+        dist_sq.append(d2)
+        mask.append(d2 > floor_sq and not region[i // 3])
+    if active.morphology:
+        cleaned = _open_close(mask, width, height)
+        if active.preserve_thin_components:
+            for points in _components(mask, width, height, active.min_component_pixels):
+                xs = [p % width for p in points]
+                ys = [p // width for p in points]
+                if min(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1) >= 3:
+                    continue
+                thin_colours: dict[bytes, int] = {}
+                for point in points:
+                    thin_colour = pixels[point * 3 : point * 3 + 3]
+                    thin_colours[thin_colour] = thin_colours.get(thin_colour, 0) + 1
+                if (
+                    max(thin_colours.values()) / len(points)
+                    >= active.coherent_colour_fraction
+                ):
+                    for point in points:
+                        cleaned[point] = True
+        mask = cleaned
     if not any(mask):
         return SegmentationResult(
-            "no_foreground", width=width, height=height, config=active
+            "no_foreground",
+            width=width,
+            height=height,
+            media_kind=media_kind,
+            config=active,
         )
 
     raw = []
@@ -254,13 +555,28 @@ def segment_image(
         xs = [p % width for p in points]
         ys = [p // width for p in points]
         colours: dict[tuple[int, int, int], int] = {}
-        for p in points:
-            c = (pixels[p * 3], pixels[p * 3 + 1], pixels[p * 3 + 2])
+        for point in points:
+            c = (pixels[point * 3], pixels[point * 3 + 1], pixels[point * 3 + 2])
             colours[c] = colours.get(c, 0) + 1
         colour = max(colours, key=lambda c: colours[c])
+        # Two-threshold decision: a component is an element when it
+        # contains a strongly non-background pixel, or when it is a
+        # coherent flat region away from the border (lit-window
+        # elements vs background variation/noise).
+        strong = any(dist_sq[p] > tolerance_sq for p in points)
+        if not strong:
+            touches_border = (
+                min(xs) == 0
+                or max(xs) == width - 1
+                or min(ys) == 0
+                or max(ys) == height - 1
+            )
+            coherent = colours[colour] / len(points) >= active.coherent_colour_fraction
+            if touches_border or not coherent:
+                continue
         rows: dict[int, list[int]] = {}
-        for p in points:
-            rows.setdefault(p // width, []).append(p % width)
+        for point in points:
+            rows.setdefault(point // width, []).append(point % width)
         ordered_y = sorted(rows)
         mean_y = sum(ordered_y) / len(ordered_y)
         num = sum((y - mean_y) * (sum(rows[y]) / len(rows[y])) for y in ordered_y)
@@ -311,17 +627,30 @@ def segment_image(
                 "brightness": comp["brightness"],
             }
         )
+    detail = (
+        "jpeg raster reconstructed lossily; attributes are approximate"
+        if media_kind == "jpeg"
+        else ""
+    )
     if len(elements) < active.min_elements:
         return SegmentationResult(
             "too_few_elements",
-            detail=f"{len(elements)} element(s) below min_elements={active.min_elements}",
+            detail=f"{len(elements)} element(s) below min_elements={active.min_elements}"
+            + (f"; {detail}" if detail else ""),
             width=width,
             height=height,
             elements=elements,
+            media_kind=media_kind,
             config=active,
         )
     return SegmentationResult(
-        "ok", width=width, height=height, elements=elements, config=active
+        "ok",
+        width=width,
+        height=height,
+        elements=elements,
+        detail=detail,
+        media_kind=media_kind,
+        config=active,
     )
 
 

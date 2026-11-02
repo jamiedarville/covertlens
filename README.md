@@ -362,7 +362,7 @@ criterion to code, contract doc, schema, and tests. History in
 | Acceptance criterion | Deliverable |
 |---|---|
 | Vector sources containing embedded objects/elements/attributes are parsed directly and emitted to DET-02 | `parse_vector_source` reads the `covertlens.vector-source` object list into the CL-39 record shape, consumed by the same CL-40 tests · [docs/contracts/vector-source.md](docs/contracts/vector-source.md) · [schemas/vector-binding.schema.json](schemas/vector-binding.schema.json) |
-| Raster fallback (original bytes only) is recorded with renderer-effect limitations | `analyze_with_source(..., source=None)`: `absent_raster_fallback` + `RASTER_LIMITATIONS` (pixel quantization, PNG-only, original bytes) |
+| Raster fallback (original bytes only) is recorded with renderer-effect limitations | `analyze_with_source(..., source=None)`: `absent_raster_fallback` + `RASTER_LIMITATIONS` (pixel quantization, JPEG fidelity, original bytes; JPEG support added in CL-52) |
 | Vector and rendered outputs are associated via artefact lineage, and gate evaluation binds the verdict to the exact rendered version (hash) | Combined report binds `bound_content_hash` (rendered raster hash/version); store registers the source as lineage derivative `rendered_from_vector_source` parented to the rendered version |
 | When vector sources are available, gate-level verdict binding binds to the exact delivered (rendered) artefact version | Gate binding activates with frozen geometric thresholds (post CL-42 benchmark); until then the geometric finding is log-only triage bound to the rendered hash |
 | Vector source present but not intercepted: a clean raster score cannot clear it (C-10) | `clearance: refused_unparsed_vector_source`, `cleared: false`; same refusal for a corrupt source |
@@ -392,7 +392,7 @@ criterion to code, contract doc, schema, and tests. History in
 |---|---|
 | Geometric is a channel family of the gate, not a side pipeline | `geometric` added to `manifest.FAMILIES` and `config/allowed-channel-manifest.json` (manifest 1.1.0, `applies_to: ["png"]`, thresholds `unfrozen_placeholder`, same fail-closed error behaviour) |
 | The geometric `Finding` validates under DET-02 and the ladder handles the family | `validate_finding(geometric) == []`; `decide_verdict` returns `log` with `enforceable == False` while unfrozen; `families_without_findings` lists geometric when absent; `schemas/geometric-finding.schema.json` referenced from the analysis-result finding schema |
-| `analyze_all_bytes` attaches at most one finding per family, including geometric for parsed PNGs | `detect_geometric` in the integrated pipeline (PNG only; JPEG/failed parses get none) |
+| `analyze_all_bytes` attaches at most one finding per family, including geometric for parsed rasters | `detect_geometric` in the integrated pipeline (PNG and, since CL-52, supported JPEG; failed parses get none) |
 | Trace join, run report, review export and pin carry geometric findings and detector/config versions | Findings flow through `join_trace`/`build_run_report`/`export_bundle` generically; `build_pin` pins the geometric detector + config version and the family's threshold status |
 | Scorecard gains a geometric section citing the CL-42 benchmark, per subfamily, never pooled | `sections.geometric` in `build_scorecard` and the republished `config/release-scorecard.json` (scorecard 1.1.0) |
 | REQUIREMENTS.md traces the family; `corrupt_source` is a recorded segmentation status | GEO-01..07 traced to CL-38..CL-44 with C-09/C-10 marked active; `corrupt_source` added to `segmentation.FAILURE_MODES` |
@@ -466,6 +466,15 @@ criterion to code, contract doc, schema, and tests. History in
 | Random-hidden grid is actually hidden from the attacker view | Response echoes only `{mode: random_hidden, hidden: true}`; base/step exist solely in the server-side provenance record (tested) |
 | No regression to the CL-48 Analyze page | Includes a follow-on fix found through this page: failed-segmentation reports omit `channels` entirely and crashed the overlay (`geometric.channels` dereference); overlay and landing now tolerate the minimal report shape |
 
+
+### CL-52 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Segment real renderings with expected element count ±1 | Five committed images with independent counts, location annotations, hashes and licence/provenance notes in [tests/data/real/](tests/data/real/README.md); offline `tests/test_real_images.py` |
+| Replace exact-colour foreground detection and record tolerances | Segmenter 1.1.0: bucketed perimeter background, gradient flood, RGB distance thresholds, coherent near-background elements and 3×3 morphological open/close; detector 2.1.0 distinguishes replay pins; [segmentation contract](docs/contracts/segmentation.md) and [schema](schemas/segmentation.schema.json) |
+| Accept JPEG geometry with a fidelity limitation | Baseline pixel reconstruction in `covertlens/jpeg_pixels.py`; finding/segmentation fidelity notes; JPEG web-overlay and pixel-cap tests. The integrated pipeline retains the CL-13 baseline 4:4:4 parser subset; direct geometry additionally handles 4:2:2/4:2:0, grayscale and restart intervals. Manifest 1.2.0 declares JPEG geometry. |
+| Preserve the geometric benchmark and verify decoders independently | Existing geometric benchmark plus `tests/test_png_pixels.py`, `tests/test_jpeg_pixels.py` and committed libjpeg reference outputs; no codec/network dependency in tests |
 
 ## Development quickstart
 

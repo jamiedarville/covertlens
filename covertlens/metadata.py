@@ -17,7 +17,7 @@ score is evidence, not a decoded message or proof of collusion
 (C-02/C-09 analogue for this channel).
 
 `analyze_all_bytes` is the integrated pipeline: one CL-13 parse, then
-LSB (PNG), DCT (JPEG), metadata and geometric (PNG, CL-44) findings
+LSB (PNG), DCT (JPEG), metadata and geometric (PNG/JPEG, CL-52) findings
 attached to the single result, each family individually visible.
 `analyze_and_decide` runs that result through the CL-17 ladder with
 a pinned threshold config.

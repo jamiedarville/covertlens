@@ -221,7 +221,7 @@ def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
     if parsed.status.value != "parsed":
         return base
     image = parsed.image or {}
-    if parsed.media_kind == "png" and image.get("width"):
+    if parsed.media_kind in ("png", "jpeg") and image.get("width"):
         width, height = int(image["width"]), int(image["height"])
         if width * height > max_pixels:
             # Explicit oversized status instead of an unbounded
@@ -235,7 +235,7 @@ def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
 
     result = analyze_all_bytes(data)
     base["analysis"] = result.to_dict()
-    if parsed.media_kind == "png":
+    if parsed.media_kind in ("png", "jpeg"):
         geometric = analyze_geometric_bytes(data)
         geometric.pop("candidate_decode", None)  # reviewer-only (CL-46)
         geometric.pop("finding", None)  # already in analysis.findings

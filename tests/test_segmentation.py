@@ -47,6 +47,18 @@ def test_gap_colour_and_angle_sequences(dataset):
     assert angles == pytest.approx([-30 + 15 * s for s in truth["symbols"]], abs=3.5)
 
 
+def test_lit_dark_near_background_elements_survive_threshold(dataset):
+    # Lit elements are flat grey 235 against background (238,238,232):
+    # Euclidean distance ~5.2, far below the strong-foreground
+    # tolerance. The component-coherence path must keep them.
+    fixture = _one(dataset, "lit_dark", "encoded")
+    result = segment_image(fixture.data)
+    assert result.status == "ok"
+    truth = geo_ground_truth([fixture], role="scorer")[fixture.fixture_id]
+    expected = [45.0 if s == 0 else 235.0 for s in truth["symbols"]]
+    assert result.sequence("brightness") == pytest.approx(expected, abs=6.0)
+
+
 def test_failure_modes_are_explicit(dataset):
     clean = _one(dataset, "height_position", "clean")
     # Blank raster: no foreground at all.
@@ -54,8 +66,16 @@ def test_failure_modes_are_explicit(dataset):
 
     blank = _save_png(bytes((238, 238, 232)) * (64 * 32), 64, 32)
     assert segment_image(blank).status == "no_foreground"
-    # JPEG bytes are rejected, never silently degraded.
-    assert segment_image(b"\xff\xd8\xff\xe0" + bytes(64)).status == "unsupported_media"
+    # Garbage after a JPEG signature does not decode: corrupt.
+    assert segment_image(b"\xff\xd8\xff\xe0" + bytes(64)).status == "corrupt_input"
+    # Progressive JPEG (SOF2) is outside the supported subset.
+    sof2_body = bytes([8, 0, 16, 0, 16, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1])
+    progressive = (
+        b"\xff\xd8\xff\xc2" + (len(sof2_body) + 2).to_bytes(2, "big") + sof2_body
+    )
+    assert segment_image(progressive).status == "unsupported_media"
+    # Non-raster bytes are unsupported, not corrupt.
+    assert segment_image(b"GIF89a" + bytes(32)).status == "unsupported_media"
     # Corrupt PNG header with a valid signature.
     assert segment_image(b"\x89PNG\r\n\x1a\n" + bytes(32)).status == "corrupt_input"
     # Limits are explicit too.
@@ -71,8 +91,13 @@ def test_failure_modes_are_explicit(dataset):
 
 def test_method_and_tolerances_recorded(dataset):
     doc = segment_image(_one(dataset, "lit_dark", "encoded").data).to_dict()
-    assert doc["segmenter"] == {"name": "geometric-segmenter", "version": "1.0.0"}
+    assert doc["segmenter"] == {"name": "geometric-segmenter", "version": "1.1.0"}
     assert doc["tolerances"]["angle_tolerance_deg"] == 3.5
+    assert doc["tolerances"]["background_distance_tolerance"] == 24.0
+    assert doc["tolerances"]["background_distance_floor"] == 3.0
+    assert doc["tolerances"]["coherent_colour_fraction"] == 0.9
+    assert doc["tolerances"]["preserve_thin_components"] is True
+    assert doc["media_kind"] == "png"
     assert {m["status"] for m in doc["failure_modes"]} >= {
         "no_foreground",
         "too_few_elements",
