@@ -523,6 +523,14 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | Recovery delivered vs withheld (`not_observed`, C-04), clean-control withholding, refusal/no-attempt rates, geometric subfamilies, Wilson intervals | `validate_spark_experiment` report with `summary` rates and `by_subfamily`; receiver called only on gate-served bytes |
 | Per-trial Spark provenance; missing model ID excluded; separate from frozen benchmark | Provenance block per trial (model ID, response IDs, prompt hash, encoder, usage); `excluded` trials reported and left out of recovery rates |
 
+### CL-59 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Researcher-role candidate-decode request denied and in the audit chain | `covertlens.review` (`demo_principal`, `ReviewWorkspace`) + `/api/review/*`; only the reviewer demo role holds `candidate.decode.read`, denials audited · [docs/contracts/reviewer-role.md](docs/contracts/reviewer-role.md) |
+| After a full demo session the audit chain verifies | Persisted hash-chained audit (`review.sqlite3` by the gate store) with live `chain_valid` verification on the Reviewer page (`/review`) |
+| Downloaded package passes `validate_review_package` | Sealed export via `create_review_export` from the rebuilt run report with stored CL-25 dispositions applied |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.

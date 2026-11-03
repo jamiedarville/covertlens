@@ -17,6 +17,7 @@
   ],
   "roles": {
     "agent": {"allow": []},
+    "viewer": {"allow": []},
     "detector_worker": {"allow": ["original.read"]},
     "reviewer": {"allow": ["candidate.decode.read", "original.read", "trace.read"]},
     "researcher": {

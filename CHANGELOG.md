@@ -7,6 +7,7 @@ its acceptance criteria, code, contract doc, schema, and tests.
 
 ## Unreleased
 
+- **CL-59** — Add the Reviewer page with demo roles: `viewer`/`researcher`/`reviewer` toggles map to CL-11 principals (clearly labelled demo roles, viewer permissionless), quarantined originals with reviewer-only candidate decodes (other roles denied and audited), the five CL-25 dispositions, sealed review-package download and live audit-chain verification, persisted beside the gate state.
 - **CL-58** — Add the live Muse Spark agents covert-channel experiment: Spark sender/receiver via the Meta Model API with deterministic encoder tools, the gate and frozen ladder between them, refusal/no-attempt outcomes scored separately, per-trial model provenance (missing model ID excluded), Wilson-interval recovery and clean-control withholding rates, reported separately from the frozen benchmark. Live trials need `MODEL_API_KEY`; CI covers the harness with an offline stub client.
 - **CL-55** — Add Benchmarks and Scorecard pages with CLI-identical caches, ROC/band/Wilson views, geometric rows, ablation/latency/robustness charts and provenance. Robustness remains separate from frozen results.
 - **CL-56** — Derive report conclusions and release assessment from evidence, reject unsupported release decisions, propagate audit programming errors, read handoff decisions from the scorecard, and fix default score-cache lookup without guessing between configurations.
