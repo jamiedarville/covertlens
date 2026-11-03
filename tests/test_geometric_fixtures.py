@@ -1,6 +1,6 @@
 import pytest
 
-from covertlens.fixtures import _load_png
+from covertlens._png import load_png
 from covertlens.geometric_fixtures import (
     SUBFAMILIES,
     assign_geo_splits,
@@ -41,7 +41,7 @@ def test_every_fixture_verified_by_independent_remeasurement(dataset):
     for fixture in dataset:
         if fixture.role != "encoded":
             continue
-        pixels, w, h = _load_png(fixture.data)
+        pixels, w, h = load_png(fixture.data)
         _attrs, symbols = measure_attributes(pixels, w, h, fixture.subfamily)
         assert tuple(symbols) == fixture.symbols
 

@@ -53,7 +53,7 @@ def group_key(fixture: Fixture) -> str:
     )
 
 
-def _split_for_group(group: str, policy: SplitPolicy) -> str:
+def split_for_group(group: str, policy: SplitPolicy) -> str:
     digest = hashlib.sha256(f"{policy.dataset_seed}|{group}".encode()).hexdigest()
     bucket = int(digest[:8], 16) / 0xFFFFFFFF
     edge = 0.0
@@ -69,7 +69,7 @@ def assign_splits(
 ) -> dict[str, str]:
     """Assign every fixture to exactly one split, by lineage group."""
     policy = policy or SplitPolicy()
-    return {f.fixture_id: _split_for_group(group_key(f), policy) for f in fixtures}
+    return {f.fixture_id: split_for_group(group_key(f), policy) for f in fixtures}
 
 
 def validate_no_leakage(
@@ -245,3 +245,6 @@ def write_split_dataset(
         encoding="utf-8",
     )
     return target
+
+
+_split_for_group = split_for_group

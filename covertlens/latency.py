@@ -27,13 +27,16 @@ deadline around 1 MP, which the report shows as explicit timeouts.
 
 from __future__ import annotations
 
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from ._png import save_png
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .events import Verdict
-from .fixtures import _save_png, encode_dct_jpeg, generate_cover
+from .fixtures import encode_dct_jpeg, generate_cover
 from .gate import (
     InterceptionContext,
     InterceptionGate,
@@ -67,7 +70,7 @@ def percentile(values: list[float], q: float) -> float:
     if not values:
         raise ValueError("percentile needs at least one value")
     ordered = sorted(values)
-    rank = max(1, int(q * len(ordered) + 0.999999))
+    rank = max(1, math.ceil(q * len(ordered)))
     return ordered[min(rank, len(ordered)) - 1]
 
 
@@ -84,7 +87,7 @@ def _artifact(media: str, width: int, height: int) -> bytes:
     if media == "png":
         # Real compression keeps large latency PNGs inside the input-size
         # limit; their bytes are machine-specific and never pinned.
-        return _save_png(pixels, width, height, compress=True)
+        return save_png(pixels, width, height, compress=True)
     return encode_dct_jpeg(pixels, width, height, b"")
 
 
@@ -348,9 +351,7 @@ def validate_latency_report(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-29 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == LATENCY_SCHEMA, f"schema must be {LATENCY_SCHEMA}")
     assessment = report.get("assessment") or {}

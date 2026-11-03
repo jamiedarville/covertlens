@@ -29,12 +29,17 @@ CL-27/CL-54 thresholds.
 
 from __future__ import annotations
 
-import math
-import random
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from ._stats import (
+    bootstrap_interval,
+    roc_auc,
+    score_summary,
+    wilson,
+)
+from ._validation import make_need
 from .acceleration import sample_counts
 from .fixtures import Fixture
 from .parsing import (
@@ -195,116 +200,6 @@ def analyze_lsb_bytes(
     return replace(result, findings=(finding,))
 
 
-def _wilson(successes: int, total: int, z: float = 1.96) -> dict[str, Any]:
-    """Wilson score interval for a binomial proportion."""
-    if total <= 0:
-        return {"estimate": None, "ci_low": 0.0, "ci_high": 1.0, "n": 0}
-    p = successes / total
-    denom = 1.0 + z * z / total
-    centre = (p + z * z / (2 * total)) / denom
-    half = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denom
-    return {
-        "estimate": round(p, 6),
-        "ci_low": round(max(0.0, centre - half), 6),
-        "ci_high": round(min(1.0, centre + half), 6),
-        "n": total,
-    }
-
-
-def _roc_auc(positive: list[float], negative: list[float]) -> float | None:
-    """Mann-Whitney ROC-AUC (ties count half); ``None`` if a class is empty."""
-    if not positive or not negative:
-        return None
-    wins = 0.0
-    for pos in positive:
-        for neg in negative:
-            if pos > neg:
-                wins += 1.0
-            elif pos == neg:
-                wins += 0.5
-    return round(wins / (len(positive) * len(negative)), 6)
-
-
-def _average_precision(scored: list[tuple[float, int]]) -> float | None:
-    """Average precision over (score, label) rows; ``None`` if no positives."""
-    positives = sum(label for _, label in scored)
-    if positives == 0:
-        return None
-    ordered = sorted(scored, key=lambda row: row[0], reverse=True)
-    hits = 0
-    precision_sum = 0.0
-    for rank, (_, label) in enumerate(ordered, start=1):
-        if label:
-            hits += 1
-            precision_sum += hits / rank
-    return round(precision_sum / positives, 6)
-
-
-def _percentile(sorted_values: list[float], fraction: float) -> float:
-    if not sorted_values:
-        return 0.0
-    index = min(
-        len(sorted_values) - 1,
-        max(0, int(math.floor(fraction * len(sorted_values)))),
-    )
-    return sorted_values[index]
-
-
-def _bootstrap_interval(
-    positive: list[float],
-    negative: list[float],
-    *,
-    replicates: int,
-    seed: int,
-    metric: str,
-) -> dict[str, Any]:
-    """Stratified bootstrap percentile interval for AUC / average precision."""
-    estimate = (
-        _roc_auc(positive, negative)
-        if metric == "roc_auc"
-        else _average_precision([(s, 1) for s in positive] + [(s, 0) for s in negative])
-    )
-    if estimate is None or replicates <= 0:
-        return {
-            "estimate": estimate,
-            "ci_low": estimate,
-            "ci_high": estimate,
-            "bootstrap_replicates": 0,
-            "bootstrap_seed": seed,
-        }
-    rng = random.Random(seed)
-    values: list[float] = []
-    for _ in range(replicates):
-        pos = [positive[rng.randrange(len(positive))] for _ in positive]
-        neg = [negative[rng.randrange(len(negative))] for _ in negative]
-        value = (
-            _roc_auc(pos, neg)
-            if metric == "roc_auc"
-            else _average_precision([(s, 1) for s in pos] + [(s, 0) for s in neg])
-        )
-        if value is not None:
-            values.append(value)
-    values.sort()
-    return {
-        "estimate": estimate,
-        "ci_low": round(_percentile(values, 0.025), 6) if values else estimate,
-        "ci_high": round(_percentile(values, 0.975), 6) if values else estimate,
-        "bootstrap_replicates": replicates,
-        "bootstrap_seed": seed,
-    }
-
-
-def _score_summary(scores: list[float]) -> dict[str, Any]:
-    if not scores:
-        return {"count": 0, "min": None, "max": None, "mean": None}
-    return {
-        "count": len(scores),
-        "min": round(min(scores), 6),
-        "max": round(max(scores), 6),
-        "mean": round(sum(scores) / len(scores), 6),
-    }
-
-
 def benchmark_lsb(
     fixtures: Iterable[Fixture],
     *,
@@ -373,9 +268,9 @@ def benchmark_lsb(
                 "fp": fp,
                 "tn": tn,
                 "fn": fn,
-                "precision": _wilson(tp, tp + fp),
-                "recall": _wilson(tp, tp + fn),
-                "false_positive_rate": _wilson(fp, fp + tn),
+                "precision": wilson(tp, tp + fp),
+                "recall": wilson(tp, tp + fn),
+                "false_positive_rate": wilson(fp, fp + tn),
             }
         )
 
@@ -388,14 +283,14 @@ def benchmark_lsb(
             "sweep": [
                 {
                     "threshold": round(t, 6),
-                    "recall": _wilson(
+                    "recall": wilson(
                         sum(
                             r["label"] == 1 and float(r["score"]) >= t
                             for r in band_rows
                         ),
                         len(band_positive),
                     ),
-                    "false_positive_rate": _wilson(
+                    "false_positive_rate": wilson(
                         sum(score >= t for score in negative), len(negative)
                     ),
                 }
@@ -404,11 +299,11 @@ def benchmark_lsb(
             "fixture_count": len(band_rows),
             "positive_count": len(band_positive),
             "negative_count": len(band_negative),
-            "scores": _score_summary([float(r["score"]) for r in band_rows]),
+            "scores": score_summary([float(r["score"]) for r in band_rows]),
             # Each encoded band is ranked against every negative, so a
             # band cannot borrow strength from easier bands.
             "roc_auc_vs_negatives": (
-                _roc_auc(band_positive, negative) if band_positive else None
+                roc_auc(band_positive, negative) if band_positive else None
             ),
         }
 
@@ -430,14 +325,14 @@ def benchmark_lsb(
         "negative_count": len(negative),
         "rows": rows,
         "by_payload_band": by_band,
-        "roc_auc": _bootstrap_interval(
+        "roc_auc": bootstrap_interval(
             positive,
             negative,
             replicates=bootstrap_replicates,
             seed=bootstrap_seed,
             metric="roc_auc",
         ),
-        "pr_auc": _bootstrap_interval(
+        "pr_auc": bootstrap_interval(
             positive,
             negative,
             replicates=bootstrap_replicates,
@@ -459,9 +354,7 @@ def validate_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one benchmark report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == BENCHMARK_SCHEMA, f"schema must be {BENCHMARK_SCHEMA}")
     need(
@@ -806,14 +699,14 @@ def benchmark_lsb_pairs(
         for r in scored
         if r["label"] == 0 and r["pov_score"] is not None
     ]
-    pairs_auc = _bootstrap_interval(
+    pairs_auc = bootstrap_interval(
         pairs_pos,
         pairs_neg,
         replicates=bootstrap_replicates,
         seed=bootstrap_seed,
         metric="roc_auc",
     )
-    pov_auc = _bootstrap_interval(
+    pov_auc = bootstrap_interval(
         pov_pos,
         pov_neg,
         replicates=bootstrap_replicates,
@@ -828,9 +721,9 @@ def benchmark_lsb_pairs(
             "fixture_count": len(band_rows),
             "positive_count": len(band_pos),
             "negative_count": len(band_rows) - len(band_pos),
-            "scores": _score_summary([float(r["pairs_score"]) for r in band_rows]),
+            "scores": score_summary([float(r["pairs_score"]) for r in band_rows]),
             "roc_auc_vs_negatives": (
-                _roc_auc(band_pos, pairs_neg) if band_pos else None
+                roc_auc(band_pos, pairs_neg) if band_pos else None
             ),
         }
     return {
@@ -875,9 +768,7 @@ def validate_lsb_pairs_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one CL-61 pairs benchmark; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         report.get("schema") == SPA_BENCHMARK_SCHEMA,

@@ -18,7 +18,7 @@ from __future__ import annotations
 import struct
 import zlib
 
-from .parsing import _paeth
+from .parsing import paeth
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
@@ -118,7 +118,7 @@ def decode_png_rgb(
             for i in range(stride):
                 left = line[i - bpp] if i >= bpp else 0
                 up_left = prev[i - bpp] if i >= bpp else 0
-                line[i] = (line[i] + _paeth(left, prev[i], up_left)) & 0xFF
+                line[i] = (line[i] + paeth(left, prev[i], up_left)) & 0xFF
         else:
             raise PngDecodeError(f"unknown PNG filter {ftype}")
         rows.append(bytes(line))

@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from ._validation import make_need
 from .events import Verdict
 from .gate import InterceptionGate
 from .manifest import ERROR_CLASSES, load_manifest
@@ -239,9 +240,7 @@ def validate_outcome(record: dict[str, Any]) -> list[str]:
     """Return validation errors for one outcome record; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(record.get("schema") == OUTCOME_SCHEMA, f"schema must be {OUTCOME_SCHEMA}")
     need(

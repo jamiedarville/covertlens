@@ -14,6 +14,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ._validation import make_need
+
 FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata", "geometric")
 DETECTOR_MODES = ("enabled", "log_only", "disabled")
 FAIL_CLOSED = "no_clean_verdict_withhold"
@@ -48,9 +50,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     """Return validation errors; an empty list means the manifest is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         isinstance(manifest.get("manifest_id"), str) and bool(manifest["manifest_id"]),

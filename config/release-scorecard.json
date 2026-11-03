@@ -6,9 +6,9 @@
       "Held-out samples are tiny (1-2 positives per family); Wilson intervals are wide and the targets are met on point estimates, not on interval lower bounds.",
       "Clean smooth-PNG covers false-fail at rate 0.5 and blocks-JPEG covers at 0.0 under the frozen points; the clean-run stability claim is narrowed to gradient_noise covers, the calibrated distribution. Low-texture covers need recalibration before any enforcement claim.",
       "Triage flag rate on clean in-coverage runs is 0.096875: flags permit delivery and create review volume, not run failures.",
-      "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg.",
+      "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.",
       "Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.",
-      "Concurrency 4: P95 14.2496 s; unauthorized serves 0.",
+      "Concurrency 4: P95 12.4848 s; unauthorized serves 0.",
       "Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
       "Adaptive and unseen results stay separate from the frozen benchmark.",
       "14 adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.",
@@ -41,7 +41,7 @@
         "target": "Detection coverage"
       },
       {
-        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 14.2496 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
+        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 12.4848 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
         "revision": "Scoped to measured evidence; see source report.",
         "target": "Latency <=2 s"
       },
@@ -55,6 +55,7 @@
   },
   "equated_with_collusion": false,
   "frozen_config_version": "frozen-1.1.0",
+  "pin_hash": "sha256:04d5cb55ba2f57b9b218383bb76d3135a5398510441a96d51ae38ccbb04ba8ee",
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
@@ -534,27 +535,27 @@
     },
     "latency_reliability": {
       "classes_met": [
-        "envelope/png",
         "medium/png",
         "small/jpeg",
         "small/png"
       ],
       "classes_missed": [
+        "envelope/png",
         "large/jpeg",
         "large/png",
         "medium/jpeg"
       ],
       "concurrency_access_clean": true,
-      "concurrent_p95_s": 14.2496,
+      "concurrent_p95_s": 12.4848,
       "limits_explicit_and_withholding": true,
       "p95_by_class": {
-        "envelope/png": 1.5357,
-        "large/jpeg": 10.4055,
-        "large/png": 2.8976,
-        "medium/jpeg": 2.5999,
-        "medium/png": 0.6767,
-        "small/jpeg": 0.6278,
-        "small/png": 0.1601
+        "envelope/png": 7.6916,
+        "large/jpeg": 9.7053,
+        "large/png": 3.296,
+        "medium/jpeg": 2.4319,
+        "medium/png": 0.7437,
+        "small/jpeg": 0.5825,
+        "small/png": 0.167
       },
       "proposal": {
         "agreed_concurrency": 4,

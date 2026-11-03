@@ -24,10 +24,11 @@ import json
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ._validation import canonical_hash, canonical_json, make_need
+from ._validation import now_iso as _now
 from .splits import scorer_ground_truth
 from .store import ArtifactStore
 
@@ -64,9 +65,7 @@ def validate_runtime_policy(policy: dict[str, Any]) -> list[str]:
     """Return validation errors; an empty list means the policy is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(bool(policy.get("policy_id")), "policy_id is required")
     need(
@@ -143,10 +142,6 @@ def can(
     )
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 @dataclass(frozen=True)
 class AuditEntry:
     seq: int
@@ -197,10 +192,7 @@ class AuditLog:
             "detail": detail or {},
             "prev_hash": prev_hash,
         }
-        entry_hash = (
-            "sha256:"
-            + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
-        )
+        entry_hash = canonical_hash(body)
         entry = AuditEntry(
             entry_id=f"aud_{seq:06d}",
             entry_hash=entry_hash,
@@ -224,10 +216,7 @@ class AuditLog:
                 "detail": entry.detail,
                 "prev_hash": entry.prev_hash,
             }
-            digest = (
-                "sha256:"
-                + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
-            )
+            digest = canonical_hash(body)
             if digest != entry.entry_hash:
                 return False
             prev_hash = entry.entry_hash
@@ -300,9 +289,7 @@ class EvidenceGateway:
         """
         if not candidate or not candidate.get("text"):
             return None
-        digest = hashlib.sha256(
-            json.dumps(candidate, sort_keys=True).encode()
-        ).hexdigest()
+        digest = hashlib.sha256(canonical_json(candidate).encode()).hexdigest()
         decode_id = f"cand_{digest[:12]}"
         self._candidate_decodes[decode_id] = {
             "decode_id": decode_id,

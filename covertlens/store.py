@@ -21,11 +21,11 @@ import json
 import sqlite3
 import threading
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from . import ids
+from ._validation import now_iso as _now
 
 RETENTION_POLICY = "dataset_lifetime"
 
@@ -52,10 +52,6 @@ def sniff_media_kind(data: bytes) -> str:
     if data.startswith(_JPEG_MAGIC):
         return "jpeg"
     raise UnsupportedKindError("original must be PNG or JPEG bytes (eval scope)")
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 @dataclass(frozen=True)

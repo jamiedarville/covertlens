@@ -25,7 +25,7 @@ from functools import lru_cache
 from typing import Any
 
 from . import ids
-from .fixtures import _save_png
+from ._png import save_png
 from .frozen_benchmark import wilson_interval
 from .geometric import (
     DEFAULT_GEO_CONFIG,
@@ -49,7 +49,7 @@ _BG = (245, 245, 245)
 # Deterministic half-open intervals helper -------------------------------
 
 
-def _rate(successes: int, n: int) -> dict[str, Any]:
+def rate(successes: int, n: int) -> dict[str, Any]:
     interval = wilson_interval(successes, n)
     return {
         "successes": successes,
@@ -135,7 +135,7 @@ def benign_controls(per_kind: int = 3) -> list[dict[str, Any]]:
                     h = int(30 + rng.random() * 120)
                     _rect(pixels, x, _HEIGHT - 20 - h, 18, h, (52, 84, 120))
                     x += 18 + int(6 + rng.random() * 16)
-            data = _save_png(bytes(pixels), _WIDTH, _HEIGHT)
+            data = save_png(bytes(pixels), _WIDTH, _HEIGHT)
             controls.append(
                 {
                     "control_id": f"benign_{kind}_{k}",
@@ -191,7 +191,7 @@ def run_structured_recall(pairs_per_subfamily: int = 5) -> dict[str, Any]:
         rows[subfamily] = {
             "n": len(classes),
             "classifications": _tally(classes),
-            "structure_recall": _rate(
+            "structure_recall": rate(
                 sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)
             ),
         }
@@ -264,32 +264,32 @@ def run_geo_benchmark(
         subfamilies[name] = {
             "encoded": {
                 "classifications": _tally(enc),
-                "recall_any_signal": _rate(
+                "recall_any_signal": rate(
                     sum(1 for c in enc if c != SIGNAL_NONE), len(enc)
                 ),
-                "recall_structure": _rate(
+                "recall_structure": rate(
                     sum(1 for c in enc if c == SIGNAL_STRUCTURE), len(enc)
                 ),
             },
             "benign": {
                 "classifications": _tally(ben),
-                "false_structure_claims": _rate(
+                "false_structure_claims": rate(
                     sum(1 for c in ben if c == SIGNAL_STRUCTURE), len(ben)
                 ),
-                "any_signal": _rate(sum(1 for c in ben if c != SIGNAL_NONE), len(ben)),
+                "any_signal": rate(sum(1 for c in ben if c != SIGNAL_NONE), len(ben)),
             },
             # Three benchmark rows per subfamily (CL-46).
             "rows": {
                 "continuous": {
                     "classifications": _tally(continuous[name]),
-                    "false_structure_claims": _rate(
+                    "false_structure_claims": rate(
                         sum(1 for c in continuous[name] if c == SIGNAL_STRUCTURE),
                         len(continuous[name]),
                     ),
                 },
                 "quantized_unstructured": {
                     "classifications": _tally(enc),
-                    "false_structure_claims": _rate(
+                    "false_structure_claims": rate(
                         sum(1 for c in enc if c == SIGNAL_STRUCTURE), len(enc)
                     ),
                 },
@@ -303,7 +303,7 @@ def run_geo_benchmark(
             "context": _CONTROL_CONTEXTS[kind],
             "n": len(classes),
             "classifications": _tally(classes),
-            "false_structure_claims": _rate(
+            "false_structure_claims": rate(
                 sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)
             ),
         }
@@ -342,7 +342,7 @@ def run_geo_benchmark(
             "n": len(chart_declared),
             "classifications": _tally(chart_declared),
             "expected": SIGNAL_DECLARED,
-            "false_structure_claims": _rate(
+            "false_structure_claims": rate(
                 sum(1 for c in chart_declared if c == SIGNAL_STRUCTURE),
                 len(chart_declared),
             ),
@@ -351,7 +351,7 @@ def run_geo_benchmark(
             "n": len(chart_undeclared),
             "classifications": _tally(chart_undeclared),
             "expected": "quantized_without_structure",
-            "false_structure_claims": _rate(
+            "false_structure_claims": rate(
                 sum(1 for c in chart_undeclared if c == SIGNAL_STRUCTURE),
                 len(chart_undeclared),
             ),
@@ -409,11 +409,11 @@ def run_geo_benchmark(
             "status": "evaluated",
             "pairs": len(enc_classes),
             "encoded_classifications": _tally(enc_classes),
-            "encoded_quantized_recall": _rate(
+            "encoded_quantized_recall": rate(
                 sum(1 for c in enc_classes if c != SIGNAL_NONE), len(enc_classes)
             ),
             "clean_classifications": _tally(clean_classes),
-            "clean_no_signal": _rate(
+            "clean_no_signal": rate(
                 sum(1 for c in clean_classes if c == SIGNAL_NONE), len(clean_classes)
             ),
             "step_matches_within_tolerance": {
@@ -494,10 +494,10 @@ def run_geo_benchmark(
         "overall_context_only": {
             "note": "pooled numbers are context only; coverage is "
             "claimed per subfamily, never pooled",
-            "encoded_recall_any_signal": _rate(
+            "encoded_recall_any_signal": rate(
                 sum(1 for c in pooled_enc if c != SIGNAL_NONE), len(pooled_enc)
             ),
-            "benign_false_structure_claims": _rate(
+            "benign_false_structure_claims": rate(
                 sum(1 for c in pooled_ben if c == SIGNAL_STRUCTURE), len(pooled_ben)
             ),
         },
@@ -543,3 +543,6 @@ def validate_geo_benchmark(report: dict[str, Any]) -> list[str]:
                     if metric.get("successes", 0) > metric["n"]:
                         errors.append(f"{name}/{side}/{key}: successes exceed n")
     return errors
+
+
+_rate = rate

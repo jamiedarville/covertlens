@@ -29,6 +29,7 @@ from enum import StrEnum
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .acceleration import unfilter_row
 from .manifest import FAMILIES
 from .store import ArtifactStore
@@ -176,9 +177,7 @@ def validate_finding(finding: Finding | dict[str, Any]) -> list[str]:
     data = finding.to_dict() if isinstance(finding, Finding) else dict(finding)
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(data.get("family") in FAMILIES, f"family must be one of {FAMILIES}")
     need(
@@ -216,9 +215,7 @@ def validate_result(result: AnalysisResult | dict[str, Any]) -> list[str]:
     data = result.to_dict() if isinstance(result, AnalysisResult) else dict(result)
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(data.get("schema") == RESULT_SCHEMA, f"schema must be {RESULT_SCHEMA}")
     need(
@@ -334,7 +331,7 @@ def _check_dimensions(width: int, height: int, limits: ParserLimits) -> None:
         )
 
 
-def _paeth(a: int, b: int, c: int) -> int:
+def paeth(a: int, b: int, c: int) -> int:
     p = a + b - c
     pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
     return a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
@@ -471,7 +468,7 @@ def _parse_png(
             for i in range(stride):
                 left = line[i - channels] if i >= channels else 0
                 up_left = prev[i - channels] if i >= channels else 0
-                line[i] = (line[i] + _paeth(left, prev[i], up_left)) & 0xFF
+                line[i] = (line[i] + paeth(left, prev[i], up_left)) & 0xFF
         else:
             raise _Fail(AnalysisStatus.CORRUPT, f"unknown PNG filter {ftype}")
         rows.append(bytes(line))
@@ -487,7 +484,7 @@ def _parse_png(
     return image, coverage, b"".join(rows)
 
 
-_ZIGZAG = (
+ZIGZAG = (
     0,
     1,
     8,
@@ -626,7 +623,7 @@ class _BitReader:
         return value - ((1 << size) - 1) if value < (1 << (size - 1)) else value
 
 
-def _parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
+def parse_huffman(body: bytes) -> dict[int, dict[tuple[int, int], int]]:
     tables: dict[int, dict[tuple[int, int], int]] = {}
     i = 0
     while i < len(body):
@@ -698,7 +695,7 @@ def _parse_jpeg(
         elif marker == 0xDB:
             has_dqt = True
         elif marker == 0xC4:
-            tables.update(_parse_huffman(body))
+            tables.update(parse_huffman(body))
         elif marker in (
             0xC0,
             0xC1,
@@ -859,7 +856,7 @@ def _parse_jpeg(
                         raise _Fail(
                             AnalysisStatus.CORRUPT, "JPEG AC run overflows block"
                         )
-                    coeffs[_ZIGZAG[k]] = reader.read_value(sz)
+                    coeffs[ZIGZAG[k]] = reader.read_value(sz)
                     k += 1
                 blocks.append(tuple(coeffs))
     coverage = {"blocks_parsed": len(blocks), "coefficients_parsed": len(blocks) * 64}
@@ -982,3 +979,8 @@ def analyze_version(
         artifact_id=version.artifact_id,
         artifact_version_id=artifact_version_id,
     )
+
+
+_paeth = paeth
+_ZIGZAG = ZIGZAG
+_parse_huffman = parse_huffman

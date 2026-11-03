@@ -32,14 +32,35 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from ._stats import roc_auc
+from ._validation import make_need
 from .events import Event
-from .lsb import _roc_auc
 from .parsing import AnalysisResult
 from .trace_join import join_trace
 
 SEQUENCE_SCHEMA = "covertlens.sequence-context"
 SEQUENCE_SCHEMA_VERSION = 1
 SEQUENCE_VERSION = "1.0.0"
+SEQUENCE_CONFIG_VERSION = "1.0.0"
+
+
+@dataclass(frozen=True)
+class SequenceConfig:
+    """Versioned context-scoring weights (CL-63; formerly magic numbers)."""
+
+    version: str = SEQUENCE_CONFIG_VERSION
+    delivered_weight: float = 0.12
+    action_weight: float = 0.08
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "delivered_weight": self.delivered_weight,
+            "action_weight": self.action_weight,
+        }
+
+
+DEFAULT_SEQUENCE_CONFIG = SequenceConfig()
 
 
 def _max_score(delivery: dict[str, Any]) -> float:
@@ -50,6 +71,8 @@ def _max_score(delivery: dict[str, Any]) -> float:
 def build_episode_context(
     events: Iterable[Event | dict[str, Any]],
     results: Iterable[AnalysisResult | dict[str, Any]] = (),
+    *,
+    join_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the within-run episode context from a CL-16 join.
 
@@ -57,7 +80,10 @@ def build_episode_context(
     (sender/recipient identities) accumulate every artifact and
     action they took part in across all episodes of the run.
     """
-    report = join_trace(list(events), results)  # raises across runs
+    # CL-63: reuse a caller's join when supplied (report builds one).
+    report = (
+        join_report if join_report is not None else join_trace(list(events), results)
+    )
     deliveries: list[dict[str, Any]] = []
     participants: dict[str, dict[str, Any]] = {}
     episodes: dict[str, dict[str, Any]] = {}
@@ -157,11 +183,14 @@ def sequence_features(
     }
 
 
-def context_only_score(features: dict[str, Any]) -> float:
+def context_only_score(
+    features: dict[str, Any], config: SequenceConfig | None = None
+) -> float:
     """Repetition/behaviour pressure with no image scores involved."""
-    pressure = 0.12 * int(features.get("prior_delivered") or 0) + 0.08 * int(
-        features.get("prior_actions") or 0
-    )
+    active = config or DEFAULT_SEQUENCE_CONFIG
+    pressure = active.delivered_weight * int(
+        features.get("prior_delivered") or 0
+    ) + active.action_weight * int(features.get("prior_actions") or 0)
     return round(min(1.0, pressure), 6)
 
 
@@ -220,7 +249,7 @@ def benchmark_sequences(cases: Iterable[SequenceCase]) -> dict[str, Any]:
     negative = [c for c in rows if c.label == 0]
 
     def auc(scorer) -> float | None:
-        return _roc_auc([scorer(c) for c in positive], [scorer(c) for c in negative])
+        return roc_auc([scorer(c) for c in positive], [scorer(c) for c in negative])
 
     return {
         "schema": "covertlens.sequence-benchmark",
@@ -248,9 +277,7 @@ def validate_episode_context(context: dict[str, Any]) -> list[str]:
     """Return validation errors for an episode context; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(context.get("schema") == SEQUENCE_SCHEMA, f"schema must be {SEQUENCE_SCHEMA}")
     need(bool(context.get("run_id")), "run_id is required (context never spans runs)")

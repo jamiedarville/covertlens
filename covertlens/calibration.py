@@ -27,10 +27,12 @@ freeze (CL-26 pin differences name the drift).
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from ._validation import make_need
 from .fixtures import Fixture
 from .geometric import DEFAULT_GEO_CONFIG, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
 from .geometric_fixtures import GeoFixture
@@ -255,11 +257,23 @@ def development_calibration_data() -> tuple[list[Fixture | GeoFixture], dict[str
     return fixtures, assignments
 
 
+FROZEN_CONFIG_ENV = "COVERTLENS_FROZEN_CONFIG"
+
+
 def load_frozen_thresholds(
     path: str | Path | None = None,
 ) -> tuple[ThresholdConfig, dict[str, Any]]:
-    """Load the owners' frozen config + its calibration provenance."""
-    doc = json.loads(Path(path or FROZEN_PATH).read_text())
+    """Load the owners' frozen config + its calibration provenance.
+
+    With no explicit `path`, the `COVERTLENS_FROZEN_CONFIG`
+    environment variable selects the file (CL-65) — this is how a
+    campaign rolls back to a previous freeze — and the shipped
+    `config/frozen-thresholds.json` is the default.
+    """
+    if path is None:
+        env_path = os.environ.get(FROZEN_CONFIG_ENV)
+        path = Path(env_path) if env_path else FROZEN_PATH
+    doc = json.loads(Path(path).read_text())
     config_doc = doc["threshold_config"]
     families = {}
     for family, block in (config_doc.get("families") or {}).items():
@@ -282,9 +296,7 @@ def validate_calibration(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a calibration report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         report.get("schema") == CALIBRATION_SCHEMA,

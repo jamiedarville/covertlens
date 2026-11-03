@@ -27,8 +27,10 @@ import math
 from collections.abc import Iterable
 from typing import Any
 
+from ._png import save_png
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
-from .fixtures import Fixture, _save_png, build_dataset, encode_dct_jpeg, generate_cover
+from .fixtures import Fixture, build_dataset, encode_dct_jpeg, generate_cover
 from .metadata import analyze_all_bytes
 from .metadata_fixtures import build_metadata_dataset
 from .pinning import dataset_hash
@@ -163,7 +165,7 @@ def evaluate_held_out(
 def _clean_artifact(family: str, pattern: str, seed: int) -> bytes:
     pixels = generate_cover(64, 48, pattern=pattern, seed=seed)
     if family == "spatial_lsb":
-        return _save_png(pixels, 64, 48)
+        return save_png(pixels, 64, 48)
     return encode_dct_jpeg(pixels, 64, 48, b"")
 
 
@@ -313,9 +315,7 @@ def validate_frozen_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-28 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == BENCHMARK_SCHEMA, f"schema must be {BENCHMARK_SCHEMA}")
     need(

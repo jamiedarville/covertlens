@@ -51,7 +51,7 @@ def evaluate_geometric_held_out(
 ) -> dict[str, Any]:
     """Evaluate only held-out rows; no labels feed back into calibration."""
     from .calibration import load_frozen_thresholds
-    from .geo_benchmark import _rate, benign_controls
+    from .geo_benchmark import benign_controls, rate
     from .pinning import dataset_hash
 
     frozen_config, provenance = load_frozen_thresholds()
@@ -68,13 +68,13 @@ def evaluate_geometric_held_out(
         decisions = [decide_verdict([r["finding"]], active) for r in results]
         rows[subfamily] = {
             "fixture_ids": [f.fixture_id for f in encoded],
-            "recall_triage": _rate(
+            "recall_triage": rate(
                 sum(d.verdict.value != "log" for d in decisions), len(encoded)
             ),
-            "recall_enforcement": _rate(
+            "recall_enforcement": rate(
                 sum(d.delivery == "withhold" for d in decisions), len(encoded)
             ),
-            "recall_structure": _rate(
+            "recall_structure": rate(
                 sum(r["classification"] == SIGNAL_STRUCTURE for r in results),
                 len(encoded),
             ),
@@ -90,11 +90,11 @@ def evaluate_geometric_held_out(
         ]
         decisions = [decide_verdict([r["finding"]], active) for r in reports]
         controls[name] = {
-            "false_structure": _rate(
+            "false_structure": rate(
                 sum(r["classification"] == SIGNAL_STRUCTURE for r in reports),
                 len(reports),
             ),
-            "false_enforcement": _rate(
+            "false_enforcement": rate(
                 sum(d.delivery == "withhold" for d in decisions), len(decisions)
             ),
         }

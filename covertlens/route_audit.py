@@ -32,6 +32,7 @@ from collections.abc import Callable
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .events import Event, EventType, ParseStatus, Verdict
 from .fixtures import build_pair
 from .gate import (
@@ -333,9 +334,7 @@ def validate_route_audit(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-32 audit report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == AUDIT_SCHEMA, f"schema must be {AUDIT_SCHEMA}")
     need(report.get("routes_failed") == [], "no inventoried route may fail its checks")

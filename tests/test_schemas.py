@@ -87,6 +87,7 @@ CASES = {
     "route-audit-demo": ("route-trace-audit.schema.json", lambda p: [p]),
     "export-demo": ("review-export.schema.json", lambda p: [p["package"]]),
     "robustness-demo": ("robustness-evaluation.schema.json", lambda p: [p]),
+    "adaptive-demo": ("adaptive-robustness.schema.json", lambda p: [p]),
     "scorecard-demo": ("release-scorecard.schema.json", lambda p: [p]),
     "handoff-demo": ("ops-handoff.schema.json", lambda p: [p]),
     "segmentation-demo": ("segmentation.schema.json", lambda p: list(p.values())),

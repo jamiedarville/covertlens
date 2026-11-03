@@ -26,6 +26,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .events import Event, EventType, ParseStatus, TraceLog, Verdict
 from .parsing import AnalysisResult
 
@@ -337,9 +338,7 @@ def validate_trace_join(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one join report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == JOIN_SCHEMA, f"schema must be {JOIN_SCHEMA}")
     need(

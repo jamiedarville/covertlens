@@ -62,9 +62,9 @@ def test_lit_dark_near_background_elements_survive_threshold(dataset):
 def test_failure_modes_are_explicit(dataset):
     clean = _one(dataset, "height_position", "clean")
     # Blank raster: no foreground at all.
-    from covertlens.fixtures import _save_png
+    from covertlens._png import save_png
 
-    blank = _save_png(bytes((238, 238, 232)) * (64 * 32), 64, 32)
+    blank = save_png(bytes((238, 238, 232)) * (64 * 32), 64, 32)
     assert segment_image(blank).status == "no_foreground"
     # Garbage after a JPEG signature does not decode: corrupt.
     assert segment_image(b"\xff\xd8\xff\xe0" + bytes(64)).status == "corrupt_input"

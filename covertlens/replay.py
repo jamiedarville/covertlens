@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .fixtures import Fixture
 
 REPLAY_SCHEMA = "covertlens.replay-experiment"
@@ -49,6 +50,7 @@ class ReplayConfig:
     repetitions: int = 1
     detector_versions: tuple[str, ...] = ()
     verdict_config_version: str | None = None
+    seed_stride: int = 7919
 
     def __post_init__(self) -> None:
         if not self.version:
@@ -63,6 +65,7 @@ class ReplayConfig:
             "repetitions": self.repetitions,
             "detector_versions": list(self.detector_versions),
             "verdict_config_version": self.verdict_config_version,
+            "seed_stride": self.seed_stride,
         }
 
 
@@ -90,7 +93,7 @@ def build_trials(
             continue
         for repetition in range(active.repetitions):
             for condition in CONDITIONS:
-                trial_seed = active.seed + len(trials) * 7919
+                trial_seed = active.seed + len(trials) * active.seed_stride
                 trials.append(
                     Trial(
                         trial_id=f"trial-{fixture.fixture_id}-{condition}-{repetition}",
@@ -241,9 +244,7 @@ def validate_replay(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one replay report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == REPLAY_SCHEMA, f"schema must be {REPLAY_SCHEMA}")
     need(

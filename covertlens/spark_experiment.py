@@ -46,9 +46,11 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from . import ids
+from ._png import save_png
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .events import ParseStatus
-from .fixtures import _save_png, encode_dct_jpeg, encode_lsb_png, generate_cover
+from .fixtures import encode_dct_jpeg, encode_lsb_png, generate_cover
 from .frozen_benchmark import wilson_interval
 from .gate import (
     InterceptionContext,
@@ -228,7 +230,7 @@ def encode_sender_image(
         )
     width, height = 128, 96
     cover = generate_cover(width, height, seed=scene_seed)
-    clean_png = _save_png(cover, width, height)
+    clean_png = save_png(cover, width, height)
     payload = secret.encode("ascii") if secret is not None else b""
     if family == "spatial_lsb":
         data = encode_lsb_png(cover, width, height, payload) if payload else clean_png
@@ -453,9 +455,7 @@ def validate_spark_experiment(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one CL-58 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == SPARK_SCHEMA, f"schema must be {SPARK_SCHEMA}")
     need(

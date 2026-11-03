@@ -20,6 +20,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ._validation import make_need
+
 SCORECARD_SCHEMA = "covertlens.release-scorecard"
 SCORECARD_VERSION = "1.4.0"
 SCORECARD_PATH = (
@@ -63,22 +65,14 @@ def build_scorecard() -> dict[str, Any]:
     from .geo_benchmark import run_geo_benchmark
     from .geo_calibration import evaluate_geometric_held_out
     from .latency import run_reliability_report
-    from .pilot import run_pilot
+    from .pilot import DEFAULT_ADJUDICATIONS, run_pilot
     from .review_export import run_export_verification
     from .robustness import run_robustness
     from .route_audit import run_route_audit
 
     frozen = run_frozen_evaluation()
     latency = run_reliability_report()
-    pilot = run_pilot(
-        adjudications={
-            "uns-1": {
-                "disposition": "suspected",
-                "note": "strong DCT evidence; no independent basis yet",
-            },
-            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
-        }
-    )
+    pilot = run_pilot(adjudications=DEFAULT_ADJUDICATIONS)
     ablations = run_ablations()
     audit = run_route_audit()
     exports = run_export_verification()
@@ -315,6 +309,16 @@ def build_scorecard() -> dict[str, Any]:
         "universal_claim": False,
     }
 
+    # CL-65: record the campaign pin hash so escalation can cite it.
+    from .calibration import load_frozen_thresholds as _load_frozen
+    from .fixtures import build_dataset as _build_dataset
+    from .pinning import build_pin as _build_pin
+
+    _frozen_config = _load_frozen()[0]
+    card["pin_hash"] = _build_pin(_build_dataset(), threshold_config=_frozen_config)[
+        "pin_hash"
+    ]
+
     targets = scorecard_targets(card)
     safety = all(
         targets[name]
@@ -403,13 +407,16 @@ def validate_scorecard(scorecard: dict[str, Any]) -> list[str]:
     """Return validation errors for a scorecard; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         scorecard.get("schema") == SCORECARD_SCHEMA,
         f"schema must be {SCORECARD_SCHEMA}",
+    )
+    pin_hash = scorecard.get("pin_hash")
+    need(
+        isinstance(pin_hash, str) and pin_hash.startswith("sha256:"),
+        "pin_hash must be recorded in the scorecard (CL-65)",
     )
     for name in (
         "detection_frozen_benchmark",

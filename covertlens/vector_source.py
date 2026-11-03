@@ -35,10 +35,11 @@ import math
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .geometric import analyze_geometric, analyze_geometric_bytes
 from .geometric_fixtures import BASE_Y, GeoFixture, scene_plan
-from .segmentation import SegmentationResult, SegmenterConfig, _reading_order
+from .segmentation import SegmentationResult, SegmenterConfig, reading_order
 from .store import ArtifactStore
 from .verdicts import DecisionContext, ThresholdConfig, decide_verdict
 
@@ -162,7 +163,7 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
             return SegmentationResult(
                 "corrupt_source", detail=f"bad object: {exc}", config=config
             )
-    ordered = _reading_order(raw, config.row_overlap_fraction)
+    ordered = reading_order(raw, config.row_overlap_fraction)
     elements = []
     for i, comp in enumerate(ordered):
         nxt = ordered[i + 1] if i + 1 < len(ordered) else None
@@ -309,9 +310,7 @@ def validate_vector_binding(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a combined report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         report.get("schema") == "covertlens.vector-binding",
