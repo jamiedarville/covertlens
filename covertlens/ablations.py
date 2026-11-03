@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .fixtures import build_dataset
 from .metadata import analyze_all_bytes
@@ -254,9 +255,7 @@ def validate_ablations(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-31 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == ABLATION_SCHEMA, f"schema must be {ABLATION_SCHEMA}")
     for arm in ARMS:

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .fixtures import Fixture, build_pair
 from .metadata import analyze_all_bytes
@@ -329,9 +330,7 @@ def validate_robustness(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-34 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         report.get("schema") == ROBUSTNESS_SCHEMA, f"schema must be {ROBUSTNESS_SCHEMA}"

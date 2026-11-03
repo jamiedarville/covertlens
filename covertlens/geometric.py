@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ._validation import make_need
 from .grid import discover_grid
 from .parsing import AnalysisResult, AnalysisStatus, Finding
 from .segmentation import SegmentationResult, segment_image
@@ -893,9 +894,7 @@ def validate_geometric_report(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a geometric report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     finding = report.get("finding")
     if report.get("status") != "ok":

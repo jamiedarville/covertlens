@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adaptive-robustness.schema.json",
+  "title": "CovertLens genuinely adaptive attacker report (CL-62)",
+  "type": "object",
+  "required": [
+    "schema",
+    "frozen_config_version",
+    "separate_from_frozen_benchmark",
+    "merged_into_frozen_claim",
+    "query_budget_per_point",
+    "experiments",
+    "figure",
+    "equated_with_collusion"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.adaptive-robustness"},
+    "separate_from_frozen_benchmark": {"const": true},
+    "merged_into_frozen_claim": {"const": false},
+    "equated_with_collusion": {"const": false},
+    "query_budget_per_point": {"type": "integer", "minimum": 1},
+    "experiments": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["family", "payload_unit", "operating_points", "controls", "confounded"],
+        "properties": {
+          "family": {"enum": ["spatial_lsb", "jpeg_dct", "geometric"]},
+          "confounded": {"type": "boolean"},
+          "controls": {
+            "type": "object",
+            "required": ["n", "withheld"],
+            "properties": {"n": {"type": "integer", "minimum": 1}}
+          }
+        }
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": ["kind", "points"],
+      "properties": {
+        "kind": {"const": "achieved_payload_vs_operating_point"},
+        "points": {"type": "array", "minItems": 1}
+      }
+    }
+  }
+}

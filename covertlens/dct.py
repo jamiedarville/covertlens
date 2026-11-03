@@ -32,9 +32,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from ._stats import bootstrap_interval, roc_auc, score_summary, wilson
+from ._validation import make_need
 from .acceleration import numpy_backend
 from .fixtures import Fixture
-from .lsb import _bootstrap_interval, _roc_auc, _score_summary, _wilson
 from .parsing import (
     AnalysisResult,
     AnalysisStatus,
@@ -334,7 +335,7 @@ def benchmark_dct(
                         "threshold": round(threshold, 6),
                         "tp": hits,
                         "fn": len(band_rows) - hits,
-                        "recall": _wilson(hits, len(band_rows)),
+                        "recall": wilson(hits, len(band_rows)),
                     }
                 )
             else:
@@ -343,7 +344,7 @@ def benchmark_dct(
                         "threshold": round(threshold, 6),
                         "fp": hits,
                         "tn": len(band_rows) - hits,
-                        "false_positive_rate": _wilson(hits, len(band_rows)),
+                        "false_positive_rate": wilson(hits, len(band_rows)),
                     }
                 )
         return points
@@ -365,9 +366,9 @@ def benchmark_dct(
                 "fp": fp,
                 "tn": tn,
                 "fn": fn,
-                "precision": _wilson(tp, tp + fp),
-                "recall": _wilson(tp, tp + fn),
-                "false_positive_rate": _wilson(fp, fp + tn),
+                "precision": wilson(tp, tp + fp),
+                "recall": wilson(tp, tp + fn),
+                "false_positive_rate": wilson(fp, fp + tn),
             }
         )
 
@@ -379,9 +380,9 @@ def benchmark_dct(
             "fixture_count": len(band_rows),
             "positive_count": len(band_positive),
             "negative_count": len(band_rows) - len(band_positive),
-            "scores": _score_summary([float(r["score"]) for r in band_rows]),
+            "scores": score_summary([float(r["score"]) for r in band_rows]),
             "roc_auc_vs_negatives": (
-                _roc_auc(band_positive, negative) if band_positive else None
+                roc_auc(band_positive, negative) if band_positive else None
             ),
             "sweep": band_sweep(band_rows, positive_band=bool(band_positive)),
         }
@@ -404,14 +405,14 @@ def benchmark_dct(
         "negative_count": len(negative),
         "rows": rows,
         "by_payload_band": by_band,
-        "roc_auc": _bootstrap_interval(
+        "roc_auc": bootstrap_interval(
             positive,
             negative,
             replicates=bootstrap_replicates,
             seed=bootstrap_seed,
             metric="roc_auc",
         ),
-        "pr_auc": _bootstrap_interval(
+        "pr_auc": bootstrap_interval(
             positive,
             negative,
             replicates=bootstrap_replicates,
@@ -682,7 +683,7 @@ def benchmark_dct_calibrated(
     Both detectors stay individually visible: every row carries both
     scores, and each detector gets its own bootstrap ROC-AUC.
     """
-    from .lsb import _bootstrap_interval, _roc_auc, _score_summary
+    from ._stats import bootstrap_interval, roc_auc, score_summary
 
     active = config or CAL_DEFAULT_CONFIG
     if bootstrap_replicates < 0:
@@ -724,14 +725,14 @@ def benchmark_dct_calibrated(
         for r in scored
         if r["label"] == 0 and r["pov_score"] is not None
     ]
-    cal_auc = _bootstrap_interval(
+    cal_auc = bootstrap_interval(
         cal_pos,
         cal_neg,
         replicates=bootstrap_replicates,
         seed=bootstrap_seed,
         metric="roc_auc",
     )
-    pov_auc = _bootstrap_interval(
+    pov_auc = bootstrap_interval(
         pov_pos,
         pov_neg,
         replicates=bootstrap_replicates,
@@ -746,8 +747,8 @@ def benchmark_dct_calibrated(
             "fixture_count": len(band_rows),
             "positive_count": len(band_pos),
             "negative_count": len(band_rows) - len(band_pos),
-            "scores": _score_summary([float(r["calibrated_score"]) for r in band_rows]),
-            "roc_auc_vs_negatives": (_roc_auc(band_pos, cal_neg) if band_pos else None),
+            "scores": score_summary([float(r["calibrated_score"]) for r in band_rows]),
+            "roc_auc_vs_negatives": (roc_auc(band_pos, cal_neg) if band_pos else None),
         }
     return {
         "schema": CAL_BENCHMARK_SCHEMA,
@@ -791,9 +792,7 @@ def validate_dct_calibrated_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one CL-61 calibrated benchmark."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         report.get("schema") == CAL_BENCHMARK_SCHEMA,
@@ -847,9 +846,7 @@ def validate_dct_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one DCT benchmark report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == BENCHMARK_SCHEMA, f"schema must be {BENCHMARK_SCHEMA}")
     need(

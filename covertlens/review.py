@@ -436,7 +436,8 @@ class ReviewWorkspace:
 
     def build_pin_for(self, gate: InterceptionGate, run_id: str) -> dict[str, Any]:
         """Pin over the run's distinct artifact versions (CL-26 shape)."""
-        from .pinning import _hash, default_detector_versions
+        from ._validation import canonical_hash
+        from .pinning import default_detector_versions
         from .verdicts import DEFAULT_CONFIG
 
         rows = sorted(
@@ -452,7 +453,7 @@ class ReviewWorkspace:
             "pin_version": "1.0.0",
             "dataset": {
                 "fixture_count": len(rows),
-                "dataset_hash": _hash(rows),
+                "dataset_hash": canonical_hash(rows),
                 "fixtures": dict(rows),
             },
             "detectors": default_detector_versions(),
@@ -462,7 +463,9 @@ class ReviewWorkspace:
             },
             "seeds": {"review_export": 20261159},
         }
-        pin["pin_hash"] = _hash({k: v for k, v in pin.items() if k != "pin_hash"})
+        pin["pin_hash"] = canonical_hash(
+            {k: v for k, v in pin.items() if k != "pin_hash"}
+        )
         return pin
 
     def export_package(

@@ -128,3 +128,66 @@ report-demo`, `export-demo`, `pilot-demo`, `scorecard-demo`.
 unauthorized serve, or a broken audit chain / package seal are
 release-blocking incidents; file them against the frozen config
 version and pin hash from the scorecard.
+
+## 7. Which frozen config is live (CL-65)
+
+- Default: `config/frozen-thresholds.json`. Override with the
+  `COVERTLENS_FROZEN_CONFIG` environment variable (any path);
+  `load_frozen_thresholds()` honours it whenever no explicit path
+  is passed. The web service and every CLI demo read it the same way.
+- **Rollback:** keep the previous freeze file (it is in git history).
+  Point `COVERTLENS_FROZEN_CONFIG` at it, restart the service, and
+  add an entry to [campaign-log.md](campaign-log.md) using its
+  template. Prior verdicts are not rewritten. Rolling back to the
+  pre-freeze shipped config (`DEFAULT_CONFIG`) restores log-only
+  behaviour, as verified by `handoff-demo`.
+
+## 8. Re-freezing thresholds (CL-65)
+
+1. Run `make refreeze` (or `python scripts/refreeze.py`). It
+   recalibrates on development data only, bumps the frozen config
+   version, rewrites `config/frozen-thresholds.json` (preserving the
+   `owners`/`coverage` blocks), then regenerates
+   `config/release-scorecard.json` — including its `pin_hash` — from
+   the new freeze.
+2. Run the full test suite (`pytest`, `ruff`, `mypy`). In particular
+   `test_published_artifact_matches_built_scorecard` must pass: the
+   published scorecard is byte-compared against a rebuild.
+3. Add a campaign-log entry with the old/new versions and the new
+   pin hash. Never edit a frozen file without bumping its version.
+
+## 9. Regenerating published artefacts (CL-65)
+
+- Scorecard: `make refreeze`, or rebuild without touching the freeze
+  with `python -m covertlens scorecard-demo --json --out config/release-scorecard.json`
+  (only valid while the freeze is unchanged).
+- Benchmark/report caches for the web service: `python scripts/precompute.py --data-dir /data`.
+- Benchmark JSON for review: the CLI demos (`benchmark-lsb`, `benchmark-dct`,
+  `geo-benchmark-demo`, `frozen-demo`, `robustness-demo`, `adaptive-demo`),
+  each with `--json --out <path>`.
+
+## 10. Where the 10 MiB / 20 MP / 2 s limits live (CL-65)
+
+- Library: `ParserLimits` in `covertlens/parsing.py`
+  (`max_input_bytes=10 MiB`, `max_pixels=20 MP`, decompressed cap,
+  `max_runtime_s=2.0`). Library callers pass their own
+  `ParserLimits(...)` to `analyze_bytes`/`analyze_all_bytes`.
+- Web service: uploads are capped before reading by
+  `COVERTLENS_MAX_UPLOAD_BYTES` (default 8 MiB) and analysis wall-clock
+  by `COVERTLENS_ANALYZE_TIMEOUT_S` (default 30 s) in `app/main.py`.
+  Changing a limit changes the claim — record it in the campaign log.
+
+## 11. When `validate_handoff` fails (CL-65)
+
+1. Run `python -m covertlens handoff-demo --json` and read the failing
+   key; each `validate_handoff` message names the section
+   (`threshold_operations`, `quarantine_handling`, `infrastructure_errors`,
+   `reruns`, `dataset_retirement`).
+2. Threshold failures: check which freeze is live (§7) — a stray
+   `COVERTLENS_FROZEN_CONFIG` is the usual cause. Re-freeze (§8) only
+   if the change is intended.
+3. Quarantine/audit failures: do not override verdicts to make it
+   pass. Capture the audit head and pin hash from the scorecard and
+   escalate as a release-blocking incident (§6).
+4. Infrastructure failures: treat as availability (§3), fix the
+   input/pipeline, then rerun. Never resolve by editing thresholds.

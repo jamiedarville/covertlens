@@ -31,10 +31,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from ._stats import roc_auc, score_summary, wilson
+from ._validation import make_need
 from .dct import detect_dct, detect_dct_calibrated
 from .fixtures import Fixture
 from .geometric import detect_geometric
-from .lsb import _roc_auc, _score_summary, _wilson, detect_lsb, detect_lsb_pairs
+from .lsb import detect_lsb, detect_lsb_pairs
 from .metadata_fixtures import (
     ALLOWED_TASK_METADATA,
     PAYLOAD_KEYWORD,
@@ -78,6 +80,9 @@ class MetadataConfig:
     allowed_keywords: tuple[str, ...] = ALLOWED_TASK_METADATA
     payload_base_score: float = 0.9
     unknown_entry_score: float = 0.3
+    # CL-63: payload-size nudge constants, formerly magic 512/5120.
+    payload_size_cap_bytes: int = 512
+    payload_size_divisor: float = 5120.0
 
     def __post_init__(self) -> None:
         if not self.version or not self.payload_keyword:
@@ -94,6 +99,8 @@ class MetadataConfig:
             "allowed_keywords": list(self.allowed_keywords),
             "payload_base_score": self.payload_base_score,
             "unknown_entry_score": self.unknown_entry_score,
+            "payload_size_cap_bytes": self.payload_size_cap_bytes,
+            "payload_size_divisor": self.payload_size_divisor,
         }
 
 
@@ -128,7 +135,12 @@ def classify_entries(
         )
     if payload_bytes:
         # Strong evidence, nudged up by payload size (capped at 1.0).
-        score = min(1.0, active.payload_base_score + min(payload_bytes, 512) / 5120.0)
+        score = min(
+            1.0,
+            active.payload_base_score
+            + min(payload_bytes, active.payload_size_cap_bytes)
+            / active.payload_size_divisor,
+        )
     elif unknown:
         score = min(
             active.payload_base_score - 0.01,
@@ -293,9 +305,9 @@ def benchmark_metadata(
                 "fp": fp,
                 "tn": len(negative) - fp,
                 "fn": len(positive) - tp,
-                "precision": _wilson(tp, tp + fp),
-                "recall": _wilson(tp, tp + len(positive) - tp),
-                "false_positive_rate": _wilson(fp, len(negative)),
+                "precision": wilson(tp, tp + fp),
+                "recall": wilson(tp, tp + len(positive) - tp),
+                "false_positive_rate": wilson(fp, len(negative)),
             }
         )
     by_band: dict[str, Any] = {}
@@ -306,14 +318,14 @@ def benchmark_metadata(
             "sweep": [
                 {
                     "threshold": round(t, 6),
-                    "recall": _wilson(
+                    "recall": wilson(
                         sum(
                             r["label"] == 1 and float(r["score"]) >= t
                             for r in band_rows
                         ),
                         len(band_pos),
                     ),
-                    "false_positive_rate": _wilson(
+                    "false_positive_rate": wilson(
                         sum(score >= t for score in negative), len(negative)
                     ),
                 }
@@ -322,8 +334,8 @@ def benchmark_metadata(
             "fixture_count": len(band_rows),
             "positive_count": len(band_pos),
             "negative_count": len(band_rows) - len(band_pos),
-            "scores": _score_summary([float(r["score"]) for r in band_rows]),
-            "roc_auc_vs_negatives": _roc_auc(band_pos, negative) if band_pos else None,
+            "scores": score_summary([float(r["score"]) for r in band_rows]),
+            "roc_auc_vs_negatives": roc_auc(band_pos, negative) if band_pos else None,
         }
     return {
         "schema": BENCHMARK_SCHEMA,
@@ -340,7 +352,7 @@ def benchmark_metadata(
         "skipped_non_metadata": skipped,
         "positive_count": len(positive),
         "negative_count": len(negative),
-        "roc_auc": {"estimate": _roc_auc(positive, negative)},
+        "roc_auc": {"estimate": roc_auc(positive, negative)},
         "rows": rows,
         "by_payload_band": by_band,
         "sweep": sweep,
@@ -352,9 +364,7 @@ def validate_metadata_benchmark(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a metadata benchmark; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == BENCHMARK_SCHEMA, f"schema must be {BENCHMARK_SCHEMA}")
     detector = report.get("detector") or {}

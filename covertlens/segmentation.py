@@ -59,6 +59,7 @@ import struct
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from ._validation import make_need
 from .acceleration import numpy_backend
 from .geometric_fixtures import GRIDS
 from .jpeg_pixels import JpegDecodeError, decode_jpeg_rgb, probe_jpeg_size
@@ -294,7 +295,7 @@ def _thin_components_numpy(
     return result
 
 
-def _reading_order(
+def reading_order(
     components: list[dict[str, Any]], overlap: float
 ) -> list[dict[str, Any]]:
     """Group into rows by vertical overlap; rows top-down, items L-to-R."""
@@ -729,7 +730,7 @@ def segment_image(
                 "angle_deg": round(math.degrees(math.atan(-(num / den))), 3),
             }
         )
-    ordered = _reading_order(raw, active.row_overlap_fraction)
+    ordered = reading_order(raw, active.row_overlap_fraction)
     elements: list[dict[str, Any]] = []
     for i, comp in enumerate(ordered):
         nxt = ordered[i + 1] if i + 1 < len(ordered) else None
@@ -785,9 +786,7 @@ def validate_segmentation(doc: dict[str, Any]) -> list[str]:
     """Return validation errors for a segmentation result doc."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         doc.get("schema") == SEGMENTATION_SCHEMA,
@@ -812,3 +811,6 @@ def validate_segmentation(doc: dict[str, Any]) -> list[str]:
             "elements must be indexed in reading order",
         )
     return errors
+
+
+_reading_order = reading_order

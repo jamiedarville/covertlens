@@ -39,8 +39,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import ids
-from .fixtures import _load_png, _save_png
-from .splits import SPLITS, SplitPolicy, _split_for_group
+from ._png import load_png, save_png
+from .splits import SPLITS, SplitPolicy, split_for_group
 
 GEO_GENERATOR_NAME = "geometric-scenes"
 GEO_GENERATOR_VERSION = "1.0.0"
@@ -391,7 +391,7 @@ def _render(
                     perp = rx * perpx + ry * perpy
                     if 0 <= along <= length and abs(perp) <= half:
                         put(px, py, colour)
-    return _save_png(bytes(pixels), width, height)
+    return save_png(bytes(pixels), width, height)
 
 
 # --------------------------------------------------------- re-measurement ---
@@ -512,7 +512,7 @@ def measure_attributes(
 
 def verify_geo_fixture(fixture: GeoFixture) -> bool:
     """Independent re-measurement must reproduce the ground truth."""
-    pixels, width, height = _load_png(fixture.data)
+    pixels, width, height = load_png(fixture.data)
     recorded = (fixture.encoder.get("config") or {}).get("grid") or {}
     attributes, symbols = measure_attributes(
         pixels, width, height, fixture.subfamily, grid=recorded
@@ -767,9 +767,9 @@ def _negative(
         context = "chart"
     elif kind == "benign_edit":
         data = _render(elements, width, height)
-        pixels, w, h = _load_png(data)
+        pixels, w, h = load_png(data)
         edited = bytes(min(255, v + 20) for v in pixels)
-        data = _save_png(edited, w, h)
+        data = save_png(edited, w, h)
         context = "scene"
     elif kind == "generator_variation":
         data = _render(elements, width, height, background=(225, 232, 240))
@@ -882,7 +882,7 @@ def assign_geo_splits(
 ) -> dict[str, str]:
     """CL-10 lineage-group split assignment for geometric fixtures."""
     active = policy or SplitPolicy()
-    return {f.fixture_id: _split_for_group(geo_group_key(f), active) for f in fixtures}
+    return {f.fixture_id: split_for_group(geo_group_key(f), active) for f in fixtures}
 
 
 def validate_geo_splits(

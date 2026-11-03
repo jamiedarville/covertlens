@@ -99,10 +99,11 @@ def test_oversized_pixels_return_explicit_status(client, geo_encoded, monkeypatc
 
 
 def test_jpeg_upload_has_geometric_overlay_and_fidelity_limitation(client):
-    from covertlens.fixtures import _load_png, encode_dct_jpeg
+    from covertlens._png import load_png
+    from covertlens.fixtures import encode_dct_jpeg
 
     clean, _ = build_geo_pair("height_position")
-    pixels, width, height = _load_png(clean.data)
+    pixels, width, height = load_png(clean.data)
     data = encode_dct_jpeg(pixels, width, height, b"", quality=95)
     response = client.post(
         "/api/analyze", files={"file": ("scene.jpg", data, "image/jpeg")}

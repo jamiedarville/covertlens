@@ -23,12 +23,11 @@ per-delivery decisions, closed with a `bundle_hash` that
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Callable, Iterable
 from typing import Any
 
 from . import ids
+from ._validation import canonical_hash, canonical_json
 from .dct import (
     CAL_DETECTOR_NAME,
     CAL_DETECTOR_VERSION,
@@ -51,6 +50,9 @@ from .metadata import (
 )
 from .verdicts import ThresholdConfig
 
+# CL-63: default stochastic agreement bound (formerly a magic default).
+AGREEMENT_MIN_DEFAULT = 1.0
+
 PIN_SCHEMA = "covertlens.pin"
 PIN_SCHEMA_VERSION = 1
 PIN_VERSION = "1.0.0"
@@ -58,12 +60,8 @@ EXPORT_SCHEMA = "covertlens.report-export"
 EXPORT_SCHEMA_VERSION = 1
 
 
-def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, default=str)
-
-
-def _hash(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(_canonical(value).encode()).hexdigest()
+_canonical = canonical_json
+_hash = canonical_hash
 
 
 def dataset_hash(fixtures: Iterable[Fixture | GeoFixture]) -> str:
@@ -166,7 +164,7 @@ def verify_reproducibility(
     repetitions: int = 3,
     stochastic_scorer: Callable[[bytes, int], float] | None = None,
     base_seed: int = 0,
-    agreement_min: float = 1.0,
+    agreement_min: float = AGREEMENT_MIN_DEFAULT,
 ) -> dict[str, Any]:
     """Repeat the pipeline and check verdict/score reproduction.
 

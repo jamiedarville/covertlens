@@ -34,6 +34,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .events import Verdict
 from .fixtures import build_dataset
@@ -57,10 +58,11 @@ HANDOFF_VERSION = "1.0.0"
 RUNBOOK_PATH = "docs/operations-runbook.md"
 
 
-def _threshold_ops(fixtures: list) -> dict[str, Any]:
+def _threshold_ops(fixtures: list, frozen=None) -> dict[str, Any]:
     from .parsing import Finding
 
-    frozen, _doc = load_frozen_thresholds()
+    if frozen is None:
+        frozen, _doc = load_frozen_thresholds()
     pin = build_pin(fixtures, threshold_config=frozen, seeds={"campaign": 1})
     drift = pin_differences(
         pin, fixtures, threshold_config=DEFAULT_CONFIG, seeds={"campaign": 1}
@@ -88,12 +90,12 @@ def _threshold_ops(fixtures: list) -> dict[str, Any]:
     }
 
 
-def _quarantine_handling() -> dict[str, Any]:
+def _quarantine_handling(fixtures: list | None = None) -> dict[str, Any]:
     store = ArtifactStore()
     audit = AuditLog()
     gateway = EvidenceGateway(store, audit)
     gate = InterceptionGate(store)
-    fixture = build_dataset()[0]
+    fixture = (fixtures or build_dataset())[0]
     ctx = InterceptionContext(
         run_id="run_handoff", episode_id="ep_1", sender_id="agent-a"
     )
@@ -146,8 +148,9 @@ def _quarantine_handling() -> dict[str, Any]:
     }
 
 
-def _reruns(fixtures: list) -> dict[str, Any]:
-    frozen, _doc = load_frozen_thresholds()
+def _reruns(fixtures: list, frozen=None) -> dict[str, Any]:
+    if frozen is None:
+        frozen, _doc = load_frozen_thresholds()
     first = run_replay(fixtures)
     second = run_replay(fixtures)
     repro = verify_reproducibility(fixtures[:4], threshold_config=frozen, repetitions=2)
@@ -199,6 +202,7 @@ def _retirement(fixtures: list) -> dict[str, Any]:
 def run_handoff_verification() -> dict[str, Any]:
     """Exercise every load-bearing runbook claim; return the report."""
     fixtures = build_dataset()
+    frozen, _doc = load_frozen_thresholds()
     limits = limit_behavior_checks()
     return {
         "schema": HANDOFF_SCHEMA,
@@ -206,8 +210,8 @@ def run_handoff_verification() -> dict[str, Any]:
         "handoff_version": HANDOFF_VERSION,
         "runbook": RUNBOOK_PATH,
         "release_decision": load_scorecard()["decision"]["value"],
-        "threshold_operations": _threshold_ops(fixtures),
-        "quarantine_handling": _quarantine_handling(),
+        "threshold_operations": _threshold_ops(fixtures, frozen),
+        "quarantine_handling": _quarantine_handling(fixtures),
         "infrastructure_errors": {
             "timeout_status": limits["timeout_status"],
             "oversized_status": limits["oversized_status"],
@@ -215,7 +219,7 @@ def run_handoff_verification() -> dict[str, Any]:
             "enforcement_clean_verdict": limits["enforcement_clean_verdict"],
             "delivery_withheld": limits["delivery_withheld"],
         },
-        "reruns": _reruns(fixtures),
+        "reruns": _reruns(fixtures, frozen),
         "dataset_retirement": _retirement(fixtures),
         "retention_rule": "original bytes and evidence stay internal "
         "for the dataset lifetime (C-01); exports "
@@ -228,9 +232,7 @@ def validate_handoff(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-36 report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == HANDOFF_SCHEMA, f"schema must be {HANDOFF_SCHEMA}")
     thresholds = report.get("threshold_operations") or {}

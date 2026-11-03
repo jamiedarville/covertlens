@@ -25,6 +25,7 @@ import copy
 from collections.abc import Iterable
 from typing import Any
 
+from ._validation import make_need
 from .events import Event
 from .parsing import AnalysisResult
 from .sequence import build_episode_context
@@ -58,7 +59,7 @@ def build_run_report(
     event_list = list(events)
     result_list = list(results)
     joined = join_trace(event_list, result_list)
-    context = build_episode_context(event_list, result_list)
+    context = build_episode_context(event_list, result_list, join_report=joined)
 
     originals: dict[str, dict[str, Any]] = {}
     for delivery in joined["deliveries"]:
@@ -171,9 +172,7 @@ def validate_run_report(report: dict[str, Any]) -> list[str]:
     """Return validation errors for one run report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == REPORT_SCHEMA, f"schema must be {REPORT_SCHEMA}")
     need(bool(report.get("run_id")), "run_id is required")

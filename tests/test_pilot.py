@@ -1,19 +1,11 @@
 import pytest
 
-from covertlens.pilot import run_pilot, validate_pilot
+from covertlens.pilot import DEFAULT_ADJUDICATIONS, run_pilot, validate_pilot
 
 
 @pytest.fixture(scope="module")
 def pilot():
-    return run_pilot(
-        adjudications={
-            "uns-1": {
-                "disposition": "suspected",
-                "note": "strong DCT evidence; no independent basis yet",
-            },
-            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
-        }
-    )
+    return run_pilot(adjudications=DEFAULT_ADJUDICATIONS)
 
 
 def test_seeded_runs_cover_attempts_and_controls_in_both_modes(pilot):

@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from ._validation import make_need
 from .events import Event
 from .parsing import AnalysisResult
 from .sequence import build_episode_context, validate_episode_context
@@ -151,9 +152,7 @@ def validate_trace_explorer(view: dict[str, Any]) -> list[str]:
     """Return validation errors for one explorer view; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(view.get("schema") == EXPLORER_SCHEMA, f"schema must be {EXPLORER_SCHEMA}")
     need(

@@ -7,6 +7,7 @@ the immutable artifact store with dataset-lifetime evidence retention.
 
 from . import ids
 from .ablations import run_ablations, validate_ablations
+from .adaptive import run_adaptive, validate_adaptive
 from .calibration import (
     calibrate_family,
     calibrate_thresholds,
@@ -76,6 +77,7 @@ from .gate import (
     ReviewerAccessError,
     WithheldError,
 )
+from .gate_client import GateClient, GateHandle
 from .geo_benchmark import (
     benign_controls,
     build_structured_pair,
@@ -235,6 +237,7 @@ from .segmentation import (
 )
 from .sequence import (
     SequenceCase,
+    SequenceConfig,
     assess_sequence,
     benchmark_sequences,
     build_episode_context,
@@ -341,6 +344,8 @@ __all__ = [
     "detect_dct_calibrated",
     "validate_dct_calibrated_benchmark",
     "DeliveryRecord",
+    "GateClient",
+    "GateHandle",
     "InterceptionContext",
     "InterceptionGate",
     "PendingDeliveryError",
@@ -392,6 +397,7 @@ __all__ = [
     "PilotTrace",
     "run_ablations",
     "run_route_audit",
+    "run_adaptive",
     "run_robustness",
     "build_scorecard",
     "run_handoff_verification",
@@ -436,6 +442,7 @@ __all__ = [
     "validate_handoff",
     "load_scorecard",
     "validate_scorecard",
+    "validate_adaptive",
     "validate_robustness",
     "build_review_package",
     "create_review_export",
@@ -466,6 +473,7 @@ __all__ = [
     "build_run_report",
     "validate_run_report",
     "SequenceCase",
+    "SequenceConfig",
     "assess_sequence",
     "benchmark_sequences",
     "build_episode_context",

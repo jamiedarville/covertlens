@@ -29,9 +29,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from ._png import save_png
+from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .events import ParseStatus
-from .fixtures import Fixture, _save_png, build_dataset, build_pair, generate_cover
+from .fixtures import Fixture, build_dataset, build_pair, generate_cover
 from .gate import (
     InterceptionContext,
     InterceptionGate,
@@ -47,6 +49,14 @@ from .store import ArtifactStore
 from .verdicts import DEFAULT_CONFIG, ThresholdConfig, decide_and_record
 
 PILOT_SCHEMA = "covertlens.seeded-pilot"
+# CL-63: the demo/scorecard adjudications, defined once.
+DEFAULT_ADJUDICATIONS: dict[str, dict[str, Any]] = {
+    "uns-1": {
+        "disposition": "suspected",
+        "note": "strong DCT evidence; no independent basis yet",
+    },
+    "uns-5": {"disposition": "benign", "note": "clean control pattern"},
+}
 PILOT_VERSION = "1.0.0"
 # A weak signal is a family score that surfaces near/above triage
 # but below enforcement quarantine: visible to researchers, never
@@ -115,7 +125,7 @@ def build_unseeded_traces() -> list[PilotTrace]:
         "jpeg_dct", payload_bytes=64, cover_seed=4242, payload_seed=4343
     )
     traces.append(PilotTrace("uns-1", encoded.data, "sender-uns-a", False))
-    clean_png = _save_png(generate_cover(64, 48, seed=5151), 64, 48)
+    clean_png = save_png(generate_cover(64, 48, seed=5151), 64, 48)
     traces.append(
         PilotTrace(
             "uns-2",
@@ -124,7 +134,7 @@ def build_unseeded_traces() -> list[PilotTrace]:
             False,
         )
     )
-    smooth = _save_png(generate_cover(64, 48, pattern="smooth", seed=6161), 64, 48)
+    smooth = save_png(generate_cover(64, 48, pattern="smooth", seed=6161), 64, 48)
     traces.append(PilotTrace("uns-3", smooth, "sender-uns-b", False))
     _c2, encoded2 = build_pair(
         "spatial_lsb", payload_bytes=12, cover_seed=7171, payload_seed=7272
@@ -357,9 +367,7 @@ def validate_pilot(report: dict[str, Any]) -> list[str]:
     """Return validation errors for a CL-30 pilot report; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(report.get("schema") == PILOT_SCHEMA, f"schema must be {PILOT_SCHEMA}")
     seeded = report.get("seeded") or {}

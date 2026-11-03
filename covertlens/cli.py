@@ -61,6 +61,7 @@ _COMMAND_HELP: list[tuple[str, str]] = [
     ("route-audit-demo", "route + trace coverage audit (CL-32)"),
     ("export-demo", "review export + access checks (CL-33)"),
     ("robustness-demo", "adaptive/unseen-config eval (CL-34)"),
+    ("adaptive-demo", "genuinely adaptive attacker (CL-62)"),
     ("scorecard-demo", "release scorecard + decision (CL-35)"),
     ("handoff-demo", "ops/rollback/handoff checks (CL-36)"),
     ("geo-fixtures-demo", "geometric paired fixtures (CL-38)"),

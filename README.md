@@ -557,6 +557,33 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | Calibrated-histogram DCT detector alongside PoV; both detectors individually visible | `covertlens.dct` (`dct-calibrated-histogram` v1.0.0, neighbor-calibrated histogram TV distance) in `benchmark_dct_calibrated`: 0.833 vs 0.715; both findings attached by `analyze_all_bytes` · [schemas/dct-calibrated-benchmark.schema.json](schemas/dct-calibrated-benchmark.schema.json) |
 | No regression on the existing frozen benchmark | Frozen score selection and calibration pinned by detector name to the originally calibrated PoV/metadata detectors; new detectors gate to 0 on the frozen suite's uncorrelated covers; `benchmark-matching` CLI demo |
 
+### CL-62 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| A figure of achieved payload vs operating point per family, with the loop's query budget recorded | `covertlens.adaptive` (`run_adaptive`, score-oracle binary search under triage/quarantine points) · `adaptive-demo` CLI · [docs/contracts/adaptive-attacker.md](docs/contracts/adaptive-attacker.md) · [schemas/adaptive-robustness.schema.json](schemas/adaptive-robustness.schema.json) |
+| Every experiment has controls; the `confounded` flag is computed from them | Matched clean controls per family in `run_adaptive`; withheld controls mark the experiment confounded |
+
+### CL-63 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| No module imports a private name from another module | `covertlens._stats` / `._png` / `._validation` public helpers; AST guard in `tests/test_shared_helpers.py` · [docs/contracts/shared-helpers.md](docs/contracts/shared-helpers.md) |
+| All tests pass with no behaviour change; versioned config dumps include the moved constants | `SequenceConfig`, `ReplayConfig.seed_stride`, `MetadataConfig.payload_size_*`, `AGREEMENT_MIN_DEFAULT`; frozen `Event`; single `_now`, canonical JSON, pilot adjudications |
+
+### CL-64 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| The example runs against `docker run` of the image and prints the trace for both deliveries | `covertlens.gate_client.GateClient` (`intercept`/`attempt`/`access`) + [examples/harness_example.py](examples/harness_example.py) · [docs/contracts/harness-adapter.md](docs/contracts/harness-adapter.md) |
+| The withheld delivery raises `WithheldError` on the client, and no bytes reach the stub recipient | `GateClient.access` maps 403 to `WithheldError` (409 to `PendingDeliveryError`); `tests/test_gate_client.py` |
+
+### CL-65 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Someone who did not write the code can roll back, re-freeze, and regenerate the scorecard by following the runbook alone, with all tests passing | `COVERTLENS_FROZEN_CONFIG` honoured by `load_frozen_thresholds`; `make refreeze` (`scripts/refreeze.py`); `pin_hash` in the scorecard; [docs/campaign-log.md](docs/campaign-log.md); runbook sections 7-11 in [docs/operations-runbook.md](docs/operations-runbook.md) |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.

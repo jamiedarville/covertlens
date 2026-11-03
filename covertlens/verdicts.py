@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 from .events import Event, EventType, Verdict
 from .gate import InterceptionGate
 from .manifest import FAMILIES, load_manifest
@@ -180,9 +181,7 @@ def validate_threshold_config(config: ThresholdConfig | dict[str, Any]) -> list[
     data = config.to_dict() if isinstance(config, ThresholdConfig) else dict(config)
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(bool(data.get("version")), "version is required")
     families = data.get("families") or {}
@@ -414,9 +413,7 @@ def validate_decision(decision: VerdictDecision | dict[str, Any]) -> list[str]:
     )
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(data.get("schema") == DECISION_SCHEMA, f"schema must be {DECISION_SCHEMA}")
     need(

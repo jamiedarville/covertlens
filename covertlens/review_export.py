@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import ids
-from .pinning import _hash
+from ._validation import canonical_hash, make_need
 from .runtime import AuditLog, Principal, can, load_runtime_policy
 
 EXPORT_PACKAGE_SCHEMA = "covertlens.review-export"
@@ -110,7 +110,7 @@ def build_review_package(
         "contains_raw_bytes": False,
         "equated_with_collusion": False,
     }
-    package["package_hash"] = _hash(
+    package["package_hash"] = canonical_hash(
         {k: v for k, v in package.items() if k != "package_hash"}
     )
     return package
@@ -282,9 +282,7 @@ def validate_review_package(package: dict[str, Any]) -> list[str]:
     """Return validation errors for a review package; empty is valid."""
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     need(
         package.get("schema") == EXPORT_PACKAGE_SCHEMA,
@@ -292,7 +290,7 @@ def validate_review_package(package: dict[str, Any]) -> list[str]:
     )
     sealed = {k: v for k, v in package.items() if k != "package_hash"}
     need(
-        package.get("package_hash") == _hash(sealed),
+        package.get("package_hash") == canonical_hash(sealed),
         "package seal mismatch: contents were tampered with",
     )
     need(

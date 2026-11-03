@@ -27,11 +27,11 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from . import ids
+from ._validation import now_iso as _now
 from .events import Event, EventType, ParseStatus, TraceLog, Verdict
 from .manifest import load_manifest
 from .routes import ROUTES, Route
@@ -77,10 +77,6 @@ class DeliveryRecord:
     verdict_id: str | None = None
     verdict: Verdict | None = None
     infrastructure_error: str | None = None  # CL-19: withheld without a verdict
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 class InterceptionGate:

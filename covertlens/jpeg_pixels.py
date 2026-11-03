@@ -25,7 +25,7 @@ from typing import Any
 
 from .acceleration import numpy_backend
 from .ids import content_hash
-from .parsing import _ZIGZAG, AnalysisResult, AnalysisStatus, _parse_huffman
+from .parsing import ZIGZAG, AnalysisResult, AnalysisStatus, parse_huffman
 
 _SOF_MARKERS = (
     0xC0,
@@ -214,7 +214,7 @@ def _parse_quant_tables(body: bytes) -> dict[int, list[int]]:
             raise JpegDecodeError("unsupported DQT precision")
         raster = [0] * 64
         for k, value in enumerate(values):
-            raster[_ZIGZAG[k]] = value
+            raster[ZIGZAG[k]] = value
         tables[table_id] = raster
     return tables
 
@@ -258,7 +258,7 @@ def decode_jpeg_rgb(
             quant.update(_parse_quant_tables(body))
         elif marker == 0xC4:
             try:
-                huff.update(_parse_huffman(body))
+                huff.update(parse_huffman(body))
             except Exception as exc:
                 raise JpegDecodeError(str(exc)) from None
         elif marker == 0xDD:
@@ -398,7 +398,7 @@ def decode_jpeg_rgb(
             k += run
             if k >= 64:
                 raise JpegDecodeError("JPEG AC run overflows block")
-            coeffs[_ZIGZAG[k]] = reader.read_value(sz)
+            coeffs[ZIGZAG[k]] = reader.read_value(sz)
             k += 1
         dequantized = [coeffs[i] * qtable[i] for i in range(64)]
         return dequantized if np is not None else _idct_block(dequantized)

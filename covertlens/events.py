@@ -16,6 +16,7 @@ from enum import StrEnum
 from typing import Any
 
 from . import ids
+from ._validation import make_need
 
 SCHEMA_VERSION = 1
 
@@ -54,7 +55,7 @@ class ParseStatus(StrEnum):
     MISSING = "missing"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Event:
     event_type: EventType
     run_id: str
@@ -97,9 +98,7 @@ def validate_event(event: Event | dict[str, Any]) -> list[str]:
     data = event.to_dict() if isinstance(event, Event) else dict(event)
     errors: list[str] = []
 
-    def need(cond: bool, msg: str) -> None:
-        if not cond:
-            errors.append(msg)
+    need = make_need(errors)
 
     raw_type = data.get("event_type")
     try:

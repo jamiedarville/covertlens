@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .ablations import run_ablations
+from .adaptive import run_adaptive, validate_adaptive
 from .calibration import calibrate_thresholds, development_calibration_data
 from .dct import analyze_dct_bytes, benchmark_dct, benchmark_dct_calibrated
 from .events import REQUIRED_FAMILIES, Event, EventType, ParseStatus, Verdict
@@ -48,7 +49,7 @@ from .manifest import load_manifest, validate_manifest
 from .metadata import analyze_all_bytes, benchmark_metadata
 from .metadata_fixtures import build_metadata_dataset
 from .parsing import ParserLimits, analyze_bytes, analyze_version
-from .pilot import run_pilot
+from .pilot import DEFAULT_ADJUDICATIONS, run_pilot
 from .pinning import build_pin, verify_reproducibility
 from .replay import run_replay
 from .report import build_run_report
@@ -617,15 +618,7 @@ def cmd_latency_demo(args: argparse.Namespace) -> DemoResult:
 
 def cmd_pilot_demo(args: argparse.Namespace) -> DemoResult:
     del args
-    report = run_pilot(
-        adjudications={
-            "uns-1": {
-                "disposition": "suspected",
-                "note": "strong DCT evidence; no independent basis yet",
-            },
-            "uns-5": {"disposition": "benign", "note": "clean control pattern"},
-        }
-    )
+    report = run_pilot(adjudications=DEFAULT_ADJUDICATIONS)
     summary = _dump(
         {
             "pin_hash": report["pin_hash"],
@@ -704,6 +697,21 @@ def cmd_robustness_demo(args: argparse.Namespace) -> DemoResult:
         }
     )
     return DemoResult(0, payload=report, summary=summary)
+
+
+def cmd_adaptive_demo(args: argparse.Namespace) -> DemoResult:
+    del args
+    report = run_adaptive()
+    errors = validate_adaptive(report)
+    summary = _dump(
+        {
+            "frozen_config_version": report["frozen_config_version"],
+            "figure_points": report["figure"]["points"],
+            "confounded": report["confounded_experiments"],
+            "valid": not errors,
+        }
+    )
+    return DemoResult(0 if not errors else 1, payload=report, summary=summary)
 
 
 def cmd_scorecard_demo(args: argparse.Namespace) -> DemoResult:
