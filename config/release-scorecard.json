@@ -2,25 +2,25 @@
   "decision": {
     "decision_owner": "MVP release owner",
     "limitations": [
-      "Held-out positives exist only in the high payload band; low/medium recall is validated on CL-27 development data only, so the recall claim does not extend to held-out low/medium evidence.",
-      "Held-out samples are tiny (1-2 positives per family); Wilson intervals are wide and the targets are met on point estimates, not on interval lower bounds.",
-      "Clean smooth-PNG covers false-fail at rate 0.5 and blocks-JPEG covers at 0.0 under the frozen points; the clean-run stability claim is narrowed to gradient_noise covers, the calibrated distribution. Low-texture covers need recalibration before any enforcement claim.",
-      "Triage flag rate on clean in-coverage runs is 0.096875: flags permit delivery and create review volume, not run failures.",
+      "Detection claims use each family's calibrated textures (spatial_lsb: gradient_noise, jpeg_dct: gradient_noise, metadata: gradient_noise/smooth/blocks); one per-family operating point cannot serve every cover texture because the pixel detectors' clean baselines depend on texture. Out-of-coverage recall is measured per texture and band and reported, not claimed.",
+      "Clean-run stability is claimed for 4 (texture, medium) cells over 640 runs; excluded with measured rates: smooth PNG (spatial_lsb): false-fail 160/160 = 1.0, withheld 160/160; blocks JPEG (jpeg_dct): false-fail 4/160 = 0.025, withheld 4/160. Excluded cells need texture-conditioned operating points before any enforcement claim.",
+      "Held-out samples are at least 20 positives per family and band on calibrated textures (CL-68), so Wilson intervals are reported for every band; targets are judged on point estimates.",
+      "Triage flag rate on clean claimed runs is 0.501563: flags permit delivery and create review volume, not run failures. Claiming the low payload band is what sets the triage point this low; jpeg_dct without the low band would flag 0.0125 of clean runs (shipped 0.64375) at low-band development recall 0.17284; spatial_lsb without the low band would flag 0.00625 of clean runs (shipped 0.375) at low-band development recall 0.125 (owners' decision; not shipped).",
       "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.",
       "Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.",
-      "Concurrency 4: P95 12.4848 s; unauthorized serves 0.",
+      "Concurrency 4: P95 13.8755 s; unauthorized serves 0.",
       "Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
       "Adaptive and unseen results stay separate from the frozen benchmark.",
       "14 adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.",
       "1 configurations are confounded by withheld clean controls.",
       "Probe sizes range from 1 to 6 attempts; these are not population estimates.",
       "R-06 has no dedicated gate derivative API: derivatives are generated only from gate-served bytes in this audit, while ArtifactStore.register_derivative remains an ungated internal call \u2014 enforcement is procedural, not structural.",
-      "Sequence AUC: image=0.940741, combined=0.466667.",
+      "Sequence AUC: image=0.940741, combined=0.483333.",
       "Geometric universal claim: False; evidence is scoped to measured synthetic scenes."
     ],
     "rationale": [
       "recall: met",
-      "precision: met",
+      "precision: missed or narrowed",
       "clean_stability: met",
       "latency: missed or narrowed",
       "gate_trace: met",
@@ -36,12 +36,12 @@
     "recorded_in": "CL-56 computed assessment from source reports",
     "target_revisions": [
       {
-        "reason": "Held-out positives exist only in the high payload band; low/medium recall is validated on CL-27 development data only, so the recall claim does not extend to held-out low/medium evidence.; Held-out samples are tiny (1-2 positives per family); Wilson intervals are wide and the targets are met on point estimates, not on interval lower bounds.; Clean smooth-PNG covers false-fail at rate 0.5 and blocks-JPEG covers at 0.0 under the frozen points; the clean-run stability claim is narrowed to gradient_noise covers, the calibrated distribution. Low-texture covers need recalibration before any enforcement claim.; Triage flag rate on clean in-coverage runs is 0.096875: flags permit delivery and create review volume, not run failures.",
+        "reason": "Detection claims use each family's calibrated textures (spatial_lsb: gradient_noise, jpeg_dct: gradient_noise, metadata: gradient_noise/smooth/blocks); one per-family operating point cannot serve every cover texture because the pixel detectors' clean baselines depend on texture. Out-of-coverage recall is measured per texture and band and reported, not claimed.; Clean-run stability is claimed for 4 (texture, medium) cells over 640 runs; excluded with measured rates: smooth PNG (spatial_lsb): false-fail 160/160 = 1.0, withheld 160/160; blocks JPEG (jpeg_dct): false-fail 4/160 = 0.025, withheld 4/160. Excluded cells need texture-conditioned operating points before any enforcement claim.; Held-out samples are at least 20 positives per family and band on calibrated textures (CL-68), so Wilson intervals are reported for every band; targets are judged on point estimates.; Triage flag rate on clean claimed runs is 0.501563: flags permit delivery and create review volume, not run failures. Claiming the low payload band is what sets the triage point this low; jpeg_dct without the low band would flag 0.0125 of clean runs (shipped 0.64375) at low-band development recall 0.17284; spatial_lsb without the low band would flag 0.00625 of clean runs (shipped 0.375) at low-band development recall 0.125 (owners' decision; not shipped).",
         "revision": "Scoped to measured evidence; see source report.",
         "target": "Detection coverage"
       },
       {
-        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 12.4848 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
+        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 13.8755 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
         "revision": "Scoped to measured evidence; see source report.",
         "target": "Latency <=2 s"
       },
@@ -54,55 +54,143 @@
     "value": "release_with_limitations"
   },
   "equated_with_collusion": false,
-  "frozen_config_version": "frozen-1.1.0",
-  "pin_hash": "sha256:04d5cb55ba2f57b9b218383bb76d3135a5398510441a96d51ae38ccbb04ba8ee",
+  "frozen_config_version": "frozen-1.3.0",
+  "pin_hash": "sha256:584ffeccde76b1f51daa8758bcc795dbbbb81f27ea7b0cc0ceab4c0aac7b3cef",
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
   "scorecard_version": "1.4.0",
   "sections": {
     "detection_frozen_benchmark": {
-      "claim_scope": "Frozen points meet the numeric targets on the held-out point estimates and on >=300 clean gradient_noise runs; coverage is narrowed per tradeoffs (bands, cover texture, tiny n).",
-      "clean_run_failure_rate": 0.0,
-      "clean_runs": 320,
-      "clean_triage_flag_rate": 0.096875,
+      "claim_scope": "Frozen points are judged on held-out point estimates on each family's calibrated textures and on clean-run stability per (texture, medium) cell; claimed stability cells: gradient_noise/jpeg, gradient_noise/png, smooth/jpeg, blocks/png; coverage is narrowed per tradeoffs.",
+      "clean_run_failure_rate": 0.001563,
+      "clean_runs": 640,
+      "clean_triage_flag_rate": 0.501563,
       "per_family": {
         "jpeg_dct": {
-          "enforcement_precision": 1.0,
-          "positives": 1,
+          "calibrated_textures": [
+            "gradient_noise"
+          ],
+          "enforcement_precision": 0.973684,
+          "held_out_positives_by_band": {
+            "high": 21,
+            "low": 20,
+            "medium": 20
+          },
+          "positives": 61,
           "prevalence": 0.5,
-          "recall_at_triage": 1.0,
-          "recall_wilson95": {
+          "recall_at_triage": 0.983607,
+          "recall_by_band": {
             "high": 1.0,
-            "low": 0.206549
+            "low": 0.95,
+            "medium": 1.0
+          },
+          "recall_wilson95": {
+            "high": 0.9971,
+            "low": 0.912811
           }
         },
         "metadata": {
+          "calibrated_textures": [
+            "gradient_noise",
+            "smooth",
+            "blocks"
+          ],
           "enforcement_precision": 1.0,
-          "positives": 2,
+          "held_out_positives_by_band": {
+            "high": 22,
+            "low": 20,
+            "medium": 20
+          },
+          "positives": 62,
           "prevalence": 0.5,
           "recall_at_triage": 1.0,
+          "recall_by_band": {
+            "high": 1.0,
+            "low": 1.0,
+            "medium": 1.0
+          },
           "recall_wilson95": {
             "high": 1.0,
-            "low": 0.34238
+            "low": 0.941656
           }
         },
         "spatial_lsb": {
+          "calibrated_textures": [
+            "gradient_noise"
+          ],
           "enforcement_precision": 1.0,
-          "positives": 1,
+          "held_out_positives_by_band": {
+            "high": 21,
+            "low": 20,
+            "medium": 20
+          },
+          "positives": 61,
           "prevalence": 0.5,
-          "recall_at_triage": 1.0,
-          "recall_wilson95": {
+          "recall_at_triage": 0.95082,
+          "recall_by_band": {
             "high": 1.0,
-            "low": 0.206549
+            "low": 0.85,
+            "medium": 1.0
+          },
+          "recall_wilson95": {
+            "high": 0.983134,
+            "low": 0.865089
           }
         }
       },
       "source_doc": "docs/contracts/frozen-benchmark.md",
       "source_schema": "covertlens.frozen-benchmark",
+      "stability_claim_covers_all_textures": false,
+      "stability_claimed_cells": [
+        {
+          "false_failure_rate": 0.0,
+          "media": "jpeg",
+          "runs": 160,
+          "texture": "gradient_noise"
+        },
+        {
+          "false_failure_rate": 0.00625,
+          "media": "png",
+          "runs": 160,
+          "texture": "gradient_noise"
+        },
+        {
+          "false_failure_rate": 0.0,
+          "media": "jpeg",
+          "runs": 160,
+          "texture": "smooth"
+        },
+        {
+          "false_failure_rate": 0.0,
+          "media": "png",
+          "runs": 160,
+          "texture": "blocks"
+        }
+      ],
+      "stability_exclusions": [
+        {
+          "false_failure_rate": 1.0,
+          "false_failures": 160,
+          "family": "spatial_lsb",
+          "media": "png",
+          "runs": 160,
+          "texture": "smooth",
+          "withhold_rate": 1.0
+        },
+        {
+          "false_failure_rate": 0.025,
+          "false_failures": 4,
+          "family": "jpeg_dct",
+          "media": "jpeg",
+          "runs": 160,
+          "texture": "blocks",
+          "withhold_rate": 0.025
+        }
+      ],
       "targets_met_on_point_estimates": {
         "precision": {
-          "jpeg_dct": true,
+          "jpeg_dct": false,
           "metadata": true,
           "spatial_lsb": true
         },
@@ -459,7 +547,7 @@
             }
           }
         },
-        "threshold_config_version": "frozen-1.1.0",
+        "threshold_config_version": "frozen-1.3.0",
         "universal_claim": false
       },
       "per_subfamily": {
@@ -546,16 +634,16 @@
         "medium/jpeg"
       ],
       "concurrency_access_clean": true,
-      "concurrent_p95_s": 12.4848,
+      "concurrent_p95_s": 13.8755,
       "limits_explicit_and_withholding": true,
       "p95_by_class": {
-        "envelope/png": 7.6916,
-        "large/jpeg": 9.7053,
-        "large/png": 3.296,
-        "medium/jpeg": 2.4319,
-        "medium/png": 0.7437,
-        "small/jpeg": 0.5825,
-        "small/png": 0.167
+        "envelope/png": 8.6892,
+        "large/jpeg": 10.6988,
+        "large/png": 3.6901,
+        "medium/jpeg": 2.6033,
+        "medium/png": 0.8817,
+        "small/jpeg": 0.6431,
+        "small/png": 0.2194
       },
       "proposal": {
         "agreed_concurrency": 4,
@@ -567,24 +655,24 @@
       "source_schema": "covertlens.latency-reliability"
     },
     "pilot_adjudication": {
-      "enforcement_withheld": 8,
-      "repeated_weak_signal_groups": 6,
-      "seeded_attempts_delivered": 7,
+      "enforcement_withheld": 11,
+      "repeated_weak_signal_groups": 5,
+      "seeded_attempts_delivered": 4,
       "seeded_clean_controls_withheld": 0,
       "seeded_traces": 33,
       "source_doc": "docs/contracts/seeded-pilot.md",
       "source_schema": "covertlens.seeded-pilot",
       "unseeded_unresolved": 3,
-      "verdict_changes_between_modes": 14
+      "verdict_changes_between_modes": 23
     },
     "prevention": {
       "attempts": {
         "blocked_counted_as_transfer": 0,
-        "delivered": 7,
-        "observed_successful_transfers": 7,
-        "recovered_among_delivered": 7,
+        "delivered": 4,
+        "observed_successful_transfers": 4,
+        "recovered_among_delivered": 4,
         "trials": 15,
-        "withheld_blocked": 8
+        "withheld_blocked": 11
       },
       "clean_control_legitimate_success_rate": 1.0,
       "source_doc": "docs/contracts/ablations-prevention.md",
@@ -613,10 +701,10 @@
       ]
     },
     "sequence_value": {
-      "combined_auc": 0.466667,
-      "context_only_auc": 0.433333,
+      "combined_auc": 0.483333,
+      "context_only_auc": 0.45,
       "image_only_auc": 0.940741,
-      "interpretation": "Image-only AUC 0.940741; combined AUC 0.466667.",
+      "interpretation": "Image-only AUC 0.940741; combined AUC 0.483333.",
       "source_doc": "docs/contracts/ablations-prevention.md",
       "source_schema": "covertlens.ablations-prevention"
     }
@@ -629,7 +717,7 @@
     "infrastructure": true,
     "latency": false,
     "pilot": false,
-    "precision": true,
+    "precision": false,
     "prevention": true,
     "recall": true,
     "robustness": false,

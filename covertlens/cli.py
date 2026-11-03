@@ -68,6 +68,7 @@ _COMMAND_HELP: list[tuple[str, str]] = [
     ("segmentation-demo", "segmentation + attributes (CL-39)"),
     ("geometric-demo", "quantization + structure tests (CL-40)"),
     ("vector-demo", "vector source verdict binding (CL-41)"),
+    ("svg-source-demo", "SVG vector-source parser + binding (CL-69)"),
     ("geo-benchmark-demo", "geometric benchmark (CL-42)"),
     ("spark-demo", "live Muse Spark agents experiment (CL-58)"),
 ]

@@ -20,6 +20,12 @@ try {
       platform: "node",
       format: "cjs",
       jsx: "automatic",
+      // Tests run the demo build unless a test overrides it (CL-67).
+      define: {
+        "import.meta.env.VITE_DEMO_BUILD": JSON.stringify(
+          process.env.VITE_DEMO_BUILD ?? "on",
+        ),
+      },
     });
     outfiles.push(outfile);
   }

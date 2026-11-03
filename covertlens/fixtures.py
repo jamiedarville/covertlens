@@ -557,6 +557,27 @@ def _embed_dct(coeff_planes: list[list[list[int]]], payload: bytes) -> None:
         raise ValueError("payload exceeds DCT carrier capacity (|AC| >= 2)")
 
 
+def dct_carrier_capacity_bits(
+    pixels: bytes, width: int, height: int, *, quality: int = 90
+) -> int:
+    """Carrier bits the CL-9 DCT encoder can embed in this cover.
+
+    The same |AC| >= 2 count `_embed_dct` walks, so a payload of
+    `n` bytes embeds exactly when `8 * n` is at most this (CL-68
+    sizes banded payloads with it instead of failing encodes).
+    """
+    q_luma, q_chroma = (
+        _scaled_quant(_Q_LUMA, quality),
+        _scaled_quant(_Q_CHROMA, quality),
+    )
+    count = 0
+    for plane, quant in zip(_to_ycbcr(pixels), (q_luma, q_chroma, q_chroma)):
+        for block in _blocks(plane, width, height):
+            coeffs = _fdct_quant(block, quant)
+            count += sum(1 for zi in range(1, 64) if abs(coeffs[_ZIGZAG[zi]]) >= 2)
+    return count
+
+
 def _embed_dct_matching(
     coeff_planes: list[list[list[int]]], payload: bytes, *, seed: int
 ) -> None:

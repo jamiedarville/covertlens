@@ -6,3 +6,6 @@ __pycache__
 app/frontend/node_modules
 app/frontend/dist
 app/static
+app/frontend/dist-static
+app/frontend/public-static
+app/frontend/.static-build

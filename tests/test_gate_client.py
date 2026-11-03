@@ -85,3 +85,32 @@ def test_withheld_raises_and_no_bytes(client):
     _STATE["d1"] = "withheld"
     with pytest.raises(WithheldError):
         client.access("d1")
+
+
+def test_bearer_token_is_sent_for_oidc_deployments(monkeypatch):
+    """CL-67: a harness authenticates with its service identity's JWT."""
+    import io
+    import urllib.request
+
+    from covertlens.gate_client import GateClient
+
+    seen = []
+
+    class _Response(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(dict(req.header_items()))
+        return _Response(json.dumps({"run_id": "run_x"}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    GateClient("http://gate.test", bearer_token="eyJ.test.sig").create_run("run_x")
+    GateClient("http://gate.test").create_run("run_x")
+    assert seen[0]["Authorization"] == "Bearer eyJ.test.sig"
+    assert "Authorization" not in seen[1]

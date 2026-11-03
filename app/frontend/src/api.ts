@@ -425,3 +425,98 @@ export function takePreload(): Preload | null {
     return null;
   }
 }
+
+// -- Leaderboard (CL-70) ----------------------------------------------
+
+export interface LeaderboardRow {
+  rank: number;
+  entry_id: string;
+  display_name: string | null;
+  kind: string;
+  subfamily: string | null;
+  payload_bits: number;
+  bits_per_pixel: number | null;
+  verdict: string;
+  family_score: number | null;
+  submitted_at: string;
+}
+
+export type OperatingPoint = "triage" | "quarantine" | "fail_run";
+
+export interface LeaderboardBoard {
+  pin_hash: string;
+  standings: Record<OperatingPoint, LeaderboardRow[]>;
+  entries: number;
+  pending: number;
+}
+
+export interface LeaderboardBoardInfo {
+  pin_hash: string;
+  entries: number;
+  visible_entries: number;
+  first_submission: string;
+  last_submission: string;
+  threshold_config_version: string;
+  detectors: string[];
+  current: boolean;
+}
+
+export interface LeaderboardView {
+  current: {
+    pin_hash: string;
+    detectors: string[];
+    threshold_config_version: string;
+    geometric_config_version: string;
+  };
+  board: LeaderboardBoard;
+  boards: LeaderboardBoardInfo[];
+  operating_points: OperatingPoint[];
+  moderation: boolean;
+  can_moderate: boolean;
+  submissions_need_sign_in: boolean;
+}
+
+export interface LeaderboardEntry {
+  entry_id: string;
+  status: "visible" | "pending" | "hidden";
+  pin_hash: string;
+  outcome: {
+    verdict: string;
+    evades: Record<OperatingPoint, boolean>;
+    payload: { bits: number; bits_per_pixel: number | null; derivation: string };
+  };
+}
+
+export async function fetchLeaderboard(): Promise<LeaderboardView> {
+  const response = await fetch("/api/leaderboard", { credentials: "same-origin" });
+  if (!response.ok) throw new ApiError(response.status, "Could not load the leaderboard.");
+  return (await readJson(response)) as LeaderboardView;
+}
+
+export async function fetchLeaderboardBoard(pinHash: string): Promise<LeaderboardBoard> {
+  const response = await fetch(`/api/leaderboard/boards/${encodeURIComponent(pinHash)}`, {
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw new ApiError(response.status, "That board could not be loaded.");
+  return (await readJson(response)) as LeaderboardBoard;
+}
+
+export async function submitToLeaderboard(
+  artifactVersionId: string,
+  displayName: string,
+): Promise<LeaderboardEntry> {
+  const response = await fetch("/api/leaderboard/submissions", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ artifact_version_id: artifactVersionId, display_name: displayName }),
+  });
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (response.status === 401) throw new ApiError(401, "Sign in to submit to this leaderboard.");
+  if (response.status === 409) throw new ApiError(409, "This image is already on the current board.");
+  if (response.status === 429) throw new ApiError(429, "Too many submissions this hour. Try again later.");
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? `Submission failed (${response.status}).`));
+  }
+  return body as unknown as LeaderboardEntry;
+}

@@ -43,3 +43,16 @@ exactly as shipped. Schema:
 `tests/test_frozen_benchmark.py` re-runs the evaluation and asserts
 the targets, the calibration disjointness, and the smooth-cover
 tradeoff.
+
+## Banded held-out set and per-texture stability (CL-68)
+
+`run_frozen_evaluation` now scores the CL-68 banded suite too (at
+least 20 held-out positives per family and calibrated band), reports
+recall and enforcement recall per texture and band, and runs
+clean-run stability on all three textures (320 runs each). Stability
+is judged per (texture, medium) cell: claimed cells meet the ≤ 1%
+false-failure target; the rest are `stability_exclusions` with their
+measured false-fail and withhold rates (`smooth` PNG 1.0, `blocks`
+JPEG 0.025 under `frozen-1.3.0`). The pre-CL-68 statements above
+(1–2 positives, high band only) describe `frozen-1.0.0`/`1.1.0`.
+Results: [banded-fixtures.md](banded-fixtures.md).

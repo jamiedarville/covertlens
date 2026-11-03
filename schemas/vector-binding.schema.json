@@ -1,28 +1,108 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://covertlens.dev/schemas/vector-binding.schema.json",
-  "title": "CovertLens vector source with rendered-version binding (CL-41)",
+  "title": "CovertLens vector source with rendered-version binding (CL-41, CL-69)",
   "type": "object",
-  "required": ["schema", "bound_content_hash", "raster_classification",
-               "combined_classification", "clearance", "cleared", "limitations"],
+  "required": [
+    "schema",
+    "bound_content_hash",
+    "raster_classification",
+    "combined_classification",
+    "clearance",
+    "cleared",
+    "limitations"
+  ],
   "properties": {
-    "schema": {"const": "covertlens.vector-binding"},
-    "bound_content_hash": {"type": "string", "pattern": "^sha256:"},
+    "schema": {
+      "const": "covertlens.vector-binding"
+    },
+    "bound_content_hash": {
+      "type": "string",
+      "pattern": "^sha256:"
+    },
     "vector_status": {
-      "enum": ["ok", "absent_raster_fallback", "present_not_intercepted",
-               "corrupt_source", "too_few_elements"]
+      "enum": [
+        "ok",
+        "absent_raster_fallback",
+        "present_not_intercepted",
+        "corrupt_source",
+        "too_few_elements",
+        "limit_exceeded"
+      ]
     },
     "clearance": {
-      "enum": ["cleared", "not_cleared", "refused_unparsed_vector_source",
-               "refused_unparseable_vector_source"]
+      "enum": [
+        "cleared",
+        "not_cleared",
+        "refused_unparsed_vector_source",
+        "refused_unparseable_vector_source",
+        "refused_partially_parsed_vector_source"
+      ]
     },
     "lineage": {
       "type": "object",
-      "required": ["rendered_version_id", "relation", "lineage_parent"],
+      "required": [
+        "rendered_version_id",
+        "relation",
+        "lineage_parent"
+      ],
       "properties": {
-        "relation": {"const": "rendered_from_vector_source"}
+        "relation": {
+          "const": "rendered_from_vector_source"
+        },
+        "source_kind": {
+          "type": "string"
+        }
       }
     },
-    "equated_with_collusion": {"const": false}
+    "equated_with_collusion": {
+      "const": false
+    },
+    "vector_source_kind": {
+      "enum": [
+        "covertlens.vector-source",
+        "svg",
+        "matplotlib"
+      ]
+    },
+    "vector_parser": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "geometric-vector-parser",
+            "geometric-svg-parser",
+            "geometric-matplotlib-adapter"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "vector_parse": {
+      "type": "object",
+      "required": [
+        "parser",
+        "status",
+        "fully_parsed",
+        "unparsed"
+      ],
+      "properties": {
+        "fully_parsed": {
+          "type": "boolean"
+        },
+        "unparsed": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
   }
 }

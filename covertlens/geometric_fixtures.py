@@ -72,6 +72,8 @@ GRIDS: dict[str, dict[str, Any]] = {
     "angle_tilt": {"unit": "tilt_level", "base": -30.0, "step": 15.0, "alphabet": 5},
 }
 _BACKGROUND = (238, 238, 232)
+# Public name for generator-side emitters (CL-69 `svg_from_fixture`).
+SCENE_BACKGROUND = _BACKGROUND
 _BAR_COLOUR = (70, 110, 160)
 
 

@@ -440,7 +440,7 @@ def analyze_lsb_version(
 
 SPA_DETECTOR_NAME = "lsb-sample-pairs"
 SPA_DETECTOR_VERSION = "1.0.0"
-SPA_CONFIG_VERSION = "1.0.0"
+SPA_CONFIG_VERSION = "1.1.0"
 SPA_BENCHMARK_SCHEMA = "covertlens.lsb-pairs-benchmark"
 SPA_BENCHMARK_VERSION = "1.0.0"
 
@@ -469,10 +469,12 @@ class SpaConfig:
     # The pair-LSB randomness is scaled by this before it becomes the
     # score, so the unfrozen detector can at most reach triage-level
     # evidence under the frozen family points: its maximum score
-    # (0.25) stays below the frozen quarantine point (0.272414), so
-    # it can never by itself cause withholding before a dedicated
-    # freeze calibrates points for it.
-    score_scale: float = 0.25
+    # stays below the frozen spatial quarantine point, so it can never
+    # by itself cause withholding before a dedicated freeze calibrates
+    # points for it. Config 1.1.0 (CL-68) lowers the scale from 0.25
+    # because the frozen-1.3.0 quarantine point fell below 0.25; a
+    # test pins the cap under the shipped quarantine point.
+    score_scale: float = 0.23
 
     def __post_init__(self) -> None:
         if not self.version:

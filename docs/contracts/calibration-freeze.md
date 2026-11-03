@@ -1,7 +1,8 @@
 # Calibration and threshold freeze contract (CL-27)
 
 Implements: CL-27. Owners: detection research (thresholds),
-evaluation (acceptance targets). Status: `frozen-1.1.0` in
+evaluation (acceptance targets). Status: `frozen-1.3.0` (CL-68,
+see [banded-fixtures.md](banded-fixtures.md)) in
 [config/frozen-thresholds.json](../../config/frozen-thresholds.json)
 (schema: [schemas/calibration.schema.json](../../schemas/calibration.schema.json)).
 
@@ -66,3 +67,14 @@ Vector binding uses `decide_verdict` over raster and parsed source findings:
 log/flag permit, quarantine/fail-run withhold. Missing or corrupt source
 interception still refuses clearance (C-10). Parse failures never clear an
 artifact solely because no finding was produced.
+
+## Banded recalibration (CL-68)
+
+`frozen-1.3.0` recalibrates the three CL-27 families on the CL-68
+banded suite (dozens of development pairs per band; every band is now
+calibrated) restricted to `CALIBRATED_TEXTURES` (`gradient_noise` for
+the pixel families, all three textures for metadata), with two refined
+selection rules: free-recall triage and fail-run above every
+development negative. Geometric points are unchanged. Details,
+measurements and the low-band owners' decision:
+[banded-fixtures.md](banded-fixtures.md).

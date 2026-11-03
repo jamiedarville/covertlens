@@ -182,8 +182,13 @@ def build_metadata_pair(
     payload_seed: int = 202,
     width: int = 64,
     height: int = 48,
+    pattern: str = "gradient_noise",
 ) -> tuple[Fixture, Fixture]:
-    """One clean/encoded metadata pair; image bytes differ only in metadata."""
+    """One clean/encoded metadata pair; image bytes differ only in metadata.
+
+    `pattern` selects the CL-9 cover texture (CL-68 banded suite);
+    the default keeps every existing fixture byte-identical.
+    """
     if media_kind not in ("png", "jpeg"):
         raise ValueError("media_kind must be png or jpeg")
     family = "spatial_lsb" if media_kind == "png" else "jpeg_dct"
@@ -194,11 +199,14 @@ def build_metadata_pair(
         payload_bytes=8,
         cover_seed=cover_seed,
         payload_seed=payload_seed,
+        pattern=pattern,
     )
     payload = make_payload(payload_seed, payload_bytes)
     encode = encode_metadata_png if media_kind == "png" else encode_metadata_jpeg
     encoded_data = encode(clean_base.data, payload)
-    pair_id = f"pair-metadata-{media_kind}-{cover_seed}"
+    pair_id = f"pair-metadata-{media_kind}-{cover_seed}" + (
+        "" if pattern == "gradient_noise" else f"-{pattern}"
+    )
     clean = _metadata_fixture(
         role="clean",
         pair_id=pair_id,

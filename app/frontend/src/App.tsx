@@ -6,6 +6,7 @@ import LiveGate from "./pages/LiveGate";
 import Review from "./pages/Review";
 import Trace from "./pages/Trace";
 import Benchmarks from "./pages/Benchmarks";
+import Leaderboard from "./pages/Leaderboard";
 import Scorecard from "./pages/Scorecard";
 import { fetchVersionLine } from "./api";
 
@@ -40,6 +41,8 @@ export default function App() {
               ? "trace"
               : path === "/benchmarks"
             ? "benchmarks"
+            : path === "/leaderboard"
+            ? "leaderboard"
             : path === "/scorecard"
               ? "scorecard"
               : "landing";
@@ -58,6 +61,8 @@ export default function App() {
                 ? "Trace explorer — CovertLens"
                 : page === "benchmarks"
               ? "Benchmarks — CovertLens"
+              : page === "leaderboard"
+              ? "Leaderboard — CovertLens"
               : page === "scorecard"
                 ? "Scorecard — CovertLens"
                 : "CovertLens";
@@ -131,6 +136,13 @@ export default function App() {
             Benchmarks
           </a>
           <a
+            href="/leaderboard"
+            onClick={go("/leaderboard")}
+            aria-current={page === "leaderboard" ? "page" : undefined}
+          >
+            Leaderboard
+          </a>
+          <a
             href="/scorecard"
             onClick={go("/scorecard")}
             aria-current={page === "scorecard" ? "page" : undefined}
@@ -153,6 +165,8 @@ export default function App() {
           <Trace />
         ) : page === "benchmarks" ? (
           <Benchmarks />
+        ) : page === "leaderboard" ? (
+          <Leaderboard />
         ) : page === "scorecard" ? (
           <Scorecard />
         ) : (

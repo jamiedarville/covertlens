@@ -17,7 +17,7 @@ import {
   recipientImageUrl,
   recordGateVerdict,
 } from "../api";
-import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
 
 const ROUTES = ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07"];
@@ -298,7 +298,7 @@ export default function LiveGate() {
             />
           </label>
         </div>
-        <DemoRoleSelect
+        <RoleControl
           role={role}
           onChange={setRole}
           disabled={busy}

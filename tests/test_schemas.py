@@ -96,6 +96,7 @@ CASES = {
         lambda p: [f for f in p["findings"].values() if f is not None],
     ),
     "vector-demo": ("vector-binding.schema.json", lambda p: [p["bound"]]),
+    "svg-source-demo": ("vector-binding.schema.json", lambda p: [p["bound"]]),
     "geo-benchmark-demo": ("geo-benchmark.schema.json", lambda p: [p]),
     "replay-demo": ("replay-experiment.schema.json", lambda p: [p]),
     "verdict-demo": (

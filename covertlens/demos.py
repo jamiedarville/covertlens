@@ -843,6 +843,36 @@ def cmd_vector_demo(args: argparse.Namespace) -> DemoResult:
     return DemoResult(0, payload=payload)
 
 
+def cmd_svg_source_demo(args: argparse.Namespace) -> DemoResult:
+    """CL-69: an SVG source parsed on the raster grid, bound to the raster."""
+    del args
+    from .segmentation import segment_image
+    from .svg_source import parse_svg_source, svg_from_fixture
+    from .vector_source import analyze_rendered_with_source
+
+    pair = build_geo_pair("height_position")
+    encoded = next(f for f in pair if f.role == "encoded")
+    svg = svg_from_fixture(encoded)
+    parsed = parse_svg_source(svg, raster_size=(encoded.width, encoded.height))
+    raster = segment_image(encoded.data)
+    partial = svg.replace(b"</svg>", b'<text x="4" y="12">note</text></svg>')
+    payload = {
+        "bound": analyze_rendered_with_source(
+            encoded.data, svg, source_kind="svg", store=ArtifactStore()
+        ),
+        "svg_parse": parsed.to_dict(),
+        "height_sequences_agree": parsed.result.sequence("height")
+        == raster.sequence("height"),
+        "partial_parse_clearance": analyze_rendered_with_source(
+            encoded.data, partial, source_kind="svg"
+        )["clearance"],
+        "unintercepted_clearance": analyze_rendered_with_source(
+            encoded.data, svg, source_kind="svg", source_intercepted=False
+        )["clearance"],
+    }
+    return DemoResult(0, payload=payload)
+
+
 def cmd_geo_benchmark_demo(args: argparse.Namespace) -> DemoResult:
     del args
     report = run_geo_benchmark()
