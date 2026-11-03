@@ -16,6 +16,9 @@ Thin FastAPI layer over the library:
 - `GET /api/benchmarks/{name}` — cached precompute output.
 - `GET /api/comparison` — cached landing-page skyline pair (CL-48).
 - `GET /api/scorecard`, `GET /api/version`, `GET /api/health`.
+- `GET /api/trace/runs/{run_id}` — Trace explorer view (CL-60):
+  join records with explicit missing-link reasons, episode
+  context, per-sender weak signals, action candidate inputs.
 - `/api/review/*` — Reviewer page API (CL-59): demo roles
   (`viewer`/`researcher`/`reviewer` via `X-Demo-Role`) mapped to
   CL-11 principals; quarantined originals, reviewer-only candidate
@@ -882,6 +885,32 @@ def review_audit(run_id: str | None = None) -> dict[str, Any]:
     return _review_workspace().audit_payload(run_id)
 
 
+# -- Trace explorer (CL-60) ----------------------------------------------
+
+
+@app.get("/api/trace/runs/{run_id}")
+def trace_run(run_id: str) -> JSONResponse:
+    """Trace explorer view for one run (CL-60, REV-01/02/03)."""
+    from covertlens.metadata import analyze_all_bytes
+    from covertlens.trace_explorer import build_trace_explorer
+
+    gate = _gate()
+    results = []
+    for record in gate.deliveries(run_id):
+        data = gate.store.get_original(
+            record.artifact_version_id,
+            actor_id="trace-explorer",
+            purpose="analysis",
+        )
+        results.append(
+            analyze_all_bytes(data, artifact_version_id=record.artifact_version_id)
+        )
+    view = build_trace_explorer(gate.events(run_id), results)
+    if view["run_id"] is None:
+        view["run_id"] = run_id
+    return JSONResponse(view)
+
+
 @app.get("/api/benchmarks/{name}")
 def benchmark(name: str) -> Response:
     from scripts.precompute import REPORT_COMMANDS
@@ -952,6 +981,15 @@ def analyze_page() -> Response:
 @app.get("/generate")
 def generate_page() -> Response:
     """SPA route for the Generate / red-team page (CL-51)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/trace")
+def trace_page() -> Response:
+    """SPA route for the Trace explorer page (CL-60)."""
     response = _index_response()
     if response is not None:
         return response

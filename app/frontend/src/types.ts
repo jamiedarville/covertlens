@@ -200,6 +200,86 @@ export interface GateEvent {
   recipient_id: string | null;
 }
 
+export interface TraceMissingReason {
+  link: string;
+  reason: string;
+}
+
+export interface TraceDelivery {
+  delivery_id: string;
+  artifact_id: string | null;
+  artifact_version_id: string | null;
+  content_hash: string;
+  episode_id: string | null;
+  sender_id: string | null;
+  recipient_id: string | null;
+  verdict_reference_status: string;
+  verdict: { verdict_id: string | null; verdict: string | null } | null;
+  delivered: boolean;
+  parse: { linkage: string; parse_status: string };
+  next_action: { linkage: string };
+  next_actions: { linkage: string; causation_claimed: boolean }[];
+  findings_status: string;
+  findings: Finding[];
+  missing: string[];
+  missing_reasons: TraceMissingReason[];
+}
+
+export interface TraceAction {
+  event_id: string;
+  seq: number;
+  recipient_id: string | null;
+  referenced_delivery_id: string | null;
+  candidate_delivery_ids: string[];
+  candidate_count: number;
+  causation_claimed: boolean;
+  linkage_basis: string;
+}
+
+export interface TraceWeakSender {
+  sender_id: string;
+  deliveries: number;
+  delivered: number;
+  weak_signals: number;
+  weak_delivery_ids: string[];
+  repeated_weak: boolean;
+  max_score: number;
+}
+
+export interface TraceView {
+  run_id: string;
+  causation_claimed: boolean;
+  causation_note: string;
+  deliveries: TraceDelivery[];
+  actions: TraceAction[];
+  context: {
+    participants: Record<
+      string,
+      { agent_id: string; sent: string[]; received: string[]; actions: string[] }
+    >;
+    episodes: Record<
+      string,
+      { episode_id: string | null; deliveries: string[]; actions: string[] }
+    >;
+    deliveries: {
+      delivery_id: string;
+      episode_id: string | null;
+      sender_id: string | null;
+      recipient_id: string | null;
+      max_score: number;
+      delivered: boolean;
+    }[];
+  };
+  weak_signals: {
+    band: { min_exclusive: number; max_exclusive: number };
+    per_sender: TraceWeakSender[];
+    repeated_senders: string[];
+    label: string;
+  };
+  summary: Record<string, unknown>;
+  linkage_errors: string[];
+}
+
 export interface ReviewRole {
   role: string;
   actor_id: string;

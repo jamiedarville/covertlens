@@ -9,6 +9,7 @@ import type {
   ReviewDetail,
   ReviewQueue,
   ReviewRole,
+  TraceView,
 } from "./types";
 
 // Same-origin API client. The Analyze overlay renders from the
@@ -183,6 +184,19 @@ export async function recordGateVerdict(
     throw new ApiError(response.status, String(body.detail ?? "Verdict failed."));
   }
   return body as unknown as GateDelivery;
+}
+
+// -- Trace explorer (CL-60) ----------------------------------------------
+
+export async function fetchTraceRun(runId: string): Promise<TraceView> {
+  const response = await fetch(
+    `/api/trace/runs/${encodeURIComponent(runId)}`,
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Could not load the trace."));
+  }
+  return body as unknown as TraceView;
 }
 
 // -- Reviewer (CL-59) ---------------------------------------------------

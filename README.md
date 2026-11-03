@@ -531,6 +531,13 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | After a full demo session the audit chain verifies | Persisted hash-chained audit (`review.sqlite3` by the gate store) with live `chain_valid` verification on the Reviewer page (`/review`) |
 | Downloaded package passes `validate_review_package` | Sealed export via `create_review_export` from the rebuilt run report with stored CL-25 dispositions applied |
 
+### CL-60 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Every delivery in a demo run appears with content hash, verdict reference and parse/next-action link or explicit missing status | `covertlens.trace_explorer` (`build_trace_explorer` over the CL-16 join + CL-24 context, `missing_reasons` per absent link) + `GET /api/trace/runs/{run_id}` · [docs/contracts/trace-explorer.md](docs/contracts/trace-explorer.md) |
+| No page element implies causation between an artifact and an action | Trace explorer page (`/trace`) with candidate-input wording and `causation_claimed: false` on the view, every action and every next-action record; causal-phrase guard in tests |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.
