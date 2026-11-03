@@ -43,6 +43,8 @@ PERMISSIONS = (
     "retirement.request",
     "retirement.approve",
     "candidate.decode.read",
+    "second_opinion.request",
+    "second_opinion.send_image",
 )
 
 _DEFAULT = Path(__file__).resolve().parent.parent / "config" / "runtime-policy.json"
@@ -333,6 +335,37 @@ class EvidenceGateway:
             detail={"decode_id": decode_id},
         )
         return dict(decode)
+
+    def authorize_second_opinion_image(
+        self,
+        principal: Principal,
+        dataset_id: str,
+        artifact_version_id: str,
+        image_hash: str,
+    ) -> bool:
+        """Authorize one image send to a second-opinion provider.
+
+        Own permission (`second_opinion.send_image`, CL-76); every
+        allowed send is written to the audit chain. Denials are
+        audited and raise, like every other gateway check.
+        """
+        self._gate(
+            principal,
+            dataset_id,
+            "second_opinion.send_image",
+            "second_opinion.image_send",
+        )
+        self._audit.append(
+            actor_id=principal.actor_id,
+            action="second_opinion.image_send",
+            dataset_id=dataset_id,
+            outcome="allowed",
+            detail={
+                "artifact_version_id": artifact_version_id,
+                "image_hash": image_hash,
+            },
+        )
+        return True
 
     def export_held_out_truth(
         self,

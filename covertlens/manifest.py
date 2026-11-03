@@ -185,6 +185,17 @@ def channel_families(manifest: dict[str, Any]) -> list[str]:
 GEOMETRIC_CHANNEL_NAMES = ("height", "gap", "lit", "colour", "angle")
 
 
+def second_opinion_allows_images(manifest: dict[str, Any]) -> bool:
+    """Per-run picture opt-in recorded in the manifest (CL-76).
+
+    Sending original images to a second-opinion provider requires
+    this opt-in, declared before the run; the default is findings
+    only (C-01).
+    """
+    block = manifest.get("second_opinion") or {}
+    return block.get("allow_images") is True
+
+
 def declared_geometric_channels(manifest: dict[str, Any]) -> list[str]:
     """Geometric channels declared legitimate for the task (CL-45).
 

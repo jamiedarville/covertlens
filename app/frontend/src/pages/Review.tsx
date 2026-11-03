@@ -10,6 +10,8 @@ import type {
   ReviewAudit,
   ReviewDetail,
   ReviewQueue,
+  SecondOpinion,
+  SecondOpinionConfig,
 } from "../types";
 import {
   ApiError,
@@ -19,7 +21,9 @@ import {
   fetchReviewDetail,
   fetchReviewOriginal,
   fetchReviewQueue,
+  fetchSecondOpinions,
   postDisposition,
+  requestSecondOpinion,
 } from "../api";
 import { DemoRoleSelect } from "../components/DemoRoleSelect";
 import { useDemoRole } from "../demoRole";
@@ -31,6 +35,96 @@ const DISPOSITIONS = [
   "demonstrated_transfer",
   "policy_supported",
 ];
+
+// AI second opinion (CL-77): advisory only, beside the disposition.
+export function SecondOpinionPanel({
+  opinions,
+  config,
+  busy,
+  onRequest,
+}: {
+  opinions: SecondOpinion[];
+  config: SecondOpinionConfig | null;
+  busy: boolean;
+  onRequest: () => void;
+}) {
+  const latest = opinions[opinions.length - 1];
+  return (
+    <>
+      <p className="note">
+        Advisory only — does not change the verdict. A second AI
+        model reviews the sealed findings; agent text is fenced as
+        untrusted data.
+      </p>
+      {config && !config.enabled && (
+        <p className="note">
+          Second opinion is off: no provider key is configured on
+          the server. The rest of this page works normally.
+        </p>
+      )}
+      {config?.enabled && (
+        <p className="note">
+          Model: {config.model ?? config.provider ?? "configured"}
+          {config.per_run_cap != null
+            ? ` · per-run cap ${config.per_run_cap}`
+            : ""}
+        </p>
+      )}
+      <p>
+        <button
+          type="button"
+          className="button"
+          onClick={onRequest}
+          disabled={busy}
+        >
+          Request second opinion
+        </button>
+      </p>
+      {latest?.status === "second_opinion_unavailable" && (
+        <p className="note" role="status">
+          Second opinion unavailable
+          {latest.unavailable_reason
+            ? `: ${latest.unavailable_reason}`
+            : ""}
+          . This is not an all-clear.
+        </p>
+      )}
+      {latest?.status === "unparseable" && (
+        <p className="note" role="status">
+          Second opinion unparseable: the model reply did not match
+          the structured format and was not treated as agreement.
+        </p>
+      )}
+      {latest?.status === "available" && latest.assessment && (
+        <dl className="kv kv-wide">
+          <div>
+            <dt>Assessment</dt>
+            <dd>{latest.assessment.assessment}</dd>
+          </div>
+          <div>
+            <dt>Model</dt>
+            <dd>
+              {latest.provider ?? "—"} / {latest.model ?? "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Confidence</dt>
+            <dd>{latest.assessment.confidence_note}</dd>
+          </div>
+        </dl>
+      )}
+      {latest?.assessment?.per_finding?.length ? (
+        <ul className="tight">
+          {latest.assessment.per_finding.map((row, i) => (
+            <li key={i}>
+              {row.family}: {row.comment}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
 
 export default function Review() {
   const [role, setRole] = useDemoRole();
@@ -46,6 +140,9 @@ export default function Review() {
   const [note, setNote] = useState("");
   const [basis, setBasis] = useState("");
   const [audit, setAudit] = useState<ReviewAudit | null>(null);
+  const [opinions, setOpinions] = useState<SecondOpinion[]>([]);
+  const [opinionConfig, setOpinionConfig] =
+    useState<SecondOpinionConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusLine, setStatusLine] = useState("");
@@ -94,14 +191,44 @@ export default function Review() {
     setSelectedId(deliveryId);
     setDecode(null);
     setDecodeNote("");
+    setOpinions([]);
     setBusy(true);
     setError(null);
     try {
       setDetail(await fetchReviewDetail(deliveryId, role));
+      const stored = await fetchSecondOpinions(deliveryId, role).catch(
+        () => null,
+      );
+      if (stored) {
+        setOpinions(stored.opinions);
+        setOpinionConfig(stored.config);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load the delivery.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onSecondOpinion = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const record = await requestSecondOpinion(selectedId, role);
+      setOpinions((prev) => [...prev, record]);
+      setStatusLine(
+        record.status === "available"
+          ? "Second opinion recorded (advisory only)."
+          : `Second opinion: ${record.status}.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Second opinion failed.",
+      );
+    } finally {
+      setBusy(false);
+      await refreshAudit(runId.trim());
     }
   };
 
@@ -390,6 +517,14 @@ export default function Review() {
               Export needs the researcher role; candidate decodes need
               the reviewer role.
             </p>
+
+            <h3>AI second opinion</h3>
+            <SecondOpinionPanel
+              opinions={opinions}
+              config={opinionConfig}
+              busy={busy}
+              onRequest={onSecondOpinion}
+            />
           </section>
         </div>
       )}

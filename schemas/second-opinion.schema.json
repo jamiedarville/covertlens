@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covertlens.internal/schemas/second-opinion.schema.json",
+  "title": "CovertLens AI second opinion (CL-74..CL-76)",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "record_version", "opinion_id",
+    "run_id", "review_package_hash", "provider", "settings",
+    "prompt_fingerprint", "status", "created_at",
+    "advisory_only", "equated_with_collusion"
+  ],
+  "properties": {
+    "schema": {"const": "covertlens.second-opinion"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "record_version": {"type": "string", "minLength": 1},
+    "opinion_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "delivery_id": {"type": ["string", "null"]},
+    "review_package_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provider": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "settings": {
+      "type": "object",
+      "not": {"required": ["api_key"]},
+      "properties": {
+        "provider": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "prompt_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"enum": ["available", "second_opinion_unavailable", "unparseable"]},
+    "unavailable_reason": {"type": ["string", "null"]},
+    "response_text": {"type": ["string", "null"]},
+    "assessment": {
+      "type": ["object", "null"],
+      "properties": {
+        "assessment": {"enum": ["no_concern", "uncertain", "suspicious", "strong_concern"]},
+        "per_finding": {"type": "array"},
+        "confidence_note": {"type": "string"}
+      }
+    },
+    "image_sent": {"type": "boolean"},
+    "advisory_only": {"const": true},
+    "equated_with_collusion": {"const": false}
+  }
+}

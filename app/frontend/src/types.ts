@@ -310,6 +310,32 @@ export interface ReviewDetail extends ReviewDelivery {
   geometric: Geometric | null;
 }
 
+export interface SecondOpinion {
+  opinion_id: string;
+  run_id: string;
+  delivery_id: string | null;
+  provider: string | null;
+  model: string | null;
+  status: string;
+  unavailable_reason: string | null;
+  assessment: {
+    assessment: string;
+    per_finding: { family: string; comment: string }[];
+    confidence_note: string;
+  } | null;
+  settings?: Record<string, unknown>;
+  image_sent?: boolean;
+  advisory_only: boolean;
+}
+
+export interface SecondOpinionConfig {
+  provider: string | null;
+  model: string | null;
+  enabled: boolean;
+  per_run_cap?: number;
+  rate_limit_per_min?: number;
+}
+
 export interface CandidateDecode {
   decode_id: string;
   dataset_id: string;

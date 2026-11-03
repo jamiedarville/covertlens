@@ -1105,6 +1105,103 @@ async def review_disposition(delivery_id: str, request: Request) -> JSONResponse
     return JSONResponse({"delivery_id": delivery_id, **review})
 
 
+# -- AI second opinion (CL-74..CL-77, advisory only) -------------------
+# The API key is read server-side from the environment only and
+# never appears in any response. Opinions never change a verdict.
+
+_second_opinion_tracker: Any = None
+
+
+def _opinion_tracker() -> Any:
+    global _second_opinion_tracker
+    if _second_opinion_tracker is None:
+        from covertlens.second_opinion import UsageTracker
+
+        _second_opinion_tracker = UsageTracker()
+    return _second_opinion_tracker
+
+
+def _opinion_provider_and_config() -> tuple[Any, Any]:
+    """Server-side provider; tests may set a fake via the env."""
+    from covertlens.second_opinion import (
+        FakeProvider,
+        SecondOpinionConfig,
+        provider_from_config,
+    )
+
+    config = SecondOpinionConfig.from_env()
+    if config.provider == "fake":
+        text = os.environ.get("COVERTLENS_SECOND_OPINION_FAKE_RESPONSE")
+        provider = FakeProvider(response_text=text, model=config.model or "fake-model")
+        return provider, config
+    return provider_from_config(config), config
+
+
+@app.get("/api/review/second-opinion/config")
+def second_opinion_config() -> JSONResponse:
+    """Public provider status (never the key)."""
+    from covertlens.second_opinion import SecondOpinionConfig
+
+    return JSONResponse(SecondOpinionConfig.from_env().public_dict())
+
+
+@app.post("/api/review/deliveries/{delivery_id}/second-opinion")
+@app.post("/api/review/{delivery_id}/second-opinion")
+async def second_opinion_request(delivery_id: str, request: Request) -> JSONResponse:
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        record_row = gate.get_delivery(delivery_id)
+        principal, _role = _demo_principal(request, record_row.run_id)
+        provider, config = _opinion_provider_and_config()
+        record = workspace.request_second_opinion(
+            principal,
+            gate,
+            record_row.run_id,
+            delivery_id,
+            provider=provider,
+            config=config,
+            tracker=_opinion_tracker(),
+            include_image=bool(body.get("include_image")),
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    return JSONResponse(record)
+
+
+@app.get("/api/review/deliveries/{delivery_id}/second-opinion")
+@app.get("/api/review/{delivery_id}/second-opinion")
+def second_opinion_list(delivery_id: str, request: Request) -> JSONResponse:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        record_row = gate.get_delivery(delivery_id)
+        _principal, _role = _demo_principal(request, record_row.run_id)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    return JSONResponse(
+        {
+            "delivery_id": delivery_id,
+            "run_id": record_row.run_id,
+            "opinions": workspace.second_opinions(record_row.run_id, delivery_id),
+            "config": SecondOpinionConfig_status(),
+        }
+    )
+
+
+def SecondOpinionConfig_status() -> dict[str, Any]:
+    from covertlens.second_opinion import SecondOpinionConfig
+
+    return SecondOpinionConfig.from_env().public_dict()
+
+
 @app.get("/api/review/runs/{run_id}/export")
 def review_export(run_id: str, request: Request) -> Response:
     gate = _gate()

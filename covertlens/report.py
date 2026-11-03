@@ -119,8 +119,27 @@ def build_run_report(
         "actions": joined["actions"],
         "triage_queue": triage,
         "reviews": {},
+        "second_opinions": [],
         "disposition_counts": {name: 0 for name in DISPOSITIONS},
     }
+
+
+def attach_second_opinion(
+    report: dict[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Attach one advisory second opinion (CL-76); returns a copy.
+
+    Advisory only: verdicts and dispositions in the report are
+    carried over unchanged, whatever the opinion says.
+    """
+    from .second_opinion import validate_second_opinion
+
+    problems = validate_second_opinion(record)
+    if problems:
+        raise ValueError(f"invalid second opinion: {'; '.join(problems)}")
+    updated = copy.deepcopy(report)
+    updated.setdefault("second_opinions", []).append(copy.deepcopy(record))
+    return updated
 
 
 def apply_review(
@@ -192,6 +211,15 @@ def validate_run_report(report: dict[str, Any]) -> list[str]:
                 aid.get("label") == EVIDENCE_AID_LABEL,
                 f"originals[{i}] evidence aids must carry the evidence-aid label",
             )
+    for opinion in report.get("second_opinions") or []:
+        need(
+            opinion.get("advisory_only") is True,
+            "second opinions in a report must be advisory_only",
+        )
+        need(
+            opinion.get("equated_with_collusion") is False,
+            "second opinions never equate outcomes with collusion",
+        )
     for delivery_id, review in (report.get("reviews") or {}).items():
         need(
             review.get("disposition") in DISPOSITIONS,

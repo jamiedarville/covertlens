@@ -10,6 +10,8 @@ import type {
   ReviewDetail,
   ReviewQueue,
   ReviewRole,
+  SecondOpinion,
+  SecondOpinionConfig,
   TraceView,
 } from "./types";
 import { roleHeaders } from "./demoRole";
@@ -290,6 +292,46 @@ export async function postDisposition(
     throw new ApiError(response.status, String(body.detail ?? "Disposition failed."));
   }
   return body;
+}
+
+export async function fetchSecondOpinionConfig(): Promise<SecondOpinionConfig> {
+  const response = await fetch("/api/review/second-opinion/config");
+  if (!response.ok) throw new ApiError(response.status, "Could not load second-opinion status.");
+  return (await readJson(response)) as unknown as SecondOpinionConfig;
+}
+
+export async function requestSecondOpinion(
+  deliveryId: string,
+  role: string,
+): Promise<SecondOpinion> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}/second-opinion`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...roleHeaders(role) },
+      body: JSON.stringify({}),
+    },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Second opinion failed."));
+  }
+  return body as unknown as SecondOpinion;
+}
+
+export async function fetchSecondOpinions(
+  deliveryId: string,
+  role: string,
+): Promise<{ opinions: SecondOpinion[]; config: SecondOpinionConfig }> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}/second-opinion`,
+    { headers: roleHeaders(role) },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Could not load second opinions."));
+  }
+  return body as unknown as { opinions: SecondOpinion[]; config: SecondOpinionConfig };
 }
 
 export async function downloadReviewPackage(
