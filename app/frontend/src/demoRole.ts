@@ -5,6 +5,7 @@
 // the browser tab so it carries across pages.
 
 import { useCallback, useState } from "react";
+import { DEMO_BUILD } from "./build";
 
 export const DEMO_ROLES = ["viewer", "researcher", "reviewer"] as const;
 const STORAGE_KEY = "covertlens:demo-role";
@@ -32,6 +33,8 @@ export function useDemoRole(): [string, (role: string) => void] {
   return [role, setRole];
 }
 
+// Non-demo builds never send the header (CL-67): the server ignores it
+// there anyway, and the bundle carries no way to choose a role.
 export function roleHeaders(role: string): Record<string, string> {
-  return { "X-Demo-Role": role };
+  return DEMO_BUILD ? { "X-Demo-Role": role } : {};
 }

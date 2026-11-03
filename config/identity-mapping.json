@@ -1,0 +1,88 @@
+{
+  "schema": "covertlens.identity-mapping",
+  "mapping_version": "1.0.0",
+  "owner": {
+    "team": "Agent Evaluation / AI Safety"
+  },
+  "note": "CL-67. Shipped deny-by-default: an authenticated identity that matches no rule is a viewer with no dataset. Replace the example rules with your IdP's groups before deploying; COVERTLENS_IDENTITY_MAPPING points the service at another file.",
+  "actor_id_claim": "sub",
+  "groups_claim": "groups",
+  "default": {
+    "roles": [
+      "viewer"
+    ],
+    "datasets": []
+  },
+  "rules": [
+    {
+      "id": "researchers",
+      "match": {
+        "claim": "groups",
+        "op": "equals",
+        "value": "covertlens-researchers"
+      },
+      "roles": [
+        "researcher"
+      ],
+      "datasets": [
+        "*"
+      ]
+    },
+    {
+      "id": "reviewers",
+      "match": {
+        "claim": "groups",
+        "op": "equals",
+        "value": "covertlens-reviewers"
+      },
+      "roles": [
+        "reviewer"
+      ],
+      "datasets": [
+        "*"
+      ]
+    },
+    {
+      "id": "operators",
+      "match": {
+        "claim": "groups",
+        "op": "equals",
+        "value": "covertlens-operators"
+      },
+      "roles": [
+        "operator"
+      ],
+      "datasets": [
+        "*"
+      ]
+    },
+    {
+      "id": "approvers",
+      "match": {
+        "claim": "groups",
+        "op": "equals",
+        "value": "covertlens-approvers"
+      },
+      "roles": [
+        "approver"
+      ],
+      "datasets": [
+        "*"
+      ]
+    },
+    {
+      "id": "tenant-alpha-researchers",
+      "match": {
+        "claim": "groups",
+        "op": "equals",
+        "value": "tenant-alpha"
+      },
+      "roles": [
+        "researcher"
+      ],
+      "datasets": [
+        "alpha-*"
+      ]
+    }
+  ]
+}

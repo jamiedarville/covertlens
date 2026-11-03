@@ -25,7 +25,7 @@ import {
   postDisposition,
   requestSecondOpinion,
 } from "../api";
-import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
 
 const DISPOSITIONS = [
@@ -350,7 +350,7 @@ export default function Review() {
           evidence principal the API acts as; permissions come from
           the runtime policy and every read is audited.
         </p>
-        <DemoRoleSelect role={role} onChange={setRole} disabled={busy} />
+        <RoleControl role={role} onChange={setRole} disabled={busy} />
         <div className="form-grid">
           <label>
             Run ID

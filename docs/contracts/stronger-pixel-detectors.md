@@ -49,9 +49,11 @@ like the CL-9 replacement fixtures.
   pairs) the statistic cannot speak: the score is gated to 0 and
   the limitation is recorded — the same fail-closed shape as the
   PoV insufficient-coverage case, never a silent clean score.
-- **Score cap:** the randomness is scaled by `score_scale` (0.25),
-  so this unfrozen detector's maximum score stays below the frozen
-  spatial quarantine point (0.272414). It can contribute triage
+- **Score cap:** the randomness is scaled by `score_scale`, so this
+  unfrozen detector's maximum score stays below the frozen spatial
+  quarantine point (0.25 under `frozen-1.1.0`'s 0.272414; CL-68's
+  `SpaConfig` 1.1.0 uses 0.23, under `frozen-1.3.0`'s 0.24362 and above
+  its 0.21674 triage point, pinned by a test). It can contribute triage
   evidence under the frozen ladder but can never by itself cause
   withholding before a dedicated freeze calibrates points for it.
 - **Applicability:** parsed PNG with known geometry; JPEGs and

@@ -62,3 +62,19 @@ def test_published_artifact_matches_built_scorecard(scorecard):
         if name != "latency_reliability":
             assert published["sections"][name] == section
     assert published["frozen_config_version"] == scorecard["frozen_config_version"]
+
+
+def test_scorecard_names_stability_exclusions_with_measured_rates(scorecard):
+    """CL-68 acceptance (fallback branch): every texture the stability
+    claim does not cover is named with its measured false-fail rate."""
+    detection = scorecard["sections"]["detection_frozen_benchmark"]
+    exclusions = detection["stability_exclusions"]
+    assert detection["stability_claim_covers_all_textures"] is (not exclusions)
+    for row in exclusions:
+        assert row["texture"] in ("gradient_noise", "smooth", "blocks")
+        assert row["false_failure_rate"] > 0.01
+        assert row["runs"] >= 150
+    named = {(r["texture"], r["media"]) for r in exclusions}
+    assert ("smooth", "png") in named
+    for family, block in detection["per_family"].items():
+        assert min(block["held_out_positives_by_band"].values()) >= 20, family

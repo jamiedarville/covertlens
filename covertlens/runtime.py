@@ -45,6 +45,7 @@ PERMISSIONS = (
     "candidate.decode.read",
     "second_opinion.request",
     "second_opinion.send_image",
+    "leaderboard.moderate",
 )
 
 _DEFAULT = Path(__file__).resolve().parent.parent / "config" / "runtime-policy.json"

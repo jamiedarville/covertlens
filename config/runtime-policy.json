@@ -1,6 +1,6 @@
 {
   "policy_id": "covertlens.runtime-policy",
-  "policy_version": "1.1.0",
+  "policy_version": "1.2.0",
   "owner": {"team": "Agent Evaluation / AI Safety"},
   "internal_only": true,
   "default": "deny",
@@ -15,7 +15,8 @@
     "retirement.approve",
     "candidate.decode.read",
     "second_opinion.request",
-    "second_opinion.send_image"
+    "second_opinion.send_image",
+    "leaderboard.moderate"
   ],
   "roles": {
     "agent": {"allow": []},
@@ -26,7 +27,7 @@
       "allow": ["original.read", "trace.read", "export.create", "verdict.override", "second_opinion.request", "second_opinion.send_image"]
     },
     "scorer": {"allow": ["payload.read", "trace.read"]},
-    "operator": {"allow": ["config.change", "retirement.request"]},
+    "operator": {"allow": ["config.change", "retirement.request", "leaderboard.moderate"]},
     "approver": {"allow": ["retirement.approve"]}
   },
   "audit": {"hash_chain": true, "retention": "dataset_lifetime"},

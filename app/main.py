@@ -63,12 +63,19 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 
 import covertlens
 from covertlens.manifest import load_manifest
 from covertlens.pinning import default_detector_versions
 
+from . import auth
 from .analysis_worker import analyze_bytes
 from .generation_worker import generate_image
 
@@ -233,6 +240,11 @@ def _static_root() -> Path | None:
 
 @app.on_event("startup")
 def _startup() -> None:
+    if auth.auth_mode() == "oidc":
+        # Fail closed at start: a misconfigured OIDC deployment must not
+        # come up and serve every request as an anonymous viewer.
+        auth.OidcSettings.from_env()
+        _mapping()
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -285,7 +297,8 @@ async def _security_and_rate_limit(request: Request, call_next):
         return response
     if request.url.path in ("/api/analyze", "/api/generate"):
         now = time.time()
-        window = _rate_windows.setdefault(request.client.host, deque())
+        host = request.client.host if request.client else "unknown"
+        window = _rate_windows.setdefault(host, deque())
         while window and now - window[0] > 60:
             window.popleft()
         if len(window) >= RATE_LIMIT_PER_MIN:
@@ -363,22 +376,20 @@ async def _json_object(request: Request) -> tuple[dict[str, Any], JSONResponse |
 
 
 def _demo_roles_enabled() -> bool:
-    """Whether `X-Demo-Role` is honoured (CL-78).
+    """Whether `X-Demo-Role` is honoured (CL-78, CL-67).
 
     The header is a demo convenience, not authentication: any client
-    can send any role. Only the demo deployment (the Docker image)
-    turns it on. When off, every request is a `viewer`. Real roles
-    are CL-67.
+    can send any role. Only demo mode in a demo build honours it
+    (`app.auth.auth_mode`); OIDC mode and production images never do.
     """
-    value = os.environ.get(DEMO_ROLES_ENV, "off").strip().lower()
-    return value in ("on", "1", "true", "yes")
+    return auth.auth_mode() == "demo"
 
 
 class DemoRoleDenied(PermissionError):
-    """The request's demo role lacks a runtime-policy permission."""
+    """The request's role (demo or authenticated) lacks a permission."""
 
     def __init__(self, role: str, permission: str) -> None:
-        super().__init__(f"demo role {role!r} lacks {permission}")
+        super().__init__(f"role {role!r} lacks {permission}")
         self.role = role
         self.permission = permission
 
@@ -410,29 +421,28 @@ def _require(request: Request, dataset_id: str, permission: str) -> tuple[Any, s
 
 
 def _denied(exc: DemoRoleDenied) -> JSONResponse:
+    mode = auth.auth_mode()
     return JSONResponse(
         {
-            "detail": "permission denied for demo role",
+            "detail": "permission denied for demo role"
+            if mode != "oidc"
+            else "permission denied",
             "role": exc.role,
             "needs": exc.permission,
-            "demo_roles_enabled": _demo_roles_enabled(),
+            "auth_mode": mode,
+            "demo_roles_enabled": mode == "demo",
         },
         status_code=403,
     )
 
 
-def _original_readers(run_id: str) -> set[str]:
-    """Actor ids the runtime policy lets read originals of this run."""
-    from covertlens.review import DEMO_ROLES, demo_principal
+def _original_readers(run_id: str, principal: Any) -> set[str]:
+    """The request's actor, when the runtime policy lets it read originals."""
     from covertlens.runtime import can
 
-    policy = _runtime_policy()
-    readers = set()
-    for role in DEMO_ROLES:
-        principal = demo_principal(role, run_id)
-        if can(policy, principal, run_id, "original.read"):
-            readers.add(principal.actor_id)
-    return readers
+    if can(_runtime_policy(), principal, run_id, "original.read"):
+        return {principal.actor_id}
+    return set()
 
 
 @app.get("/api/health")
@@ -672,8 +682,9 @@ def _gate_error(exc: Exception) -> JSONResponse:
     if isinstance(exc, ReviewerAccessError):
         return JSONResponse(
             {
-                "detail": "reviewer access denied: the original needs a demo role"
+                "detail": "reviewer access denied: the original needs a role"
                 " with original.read (researcher or reviewer)",
+                "auth_mode": auth.auth_mode(),
                 "demo_roles_enabled": _demo_roles_enabled(),
             },
             status_code=403,
@@ -684,9 +695,14 @@ def _gate_error(exc: Exception) -> JSONResponse:
 
 
 @app.get("/api/gate/runs")
-def gate_runs() -> dict[str, Any]:
+def gate_runs(request: Request) -> dict[str, Any]:
     gate = _gate()
-    return {"runs": gate.runs()}
+    runs = gate.runs()
+    if auth.auth_mode() == "oidc":
+        # Multi-tenant: only runs inside the caller's dataset scopes.
+        identity = _request_identity(request)
+        runs = [r for r in runs if identity is not None and identity.covers(r)]
+    return {"runs": runs}
 
 
 @app.post("/api/gate/runs")
@@ -699,11 +715,15 @@ async def gate_create_run(request: Request) -> JSONResponse:
         import uuid
 
         run_id = f"run_{uuid.uuid4().hex[:16]}"
-    return JSONResponse({"run_id": run_id, "known_runs": _gate().runs()})
+    denied = _tenant_guard(request, run_id)
+    if denied is not None:
+        return denied
+    return JSONResponse({"run_id": run_id, "known_runs": gate_runs(request)["runs"]})
 
 
 @app.post("/api/gate/deliveries")
 async def gate_create_delivery(
+    request: Request,
     file: UploadFile = File(...),
     run_id: str = Form(...),
     sender_id: str = Form("agent-a"),
@@ -713,6 +733,9 @@ async def gate_create_delivery(
 ) -> JSONResponse:
     from covertlens.gate import InterceptionContext
 
+    denied = _tenant_guard(request, run_id)
+    if denied is not None:
+        return denied
     gate = _gate()
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
@@ -735,7 +758,10 @@ async def gate_create_delivery(
 
 
 @app.get("/api/gate/runs/{run_id}")
-def gate_run_detail(run_id: str) -> JSONResponse:
+def gate_run_detail(run_id: str, request: Request) -> JSONResponse:
+    denied = _tenant_guard(request, run_id)
+    if denied is not None:
+        return denied
     gate = _gate()
     deliveries = [_delivery_payload(r) for r in gate.deliveries(run_id)]
     events = [e.to_dict() for e in gate.events(run_id)]
@@ -752,13 +778,17 @@ def gate_run_detail(run_id: str) -> JSONResponse:
 
 
 @app.post("/api/gate/deliveries/{delivery_id}/analyze")
-def gate_analyze_delivery(delivery_id: str) -> JSONResponse:
+def gate_analyze_delivery(delivery_id: str, request: Request) -> JSONResponse:
     """Analyse a pending delivery's bytes; stays pending (CL-53)."""
     gate = _gate()
     try:
         record = gate.get_delivery(delivery_id)
     except Exception as exc:  # noqa: BLE001
         return _gate_error(exc)
+    denied = _tenant_guard(request, record.run_id)
+    if denied is not None:
+        return denied
+    identity = _request_identity(request)
     if record.state != "pending":
         return JSONResponse(
             {"detail": f"delivery already decided ({record.state})"},
@@ -767,7 +797,7 @@ def gate_analyze_delivery(delivery_id: str) -> JSONResponse:
     try:
         data = gate.store.get_original(
             record.artifact_version_id,
-            actor_id="gate-analyzer",
+            actor_id=identity.actor_id if identity is not None else "gate-analyzer",
             purpose="analysis",
         )
     except Exception as exc:  # noqa: BLE001
@@ -819,11 +849,14 @@ async def gate_record_verdict(delivery_id: str, request: Request) -> JSONRespons
 
 
 @app.get("/api/gate/deliveries/{delivery_id}/recipient-image")
-def gate_recipient_image(delivery_id: str) -> Response:
+def gate_recipient_image(delivery_id: str, request: Request) -> Response:
     """Recipient view: bytes only after a permitting verdict."""
     gate = _gate()
     try:
         record = gate.get_delivery(delivery_id)
+        denied = _tenant_guard(request, record.run_id)
+        if denied is not None:
+            return denied
         data = gate.recipient_access(delivery_id, via_route="R-04")
     except Exception as exc:  # noqa: BLE001
         # Withheld/pending responses carry the gate's reason and no bytes.
@@ -862,7 +895,7 @@ def gate_reviewer_image(delivery_id: str, request: Request) -> Response:
         data = gate.reviewer_access(
             delivery_id,
             actor_id=principal.actor_id,
-            reviewer_ids=_original_readers(record.run_id),
+            reviewer_ids=_original_readers(record.run_id, principal),
         )
     except Exception as exc:  # noqa: BLE001
         return _gate_error(exc)
@@ -873,8 +906,11 @@ def gate_reviewer_image(delivery_id: str, request: Request) -> Response:
 
 
 @app.get("/api/gate/runs/{run_id}/events/stream")
-async def gate_event_stream(run_id: str, request: Request) -> StreamingResponse:
+async def gate_event_stream(run_id: str, request: Request) -> Response:
     """SSE timeline for one run (CL-53): replay, then poll for new seqs."""
+    denied = _tenant_guard(request, run_id)
+    if denied is not None:
+        return denied
     gate = _gate()
 
     async def generate() -> Any:
@@ -935,13 +971,266 @@ def _reset_review_for_tests() -> None:
 
 
 def _demo_principal(request: Request, dataset_id: str) -> Any:
-    """Demo principal for the request; `viewer` unless demo roles are on."""
+    """CL-11 principal for the request on one dataset (CL-67).
+
+    OIDC mode: the authenticated identity (session cookie or bearer
+    token) mapped through `config/identity-mapping.json`; anonymous
+    requests are viewers with no dataset. Demo mode: the `X-Demo-Role`
+    header. Off: a viewer. Returns (principal, role label).
+    """
+    from covertlens.identity import principal_for
     from covertlens.review import demo_principal
 
+    mode = auth.auth_mode()
+    if mode == "oidc":
+        identity = _request_identity(request)
+        principal = principal_for(identity, dataset_id)
+        return principal, ",".join(sorted(principal.roles)) or "viewer"
     role = "viewer"
-    if _demo_roles_enabled():
+    if mode == "demo":
         role = (request.headers.get("x-demo-role") or "viewer").strip().lower()
     return demo_principal(role, dataset_id), role
+
+
+def _tenant_guard(request: Request, run_id: str) -> JSONResponse | None:
+    """OIDC mode: the run must be inside the caller's dataset scopes.
+
+    Multi-tenant isolation for run-level reads and writes that hold no
+    runtime-policy permission of their own (gate runs, deliveries,
+    review queue). Demo and off modes keep the Phase 2 behaviour.
+    """
+    if auth.auth_mode() != "oidc":
+        return None
+    identity = _request_identity(request)
+    if identity is None:
+        return JSONResponse(
+            {"detail": "authentication required", "auth_mode": "oidc"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not identity.covers(run_id):
+        return JSONResponse(
+            {"detail": "run is outside your dataset scopes", "auth_mode": "oidc"},
+            status_code=403,
+        )
+    return None
+
+
+# -- Authentication (CL-67) --------------------------------------------
+
+AUTH_DIR = DATA_DIR / "auth"
+_auth_lock = threading.Lock()
+_oidc_client: Any = None
+_session_store: Any = None
+_identity_mapping: Any = None
+
+
+def _oidc() -> Any:
+    global _oidc_client
+    with _auth_lock:
+        if _oidc_client is None:
+            _oidc_client = auth.OidcClient(auth.OidcSettings.from_env())
+        return _oidc_client
+
+
+def _sessions() -> Any:
+    global _session_store
+    with _auth_lock:
+        if _session_store is None:
+            _session_store = auth.SessionStore(AUTH_DIR / "sessions.sqlite3")
+        return _session_store
+
+
+def _mapping() -> Any:
+    global _identity_mapping
+    with _auth_lock:
+        if _identity_mapping is None:
+            from covertlens.identity import load_identity_mapping
+
+            _identity_mapping = load_identity_mapping(
+                os.environ.get("COVERTLENS_IDENTITY_MAPPING") or None
+            )
+        return _identity_mapping
+
+
+def _reset_auth_for_tests(http: Any = None) -> None:
+    """Drop cached auth state; `http` injects a fake identity provider."""
+    global _oidc_client, _session_store, _identity_mapping
+    with _auth_lock:
+        _oidc_client = (
+            auth.OidcClient(auth.OidcSettings.from_env(), http=http)
+            if http is not None
+            else None
+        )
+        _session_store = None
+        _identity_mapping = None
+
+
+def _request_identity(request: Request) -> Any:
+    """Authenticated identity (OIDC mode) or None for anonymous requests.
+
+    A presented but invalid credential raises `AuthenticationFailed`
+    (401): a bad token never degrades silently to a viewer.
+    """
+    from covertlens.identity import Identity, identity_from_claims
+
+    if auth.auth_mode() != "oidc":
+        return None
+    cached = getattr(request.state, "covertlens_identity", "unset")
+    if cached != "unset":
+        return cached
+    identity = None
+    token = auth.bearer_token(request.headers.get("authorization"))
+    if token is not None:
+        client = _oidc()
+        claims = client.validate(
+            token, audience=client.settings.audience or client.settings.client_id
+        )
+        identity = identity_from_claims(claims, _mapping(), auth_method="bearer")
+    else:
+        session = request.cookies.get(auth.SESSION_COOKIE)
+        if session:
+            stored = _sessions().get_session(session)
+            if stored is not None:
+                identity = Identity.from_dict(stored)
+    request.state.covertlens_identity = identity
+    return identity
+
+
+@app.exception_handler(auth.AuthenticationFailed)
+async def _authentication_failed(
+    request: Request, exc: auth.AuthenticationFailed
+) -> JSONResponse:
+    response = JSONResponse(
+        {"detail": "authentication failed", "reason": exc.reason},
+        status_code=401,
+        headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+    )
+    _apply_security_headers(response)
+    return response
+
+
+def _redirect_uri(request: Request) -> str:
+    configured = _oidc().settings.redirect_uri
+    if configured:
+        return str(configured)
+    return str(request.url_for("auth_callback"))
+
+
+def _cookie_secure() -> bool:
+    return bool(_oidc().settings.cookie_secure)
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> JSONResponse:
+    """Who the service thinks you are, and how to sign in (CL-67)."""
+    mode = auth.auth_mode()
+    body: dict[str, Any] = {
+        "auth_mode": mode,
+        "demo_build": auth.demo_build(),
+        "authenticated": False,
+    }
+    if mode == "oidc":
+        identity = _request_identity(request)
+        body["login_url"] = "/api/auth/login"
+        if identity is not None:
+            body.update(
+                {
+                    "authenticated": True,
+                    "actor_id": identity.actor_id,
+                    "display_name": identity.display_name,
+                    "roles": sorted(identity.roles),
+                    "dataset_patterns": list(identity.dataset_patterns),
+                    "auth_method": identity.auth_method,
+                }
+            )
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/auth/login")
+def auth_login(request: Request, next: str | None = None) -> Response:
+    """Start the OIDC code flow (PKCE S256, state bound to this browser)."""
+    if auth.auth_mode() != "oidc":
+        return JSONResponse({"detail": "oidc sign-in is not enabled"}, status_code=404)
+    login = _sessions().begin_login(auth.safe_next_path(next))
+    target = _oidc().authorization_url(
+        state=login["state"],
+        nonce=login["nonce"],
+        challenge=auth.pkce_challenge(login["verifier"]),
+        redirect_uri=_redirect_uri(request),
+    )
+    response = RedirectResponse(target, status_code=302)
+    response.set_cookie(
+        auth.LOGIN_COOKIE,
+        login["binding"],
+        max_age=auth.LOGIN_TTL_S,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+        path="/api/auth",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/api/auth/callback", name="auth_callback")
+def auth_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> Response:
+    """Finish the code flow: one-time state, PKCE exchange, ID token, session."""
+    from covertlens.identity import identity_from_claims
+
+    if auth.auth_mode() != "oidc":
+        return JSONResponse({"detail": "oidc sign-in is not enabled"}, status_code=404)
+    if error:
+        return JSONResponse(
+            {"detail": "sign-in was not completed", "error": error[:80]},
+            status_code=400,
+        )
+    if not code or not state:
+        return JSONResponse({"detail": "missing code or state"}, status_code=400)
+    try:
+        pending = _sessions().finish_login(
+            state, request.cookies.get(auth.LOGIN_COOKIE) or ""
+        )
+        client = _oidc()
+        id_token = client.exchange(
+            code=code, verifier=pending["verifier"], redirect_uri=_redirect_uri(request)
+        )
+        claims = client.validate(id_token, nonce=pending["nonce"])
+        identity = identity_from_claims(claims, _mapping())
+    except (auth.AuthenticationFailed, ValueError) as exc:
+        return JSONResponse(
+            {"detail": "sign-in failed", "reason": str(exc)[:200]}, status_code=400
+        )
+    token = _sessions().create_session(identity, client.settings.session_ttl_s)
+    response = RedirectResponse(pending["next_path"], status_code=302)
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=client.settings.session_ttl_s,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+        path="/",
+    )
+    response.delete_cookie(auth.LOGIN_COOKIE, path="/api/auth")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request) -> JSONResponse:
+    """End the server-side session and clear the cookie."""
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if token and auth.auth_mode() == "oidc":
+        _sessions().delete_session(token)
+    response = JSONResponse({"signed_out": True})
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return response
 
 
 def _review_error(exc: Exception) -> JSONResponse:
@@ -978,6 +1267,8 @@ def review_roles() -> dict[str, Any]:
         "header": "X-Demo-Role",
         "default": "viewer",
         "enabled": _demo_roles_enabled(),
+        "auth_mode": auth.auth_mode(),
+        "demo_build": auth.demo_build(),
     }
 
 
@@ -987,6 +1278,9 @@ def review_queue(run_id: str, request: Request) -> JSONResponse:
         _principal, _role = _demo_principal(request, run_id)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+    denied = _tenant_guard(request, run_id)
+    if denied is not None:
+        return denied
     gate = _gate()
     workspace = _review_workspace()
     rows = [
@@ -1008,16 +1302,22 @@ def review_delivery_detail(delivery_id: str, request: Request) -> JSONResponse:
     workspace = _review_workspace()
     try:
         record = gate.get_delivery(delivery_id)
-        _principal, _role = _demo_principal(request, record.run_id)
+        principal, _role = _demo_principal(request, record.run_id)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except Exception as exc:  # noqa: BLE001
         return _review_error(exc)
+    denied = _tenant_guard(request, record.run_id)
+    if denied is not None:
+        return denied
     from covertlens.geometric import analyze_geometric_bytes
     from covertlens.metadata import analyze_all_bytes
 
+    # Store access log names the requester (CL-67), purpose "analysis".
     data = gate.store.get_original(
-        record.artifact_version_id, actor_id="review-detail", purpose="analysis"
+        record.artifact_version_id,
+        actor_id=principal.actor_id if auth.auth_mode() == "oidc" else "review-detail",
+        purpose="analysis",
     )
     analysis = analyze_all_bytes(data, artifact_version_id=record.artifact_version_id)
     geometric = analyze_geometric_bytes(data)
@@ -1258,7 +1558,7 @@ def trace_run(run_id: str, request: Request) -> JSONResponse:
     from covertlens.trace_explorer import build_trace_explorer
 
     try:
-        _require(request, run_id, "trace.read")
+        principal, _role = _require(request, run_id, "trace.read")
     except DemoRoleDenied as exc:
         return _denied(exc)
     except ValueError as exc:
@@ -1269,7 +1569,9 @@ def trace_run(run_id: str, request: Request) -> JSONResponse:
     for record in gate.deliveries(run_id):
         data = gate.store.get_original(
             record.artifact_version_id,
-            actor_id="trace-explorer",
+            actor_id=principal.actor_id
+            if auth.auth_mode() == "oidc"
+            else "trace-explorer",
             purpose="analysis",
         )
         results.append(
@@ -1279,6 +1581,286 @@ def trace_run(run_id: str, request: Request) -> JSONResponse:
     if view["run_id"] is None:
         view["run_id"] = run_id
     return JSONResponse(view)
+
+
+# -- Leaderboard (CL-70) ---------------------------------------------------
+
+LEADERBOARD_DB = DATA_DIR / "leaderboard" / "leaderboard.sqlite3"
+LEADERBOARD_DATASET = "leaderboard"
+_leaderboard_instance: Any = None
+_leaderboard_lock = threading.Lock()
+_leaderboard_windows: dict[str, deque] = {}
+_HIDDEN_PROVENANCE = ("grid_full", "generator", "encoder")
+
+
+def _leaderboard() -> Any:
+    global _leaderboard_instance
+    with _leaderboard_lock:
+        if _leaderboard_instance is None:
+            from covertlens.leaderboard import LeaderboardStore
+
+            _leaderboard_instance = LeaderboardStore(LEADERBOARD_DB)
+        return _leaderboard_instance
+
+
+def _reset_leaderboard_for_tests() -> None:
+    global _leaderboard_instance
+    with _leaderboard_lock:
+        _leaderboard_instance = None
+        _leaderboard_windows.clear()
+
+
+def _leaderboard_moderated() -> bool:
+    """New entries wait for an operator; default on for OIDC deployments."""
+    default = "on" if auth.auth_mode() == "oidc" else "off"
+    value = os.environ.get("COVERTLENS_LEADERBOARD_MODERATION", default)
+    return value.strip().lower() in ("on", "1", "true", "yes")
+
+
+def _leaderboard_rate_ok(key: str) -> bool:
+    """Per submitter sliding hour window; idle windows are evicted."""
+    limit = int(os.environ.get("COVERTLENS_LEADERBOARD_RATE_PER_HOUR", "20"))
+    now = time.time()
+    with _leaderboard_lock:
+        for stale in [
+            k for k, w in _leaderboard_windows.items() if not w or now - w[-1] > 3600
+        ]:
+            _leaderboard_windows.pop(stale, None)
+        window = _leaderboard_windows.setdefault(key, deque())
+        while window and now - window[0] > 3600:
+            window.popleft()
+        if len(window) >= limit:
+            return False
+        window.append(now)
+        return True
+
+
+def _red_team_record(artifact_version_id: str) -> dict[str, Any] | None:
+    if not RED_TEAM_INDEX.is_file():
+        return None
+    found = None
+    with RED_TEAM_INDEX.open(encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("artifact_version_id") == artifact_version_id:
+                found = record
+    return found
+
+
+def _can_moderate(request: Request) -> bool:
+    try:
+        _require(request, LEADERBOARD_DATASET, "leaderboard.moderate")
+    except (DemoRoleDenied, ValueError):
+        return False
+    return True
+
+
+def _board_payload(pin_hash: str, request: Request) -> dict[str, Any]:
+    from covertlens.leaderboard import standings
+
+    entries = _leaderboard().entries(pin_hash)
+    return {
+        "pin_hash": pin_hash,
+        "standings": standings(entries),
+        "entries": len(entries),
+        "pending": sum(1 for e in entries if e["status"] == "pending"),
+    }
+
+
+@app.get("/api/leaderboard")
+def leaderboard(request: Request) -> JSONResponse:
+    """Current board (this release's pin hash) plus every archived board."""
+    from covertlens.leaderboard import OPERATING_POINTS, configuration_pin
+
+    pin = configuration_pin()
+    return JSONResponse(
+        {
+            "current": pin,
+            "board": _board_payload(pin["pin_hash"], request),
+            "boards": [
+                {**b, "current": b["pin_hash"] == pin["pin_hash"]}
+                for b in _leaderboard().boards()
+            ],
+            "operating_points": list(OPERATING_POINTS),
+            "moderation": _leaderboard_moderated(),
+            "can_moderate": _can_moderate(request),
+            "submissions_need_sign_in": auth.auth_mode() == "oidc",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/leaderboard/boards/{pin_hash}")
+def leaderboard_board(pin_hash: str, request: Request) -> JSONResponse:
+    """An archived (or current) board by its pin hash; old entries stay."""
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", pin_hash):
+        return JSONResponse({"detail": "not a pin hash"}, status_code=400)
+    board = _board_payload(pin_hash, request)
+    if not board["entries"]:
+        return JSONResponse({"detail": "no board for this pin hash"}, status_code=404)
+    return JSONResponse(board)
+
+
+@app.get("/api/leaderboard/entries/{entry_id}")
+def leaderboard_entry(entry_id: str, request: Request) -> JSONResponse:
+    from covertlens.leaderboard import public_entry
+
+    try:
+        entry = _leaderboard().get(entry_id)
+    except KeyError:
+        return JSONResponse({"detail": "entry_not_found"}, status_code=404)
+    if _can_moderate(request):
+        return JSONResponse(entry)
+    if entry["status"] != "visible":
+        return JSONResponse({"detail": "entry_not_found"}, status_code=404)
+    return JSONResponse(public_entry(entry))
+
+
+@app.get("/api/leaderboard/pending")
+def leaderboard_pending(request: Request) -> JSONResponse:
+    """Entries awaiting moderation; operators only."""
+    from covertlens.leaderboard import configuration_pin
+
+    try:
+        _require(request, LEADERBOARD_DATASET, "leaderboard.moderate")
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    pin = configuration_pin()["pin_hash"]
+    return JSONResponse({"pending": _leaderboard().entries(pin, status="pending")})
+
+
+@app.post("/api/leaderboard/submissions")
+async def leaderboard_submit(request: Request) -> JSONResponse:
+    """Record one Generate-page artifact on the current board (CL-70).
+
+    The server re-scores the stored bytes; the client sends only the
+    artifact version id and a display name.
+    """
+    from covertlens.leaderboard import (
+        DuplicateSubmission,
+        clean_display_name,
+        configuration_pin,
+        score_submission,
+    )
+
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
+    identity = _request_identity(request)
+    if auth.auth_mode() == "oidc" and identity is None:
+        return JSONResponse(
+            {"detail": "sign in to submit"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        name = clean_display_name(
+            body.get("display_name")
+            or (identity.display_name if identity is not None else "")
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    client_host = request.client.host if request.client else "unknown"
+    rate_key = identity.actor_id if identity is not None else f"ip:{client_host}"
+    if not _leaderboard_rate_ok(rate_key):
+        return JSONResponse({"detail": "rate_limited"}, status_code=429)
+    version_id = str(body.get("artifact_version_id") or "")
+    record = _red_team_record(version_id) if version_id else None
+    if record is None:
+        return JSONResponse(
+            {"detail": "unknown artifact: submit an image made on the Generate page"},
+            status_code=404,
+        )
+    digest = str(record["content_hash"]).removeprefix("sha256:")
+    media = str((record.get("parameters") or {}).get("kind") or "")
+    ext = (
+        "jpg"
+        if media == "jpeg_dct"
+        or (
+            media == "metadata"
+            and (record.get("parameters") or {}).get("media_kind") == "jpeg"
+        )
+        else "png"
+    )
+    path = GENERATED_DIR / f"{digest}.{ext}"
+    if not path.is_file():
+        return JSONResponse({"detail": "generated bytes are missing"}, status_code=410)
+    data = path.read_bytes()
+    if "sha256:" + hashlib.sha256(data).hexdigest() != record["content_hash"]:
+        return JSONResponse({"detail": "generated bytes do not match"}, status_code=409)
+    parameters = {
+        k: v
+        for k, v in (record.get("parameters") or {}).items()
+        if k not in _HIDDEN_PROVENANCE
+    }
+    if (parameters.get("grid") or {}).get("hidden"):
+        # A hidden attacker grid is derived from the scene and payload
+        # seeds (CL-51); publishing them would publish the grid.
+        parameters.pop("scene_seed", None)
+        parameters.pop("payload_seed", None)
+    provenance = record.get("parameters") or {}
+    parameters["encoder_name"] = (provenance.get("encoder") or {}).get("name")
+    parameters["encoder_version"] = (provenance.get("encoder") or {}).get("version")
+    future = _executor().submit(score_submission, data, parameters)
+    try:
+        outcome = await asyncio.wait_for(
+            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S
+        )
+    except (TimeoutError, concurrent.futures.TimeoutError):
+        return JSONResponse({"detail": "scoring_timeout"}, status_code=504)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    try:
+        entry = _leaderboard().submit(
+            pin=configuration_pin(),
+            artifact={
+                "content_hash": record["content_hash"],
+                "artifact_version_id": version_id,
+                "fixture_id": record.get("fixture_id"),
+            },
+            parameters=parameters,
+            outcome=outcome,
+            submitter={
+                "display_name": name,
+                "actor_id": identity.actor_id if identity is not None else "anonymous",
+                "auth_method": identity.auth_method if identity is not None else None,
+            },
+            moderated=_leaderboard_moderated(),
+        )
+    except DuplicateSubmission as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+    from covertlens.leaderboard import public_entry
+
+    return JSONResponse(public_entry(entry), status_code=201)
+
+
+@app.post("/api/leaderboard/entries/{entry_id}/moderation")
+async def leaderboard_moderate(entry_id: str, request: Request) -> JSONResponse:
+    """Approve or hide an entry; needs `leaderboard.moderate` (operator)."""
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
+    try:
+        principal, _role = _require(
+            request, LEADERBOARD_DATASET, "leaderboard.moderate"
+        )
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    try:
+        entry = _leaderboard().moderate(
+            entry_id,
+            action=str(body.get("action") or ""),
+            actor_id=principal.actor_id,
+            reason=str(body.get("reason") or ""),
+        )
+    except KeyError:
+        return JSONResponse({"detail": "entry_not_found"}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(entry)
 
 
 @app.get("/api/benchmarks/{name}")
@@ -1360,6 +1942,15 @@ def generate_page() -> Response:
 @app.get("/trace")
 def trace_page() -> Response:
     """SPA route for the Trace explorer page (CL-60)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/leaderboard")
+def leaderboard_page() -> Response:
+    """SPA route for the Leaderboard page (CL-70)."""
     response = _index_response()
     if response is not None:
         return response

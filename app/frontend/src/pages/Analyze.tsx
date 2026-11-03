@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AnalyzePayload, FixtureEntry } from "../types";
 import {
   ApiError,
@@ -24,7 +24,27 @@ function statusMessage(payload: AnalyzePayload): string {
   }
 }
 
-export default function Analyze() {
+// Where analysis runs (CL-66): the server API by default, or Pyodide in
+// the browser for the static build. The page and its CL-48 overlay
+// components are the same either way.
+export interface AnalyzeEngine {
+  analyze(file: File, onProgress?: (line: string) => void): Promise<AnalyzePayload>;
+  listExamples(): Promise<FixtureEntry[]>;
+  fetchExample(entry: FixtureEntry): Promise<File>;
+  // Landing-page preload and ?generated= handoff need the server.
+  serverHandoffs: boolean;
+  maxBytes?: number;
+  notice?: ReactNode;
+}
+
+export const serverEngine: AnalyzeEngine = {
+  analyze: (file) => analyzeFile(file),
+  listExamples: listFixtures,
+  fetchExample: fetchFixtureFile,
+  serverHandoffs: true,
+};
+
+export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEngine }) {
   const [payload, setPayload] = useState<AnalyzePayload | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [resultLabel, setResultLabel] = useState<string>("");
@@ -37,7 +57,7 @@ export default function Analyze() {
   const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const preload = takePreload();
+    const preload = engine.serverHandoffs ? takePreload() : null;
     if (preload) {
       setPayload(preload.payload);
       setPreviewUrl(preload.imageUrl);
@@ -45,7 +65,8 @@ export default function Analyze() {
       setStatusLine(`Showing the precomputed overlay for ${preload.label}.`);
     }
     let cancelled = false;
-    listFixtures()
+    engine
+      .listExamples()
       .then((entries) => {
         if (!cancelled) setFixtures(entries);
       })
@@ -74,7 +95,7 @@ export default function Analyze() {
     setStatusLine(`Analyzing ${label}…`);
     setPreviewUrl(await readPreview(file));
     try {
-      const result = await analyzeFile(file);
+      const result = await engine.analyze(file, setStatusLine);
       setPayload(result);
       setResultLabel(label);
       setStatusLine(statusMessage(result));
@@ -94,6 +115,7 @@ export default function Analyze() {
   // One-click handoff from /generate (CL-51):
   // /analyze?generated=<digest>.<ext> loads and analyzes it.
   useEffect(() => {
+    if (!engine.serverHandoffs) return;
     const generated = new URLSearchParams(window.location.search).get("generated");
     if (!generated || !/^[0-9a-f]{64}\.(png|jpg)$/.test(generated)) return;
     let cancelled = false;
@@ -124,6 +146,12 @@ export default function Analyze() {
       setStatusLine("Please choose a PNG or JPEG image.");
       return;
     }
+    if (engine.maxBytes !== undefined && file.size > engine.maxBytes) {
+      const limit = `${Math.round(engine.maxBytes / (1024 * 1024))} MiB`;
+      setError(`That file is larger than this page's ${limit} limit.`);
+      setStatusLine(`That file is larger than this page's ${limit} limit.`);
+      return;
+    }
     void run(file, file.name);
   };
 
@@ -134,7 +162,7 @@ export default function Analyze() {
     setError(null);
     setStatusLine(`Loading example ${entry.fixture_id}…`);
     try {
-      const file = await fetchFixtureFile(entry);
+      const file = await engine.fetchExample(entry);
       await run(file, entry.fixture_id);
     } catch (err) {
       const message =
@@ -155,6 +183,7 @@ export default function Analyze() {
         the four families, and the geometric overlay is drawn from that one
         response. Nothing you upload is decoded into text here.
       </p>
+      {engine.notice}
 
       <div
         className={dragging ? "dropzone dropzone-active" : "dropzone"}

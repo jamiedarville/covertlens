@@ -15,6 +15,28 @@ Two points are selected separately per family (C-06):
   successively stricter candidates whose development precision meets
   the precision target.
 
+CL-68 recalibrates on the banded suite (`banded_fixtures`): dozens of
+development pairs per payload band and cover texture. Two selection
+rules are refined for the CL-27 families, because with real sample
+sizes the CL-27 rules leave recall on the table and collapse the
+fail-run point onto quarantine:
+
+- **free-recall triage:** after the highest candidate meeting the
+  recall target is found, triage moves down to the lowest candidate
+  that admits no additional development negative;
+- **fail-run above every development negative:** fail-run is the
+  first candidate above both the quarantine point and the highest
+  development negative score that still meets the precision target
+  (1.0, unreachable, when none does). Clean-run false failures are
+  then bounded by the clean tail beyond the whole development set,
+  not by the precision target alone.
+
+Development textures are per family (`CALIBRATED_TEXTURES`): the
+pixel detectors' clean baselines depend on cover texture, and one
+per-family point cannot serve every texture (CL-68 measurement), so
+LSB/DCT calibrate on `gradient_noise`; metadata is texture-independent
+and calibrates on all three. Geometric keeps its CL-54 rules.
+
 The owners' freeze is the shipped `config/frozen-thresholds.json`:
 versioned points, acceptance targets, calibrated coverage (media and
 payload bands actually present in development data), and the
@@ -42,14 +64,88 @@ from .splits import SPLITS
 from .verdicts import FamilyThresholds, ThresholdConfig
 
 CALIBRATION_SCHEMA = "covertlens.calibration"
-CALIBRATION_VERSION = "1.0.0"
-FROZEN_CONFIG_VERSION = "frozen-1.1.0"
+CALIBRATION_VERSION = "1.1.0"
+# frozen-1.2.0 is the label used by the unmerged CL-78 branch; this
+# freeze skips it so one label never names two different freezes.
+FROZEN_CONFIG_VERSION = "frozen-1.3.0"
 FROZEN_PATH = (
     Path(__file__).resolve().parent.parent / "config" / "frozen-thresholds.json"
 )
 RECALL_TARGET = 0.95
 PRECISION_TARGET = 0.99
 FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata", "geometric")
+ALL_TEXTURES = ("gradient_noise", "smooth", "blocks")
+# CL-68: development cover textures per family (the detection claim).
+CALIBRATED_TEXTURES: dict[str, tuple[str, ...]] = {
+    "spatial_lsb": ("gradient_noise",),
+    "jpeg_dct": ("gradient_noise",),
+    "metadata": ALL_TEXTURES,
+}
+# Families calibrated with the CL-68 refined selection rules.
+REFINED_RULE_FAMILIES = ("spatial_lsb", "jpeg_dct", "metadata")
+CL27_RULES = {
+    "triage": "highest candidate meeting the recall target",
+    "quarantine": "first stricter candidate meeting the precision target",
+    "fail_run": "next candidate above quarantine meeting the precision target",
+}
+CL68_RULES = {
+    "triage": "highest candidate meeting the recall target, then the lowest "
+    "candidate admitting no additional development negative (free recall)",
+    "quarantine": "first stricter candidate meeting the precision target",
+    "fail_run": "first candidate above quarantine and above every development "
+    "negative that meets the precision target, else 1.0 (unreachable)",
+}
+
+# Detector scores are a pure function of the bytes; calibration, the
+# frozen benchmark and the scorecard score the same fixtures, so one
+# process scores each artifact once (CL-68 suites are large).
+_SCORE_MEMO: dict[str, tuple[tuple[str, str, float], ...]] = {}
+
+
+def _score_bytes(data: bytes) -> tuple[str, tuple[tuple[str, str, float], ...]]:
+    import hashlib
+
+    return hashlib.sha256(data).hexdigest(), tuple(
+        (f.family, f.detector_name, float(f.score))
+        for f in analyze_all_bytes(data).findings
+    )
+
+
+def prime_detector_scores(datas: Iterable[bytes]) -> None:
+    """Score many artifacts at once (process pool), filling the memo."""
+    import hashlib
+
+    from ._parallel import process_map
+
+    missing = {}
+    for data in datas:
+        key = hashlib.sha256(data).hexdigest()
+        if key not in _SCORE_MEMO:
+            missing[key] = data
+    for key, scores in process_map(_score_bytes, list(missing.values()), chunksize=16):
+        _SCORE_MEMO[key] = scores
+
+
+def detector_scores(data: bytes) -> tuple[tuple[str, str, float], ...]:
+    """(family, detector_name, score) for every finding on these bytes."""
+    import hashlib
+
+    key = hashlib.sha256(data).hexdigest()
+    cached = _SCORE_MEMO.get(key)
+    if cached is None:
+        cached = tuple(
+            (f.family, f.detector_name, float(f.score))
+            for f in analyze_all_bytes(data).findings
+        )
+        _SCORE_MEMO[key] = cached
+    return cached
+
+
+def texture_of(fixture: Fixture | GeoFixture) -> str:
+    """Cover texture of a fixture (geometric scenes have none)."""
+    if isinstance(fixture, GeoFixture):
+        return "synthetic_scene"
+    return str((fixture.generator or {}).get("pattern") or "unknown")
 
 
 def _candidates(scores: list[float]) -> list[float]:
@@ -80,8 +176,13 @@ def calibrate_family(
     *,
     recall_target: float = RECALL_TARGET,
     precision_target: float = PRECISION_TARGET,
+    refined_rules: bool = False,
 ) -> dict[str, Any]:
-    """Select triage/enforcement candidates for one family's dev scores."""
+    """Select triage/enforcement candidates for one family's dev scores.
+
+    `refined_rules` applies the CL-68 free-recall triage and the
+    fail-run-above-every-negative rule (module docstring).
+    """
     if not positive or not negative:
         raise ValueError("calibration needs positive and negative development scores")
     candidates = _candidates([*positive, *negative])
@@ -91,6 +192,13 @@ def calibrate_family(
             triage = candidate
     if triage is None:
         raise ValueError("no candidate meets the triage recall target")
+    if refined_rules:
+        admitted = _metrics(positive, negative, triage)["fp"]
+        triage = min(
+            c
+            for c in candidates
+            if c <= triage and _metrics(positive, negative, c)["fp"] == admitted
+        )
     stricter = [c for c in candidates if c > triage]
     quarantine = next(
         (
@@ -102,11 +210,12 @@ def calibrate_family(
     )
     if quarantine is None:
         raise ValueError("no candidate meets the enforcement precision target")
+    fail_floor = max(quarantine, max(negative)) if refined_rules else quarantine
     fail = next(
         (
             c
             for c in candidates
-            if c > quarantine
+            if c > fail_floor
             and _metrics(positive, negative, c)["precision"] >= precision_target
         ),
         1.0,
@@ -124,6 +233,7 @@ def calibrate_family(
             "positive_scores": [round(s, 6) for s in sorted(positive)],
             "negative_max": round(max(negative), 6),
         },
+        "selection_rules": dict(CL68_RULES if refined_rules else CL27_RULES),
     }
 
 
@@ -153,6 +263,10 @@ def calibrate_thresholds(
         family: {"positive": [], "negative": []} for family in FAMILIES
     }
     bands: dict[str, set[str]] = {family: set() for family in FAMILIES}
+    textures: dict[str, set[str]] = {family: set() for family in FAMILIES}
+    band_positive: dict[str, dict[str, list[float]]] = {
+        family: {} for family in FAMILIES
+    }
     # Calibration stays pinned to the detectors the frozen points were
     # calibrated for (CL-61 second detectors never tune these points).
     calibrated_detectors = {
@@ -161,36 +275,77 @@ def calibrate_thresholds(
         "metadata-ancillary-entries",
         GEO_DETECTOR_NAME,
     }
+    prime_detector_scores(f.data for f in rows)
     for fixture in rows:
-        result = analyze_all_bytes(fixture.data)
-        for finding in result.findings:
-            if finding.detector_name not in calibrated_detectors:
+        for family, detector_name, score in detector_scores(fixture.data):
+            if detector_name not in calibrated_detectors:
                 continue
-            bucket = scores[finding.family]
-            if fixture.family == finding.family or finding.family == "metadata":
+            bucket = scores[family]
+            if fixture.family == family or family == "metadata":
                 # Family fixtures score their own family; every parsed
                 # fixture also yields a metadata score-0/evidence row,
                 # but metadata calibration uses CL-22 fixtures only.
-                if finding.family == "metadata" and fixture.family != "metadata":
+                if family == "metadata" and fixture.family != "metadata":
                     continue
+                textures[family].add(texture_of(fixture))
                 if fixture.role == "encoded":
-                    bucket["positive"].append(finding.score)
-                    bands[finding.family].add(
+                    band = (
                         "symbol_sequence"
                         if isinstance(fixture, GeoFixture)
                         else fixture.payload_band
                     )
+                    bucket["positive"].append(score)
+                    bands[family].add(band)
+                    band_positive[family].setdefault(band, []).append(score)
                 elif fixture.role in ("clean", "negative"):
-                    bucket["negative"].append(finding.score)
+                    bucket["negative"].append(score)
     families: dict[str, Any] = {}
     thresholds: dict[str, FamilyThresholds] = {}
     for family in FAMILIES:
+        refined = family in REFINED_RULE_FAMILIES
         calibrated = calibrate_family(
             scores[family]["positive"],
             scores[family]["negative"],
             recall_target=recall_target,
             precision_target=precision_target,
+            refined_rules=refined,
         )
+        if (
+            refined
+            and band_positive[family].get("low")
+            and any(band_positive[family].get(b) for b in ("medium", "high"))
+        ):
+            # Owners' decision support (CL-68): where triage would sit
+            # if the low band were not claimed, and the low-band
+            # development recall that would cost.
+            without_low = [
+                s
+                for band, values in band_positive[family].items()
+                if band != "low"
+                for s in values
+            ]
+            alternative = calibrate_family(
+                without_low,
+                scores[family]["negative"],
+                recall_target=recall_target,
+                precision_target=precision_target,
+                refined_rules=True,
+            )
+            low = band_positive[family]["low"]
+            calibrated["alternative_triage_without_low_band"] = {
+                "flag_at": alternative["triage_flag_at"],
+                "development_low_band_recall": round(
+                    sum(1 for s in low if s >= alternative["triage_flag_at"])
+                    / len(low),
+                    6,
+                ),
+                "development_negatives_flagged": sum(
+                    1
+                    for s in scores[family]["negative"]
+                    if s >= alternative["triage_flag_at"]
+                ),
+                "shipped": False,
+            }
         if family == "geometric":
             # Geometric evidence supports withholding, not a run-failure claim.
             # Its score is capped below 1; reserve fail_run until severity is calibrated.
@@ -203,6 +358,7 @@ def calibrate_thresholds(
             )
         families[family] = {
             **calibrated,
+            "calibrated_textures": sorted(textures[family]),
             "calibrated_payload_bands": sorted(bands[family]),
             "uncalibrated_payload_bands": sorted(
                 {"low", "medium", "high"} - bands[family]
@@ -239,7 +395,12 @@ def calibrate_thresholds(
 
 
 def development_calibration_data() -> tuple[list[Fixture | GeoFixture], dict[str, str]]:
-    """Reproducible four-family development input, excluding held-out rows."""
+    """Reproducible four-family development input, excluding held-out rows.
+
+    CL-68: the CL-9/CL-22 suites plus the banded suite, restricted to
+    each family's calibrated textures (`CALIBRATED_TEXTURES`).
+    """
+    from .banded_fixtures import build_banded_dataset
     from .fixtures import build_dataset
     from .geo_calibration import geometric_calibration_dataset
     from .metadata_fixtures import build_metadata_dataset
@@ -247,10 +408,20 @@ def development_calibration_data() -> tuple[list[Fixture | GeoFixture], dict[str
 
     fixtures: list[Fixture | GeoFixture] = []
     assignments: dict[str, str] = {}
-    for dataset in (build_dataset(), build_metadata_dataset()):
-        split = assign_splits(dataset)
+    banded = build_banded_dataset()
+    suites: list[tuple[list[Fixture], dict[str, str]]] = [
+        (dataset, assign_splits(dataset))
+        for dataset in (build_dataset(), build_metadata_dataset())
+    ]
+    suites.append((list(banded.fixtures), banded.assignments))
+    for dataset, split in suites:
         assignments.update(split)
-        fixtures.extend(f for f in dataset if split[f.fixture_id] != "held_out")
+        fixtures.extend(
+            f
+            for f in dataset
+            if split[f.fixture_id] != "held_out"
+            and texture_of(f) in CALIBRATED_TEXTURES.get(f.family, ALL_TEXTURES)
+        )
     geo, split = geometric_calibration_dataset()
     assignments.update(split)
     fixtures.extend(f for f in geo if split[f.fixture_id] != "held_out")

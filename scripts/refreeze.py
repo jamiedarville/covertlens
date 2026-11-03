@@ -4,8 +4,9 @@ The one supported way to change enforcement points:
 
 1. Recalibrate on development data only (CL-27; held-out labels
    raise, C-07) via `calibration.calibrate_thresholds`.
-2. Bump the frozen config version (`frozen-1.1.0` -> `frozen-1.1.1`)
-   — a frozen file is never edited in place at the same version.
+2. Bump the frozen config version (`frozen-1.1.0` -> `frozen-1.1.1`,
+   or an explicit `--version`) — a frozen file is never edited in
+   place at the same version.
 3. Write `config/frozen-thresholds.json`, preserving operator-owned
    top-level blocks (`owners`, `coverage`) from the previous freeze.
 4. Regenerate `config/release-scorecard.json` from the new freeze so
@@ -40,7 +41,10 @@ def bump_version(version: str) -> str:
 
 
 def refreeze(
-    frozen_path: Path = FROZEN_PATH, scorecard_path: Path = SCORECARD_PATH
+    frozen_path: Path = FROZEN_PATH,
+    scorecard_path: Path = SCORECARD_PATH,
+    *,
+    version: str | None = None,
 ) -> dict[str, str]:
     from covertlens.calibration import (
         calibrate_thresholds,
@@ -50,7 +54,13 @@ def refreeze(
 
     previous = json.loads(frozen_path.read_text())
     old_version = previous["frozen_config_version"]
-    new_version = bump_version(old_version)
+    # An explicit version skips labels already used elsewhere (CL-68
+    # skips frozen-1.2.0, taken by an unmerged branch). It must be new.
+    new_version = version or bump_version(old_version)
+    if not re.fullmatch(r"frozen-\d+\.\d+\.\d+", new_version):
+        raise ValueError(f"not a frozen config version: {new_version!r}")
+    if new_version == old_version:
+        raise ValueError("a re-freeze needs a new version (never edit in place)")
 
     fixtures, assignments = development_calibration_data()
     report = calibrate_thresholds(fixtures, assignments)
@@ -82,8 +92,16 @@ def refreeze(
     return {"previous": old_version, "new": new_version, "pin_hash": card["pin_hash"]}
 
 
-def main() -> int:
-    result = refreeze()
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version",
+        help="explicit new frozen config version (default: bump the patch)",
+    )
+    args = parser.parse_args(argv)
+    result = refreeze(version=args.version)
     print(
         f"refroze {result['previous']} -> {result['new']}; "
         f"scorecard pin_hash {result['pin_hash']}"

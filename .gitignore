@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 node_modules/
+# CL-66 static build outputs (npm run build:static)
+app/frontend/public-static/
+app/frontend/dist-static/
+app/frontend/.static-build/

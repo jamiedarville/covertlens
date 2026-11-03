@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/test-reports.mjs"
+    "test": "node scripts/test-reports.mjs",
+    "test:prod-build": "node scripts/check-production-build.mjs",
+    "build:static": "node scripts/build-static.mjs",
+    "test:pyodide": "node scripts/test-pyodide.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -20,6 +23,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.0",
     "esbuild": "^0.25.12",
+    "pyodide": "314.0.7",
     "typescript": "^5.8.0",
     "vite": "^6.3.0"
   }

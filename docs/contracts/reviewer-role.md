@@ -25,7 +25,9 @@ because they are the demo; anywhere else it defaults to off, the
 header is ignored, and every request is a `viewer`.
 `GET /api/review/roles` reports the setting as `enabled`, and the
 role picker on the Live Gate, Trace and Reviewer pages shows a
-warning when it is off. Real roles replace this in CL-67.
+warning when it is off. Real roles: CL-67 OIDC mode
+([authentication.md](authentication.md)) ignores the header and maps
+authenticated identities to these roles and dataset scopes.
 
 ### Permission checks outside the review workspace (CL-78)
 

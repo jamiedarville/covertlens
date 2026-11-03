@@ -3,6 +3,9 @@
 Implements: CL-41 (GEO-04, C-10). Schema:
 [schemas/vector-binding.schema.json](../../schemas/vector-binding.schema.json).
 
+SVG and matplotlib sources (CL-69) use the same binding rules:
+[vector-source-parsers.md](vector-source-parsers.md).
+
 ## Paths
 
 - **Vector path:** the harness-side generator emits a

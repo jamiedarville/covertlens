@@ -126,9 +126,49 @@ def build_scorecard() -> dict[str, Any]:
                             ],
                             "positives": block["positives"],
                             "prevalence": block["prevalence"]["value"],
+                            # CL-68: held-out positives and recall per band
+                            # on the family's calibrated textures.
+                            "calibrated_textures": block.get("calibrated_textures"),
+                            "held_out_positives_by_band": block.get(
+                                "positives_by_band"
+                            ),
+                            "recall_by_band": {
+                                band: rate["value"]
+                                for band, rate in (
+                                    block.get("recall_by_band") or {}
+                                ).items()
+                            },
                         }
                         for family, block in families.items()
                     },
+                    # CL-68: stability is judged per (texture, medium) cell;
+                    # every excluded cell is named with its measured rates.
+                    "stability_claimed_cells": [
+                        {
+                            "texture": row["texture"],
+                            "media": row["media"],
+                            "runs": row["runs"],
+                            "false_failure_rate": row["false_failure_rate"]["value"],
+                        }
+                        for row in frozen["clean_run_stability"].get(
+                            "claimed_cells", []
+                        )
+                    ],
+                    "stability_exclusions": [
+                        {
+                            "texture": row["texture"],
+                            "media": row["media"],
+                            "family": row["family"],
+                            "runs": row["runs"],
+                            "false_failure_rate": row["false_failure_rate"]["value"],
+                            "false_failures": row["false_failure_rate"]["numerator"],
+                            "withhold_rate": row["withhold_rate"]["value"],
+                        }
+                        for row in frozen.get("stability_exclusions", [])
+                    ],
+                    "stability_claim_covers_all_textures": frozen["assessment"].get(
+                        "stability_claim_covers_all_textures"
+                    ),
                     "clean_runs": frozen["clean_run_stability"]["runs"],
                     "clean_run_failure_rate": frozen["clean_run_stability"][
                         "false_failure_rate"

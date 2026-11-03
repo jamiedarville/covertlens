@@ -87,10 +87,28 @@ is exercised by `python -m covertlens handoff-demo`
 - **Demo roles are not authentication.** `X-Demo-Role` is honoured
   only with `COVERTLENS_DEMO_ROLES=on`, which the Docker image and
   `docker-compose.yml` set because they are the demo. For any
-  deployment beyond a demo, run with `COVERTLENS_DEMO_ROLES=off`:
-  every request is then a `viewer`, and quarantined originals,
-  audit, trace and gate verdicts are closed until real roles land
-  (CL-67).
+  deployment beyond a demo, use real roles (CL-67, below).
+- **Real roles (CL-67).** Build with
+  `docker build --build-arg DEMO_BUILD=off -t covertlens:prod .`
+  (no demo picker, `X-Demo-Role` never trusted) and run with
+  `COVERTLENS_AUTH_MODE=oidc`, `COVERTLENS_OIDC_ISSUER`,
+  `COVERTLENS_OIDC_CLIENT_ID` (and `COVERTLENS_OIDC_CLIENT_SECRET` for
+  a confidential client). Register `https://<host>/api/auth/callback`
+  as the redirect URI. Edit `config/identity-mapping.json` (or point
+  `COVERTLENS_IDENTITY_MAPPING` at your own file) to map IdP groups
+  to roles and run-scope patterns; the service refuses to start with
+  incomplete OIDC settings or an invalid mapping. Harnesses send a
+  bearer JWT for a service identity (`GateClient(bearer_token=...)`).
+  Contract: `docs/contracts/authentication.md`.
+- **Leaderboard (CL-70).** In OIDC mode submissions need sign-in and
+  wait for moderation by default. Operators approve or hide entries
+  on `POST /api/leaderboard/entries/{id}/moderation`
+  (`leaderboard.moderate`). `COVERTLENS_LEADERBOARD_RATE_PER_HOUR`
+  (20) and `COVERTLENS_LEADERBOARD_MODERATION` tune it. A new detector
+  version or freeze starts a new board automatically.
+- **Static Analyze page (CL-66).** `cd app/frontend && npm run
+  build:static`, then publish `dist-static/` on any static host; CI
+  uploads it as the `covertlens-static-analyze` artifact.
 - **Behind a reverse proxy**, state-changing `/api` requests must
   carry an `Origin` that matches `Host` or `X-Forwarded-Host`, or
   is listed in `COVERTLENS_ALLOWED_ORIGINS` (comma separated).
@@ -144,7 +162,10 @@ version and pin hash from the scorecard.
 
 ## 8. Re-freezing thresholds (CL-65)
 
-1. Run `make refreeze` (or `python scripts/refreeze.py`). It
+1. Run `make refreeze` (or `python scripts/refreeze.py`; pass
+   `REFREEZE_ARGS="--version frozen-X.Y.Z"` to skip a label already
+   used elsewhere). `make refreeze` sets `COVERTLENS_BUILD_WORKERS=auto`
+   so the CL-68 banded suite builds and scores in a process pool. It
    recalibrates on development data only, bumps the frozen config
    version, rewrites `config/frozen-thresholds.json` (preserving the
    `owners`/`coverage` blocks), then regenerates

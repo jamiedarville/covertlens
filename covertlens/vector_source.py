@@ -35,6 +35,7 @@ import math
 from typing import Any
 
 from . import ids
+from ._shapes import VectorParse
 from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .geometric import analyze_geometric, analyze_geometric_bytes
@@ -233,6 +234,185 @@ def register_source_lineage(
     }
 
 
+SOURCE_KINDS = (VECTOR_SOURCE_SCHEMA, "svg", "matplotlib")
+
+
+def parse_source(
+    source: Any,
+    source_kind: str,
+    *,
+    raster_size: tuple[int, int] | None = None,
+) -> VectorParse:
+    """Dispatch one vector source to its parser (CL-41 JSON, SVG, matplotlib)."""
+    if source_kind == VECTOR_SOURCE_SCHEMA:
+        return VectorParse(parse_vector_source(source))
+    if source_kind == "svg":
+        from .svg_source import parse_svg_source
+
+        if not isinstance(source, (bytes, bytearray)):
+            config = SegmenterConfig(
+                name=VECTOR_PARSER_NAME, version=VECTOR_PARSER_VERSION
+            )
+            return VectorParse(
+                SegmentationResult(
+                    "corrupt_source", detail="svg source must be bytes", config=config
+                )
+            )
+        return parse_svg_source(bytes(source), raster_size=raster_size)
+    if source_kind == "matplotlib":
+        from .mpl_source import parse_matplotlib_figure
+
+        return parse_matplotlib_figure(source, raster_size=raster_size)
+    raise ValueError(f"source_kind must be one of {SOURCE_KINDS}")
+
+
+def register_rendered_lineage(
+    store: ArtifactStore,
+    rendered: bytes,
+    source_record: bytes,
+    *,
+    source_kind: str,
+    run_id: str = "run_vector",
+) -> dict[str, Any]:
+    """Register a rendered raster and its vector source with lineage (CL-69)."""
+    version = store.put_original(rendered, run_id=run_id, producer_id="generator")
+    derivative = store.register_derivative(
+        version.artifact_version_id,
+        source_record,
+        transform=f"vector_source_{source_kind.replace('.', '_').replace('-', '_')}",
+    )
+    return {
+        "artifact_id": version.artifact_id,
+        "rendered_version_id": version.artifact_version_id,
+        "source_derivative_id": derivative.derivative_id,
+        "relation": "rendered_from_vector_source",
+        "rendered_content_hash": version.content_hash,
+        "source_content_hash": ids.content_hash(source_record),
+        "source_kind": source_kind,
+        "lineage_parent": derivative.parent_version_id,
+    }
+
+
+def analyze_rendered_with_source(
+    rendered: bytes,
+    source: Any = None,
+    *,
+    source_kind: str = "svg",
+    source_intercepted: bool = True,
+    store: ArtifactStore | None = None,
+    source_record: bytes | None = None,
+    threshold_config: ThresholdConfig | None = None,
+    declared_context: dict[str, Any] | None = None,
+    bound_fixture_id: str | None = None,
+    _lineage: Any = None,
+) -> dict[str, Any]:
+    """Combined raster/vector analysis bound to the rendered raster (CL-41/CL-69).
+
+    The rendered bytes are the delivered, scored artifact; `source` is
+    evidence about them, parsed by `source_kind`. `source=None` is the
+    raster-only fallback. A source that exists but was not intercepted
+    (`source_intercepted=False`) never clears (C-10). CL-69 adds a third
+    refusal: a source that parsed only partially (visible content the
+    parser could not measure) refuses clearance too.
+
+    `source_record` is what the store registers as the source
+    derivative: the SVG bytes by default; a matplotlib figure is not
+    bytes, so pass the plotting code or its SVG export.
+    """
+    content_hash = ids.content_hash(rendered)
+    raster = analyze_geometric_bytes(rendered, declared_context=declared_context)
+    active = threshold_config or load_frozen_thresholds()[0]
+    findings = [raster["finding"]] if raster.get("finding") else []
+
+    def apply_decision(report: dict[str, Any]) -> None:
+        decision = decide_verdict(
+            findings, active, context=DecisionContext(content_hash=content_hash)
+        )
+        report["decision"] = decision.to_dict()
+        report["cleared"] = bool(findings) and decision.delivery == "permit"
+        report["clearance"] = "cleared" if report["cleared"] else "not_cleared"
+
+    report: dict[str, Any] = {
+        "schema": "covertlens.vector-binding",
+        "schema_version": 1,
+        "bound_content_hash": content_hash,
+        "raster_classification": raster["classification"],
+        "raster_status": raster["status"],
+        "vector_classification": None,
+        "combined_classification": raster["classification"],
+        "clearance": "cleared",
+        "cleared": raster["classification"] == "no_signal",
+        "limitations": list(RASTER_LIMITATIONS),
+        "equated_with_collusion": False,
+    }
+    if bound_fixture_id is not None:
+        report["bound_fixture_id"] = bound_fixture_id
+    if source is not None:
+        report["vector_source_kind"] = source_kind
+    apply_decision(report)
+    if store is not None and source is not None:
+        if _lineage is not None:
+            report["lineage"] = _lineage(store)
+        else:
+            record = source_record
+            if record is None and isinstance(source, (bytes, bytearray)):
+                record = bytes(source)
+            if record is None:
+                raise ValueError(
+                    "pass source_record (the plotting code or its SVG export) "
+                    "to register a non-bytes vector source in the store"
+                )
+            report["lineage"] = register_rendered_lineage(
+                store, rendered, record, source_kind=source_kind
+            )
+        report["bound_rendered_version_id"] = report["lineage"]["rendered_version_id"]
+    if source is None:
+        report["vector_status"] = "absent_raster_fallback"
+        return report
+    if not source_intercepted:
+        # C-10: an unparsed vector source is never cleared by a
+        # clean raster score.
+        report["vector_status"] = "present_not_intercepted"
+        report["clearance"] = "refused_unparsed_vector_source"
+        report["cleared"] = False
+        return report
+    width = int((raster.get("segmentation") or {}).get("width") or 0)
+    height = int((raster.get("segmentation") or {}).get("height") or 0)
+    parsed = parse_source(
+        source,
+        source_kind,
+        raster_size=(width, height) if width and height else None,
+    )
+    vector_seg = parsed.result
+    report["vector_status"] = vector_seg.status
+    report["vector_parser"] = {
+        "name": vector_seg.config.name,
+        "version": vector_seg.config.version,
+    }
+    if source_kind != VECTOR_SOURCE_SCHEMA:
+        report["vector_parse"] = parsed.to_dict()
+        report["limitations"] = [*report["limitations"], *parsed.limitations]
+    if not vector_seg.ok:
+        report["clearance"] = "refused_unparseable_vector_source"
+        report["cleared"] = False
+        return report
+    vector = analyze_geometric(vector_seg, declared_context=declared_context)
+    findings.append(vector["finding"])
+    report["vector_classification"] = vector["classification"]
+    combined = max(
+        (raster["classification"], vector["classification"]),
+        key=lambda c: _SEVERITY[c],
+    )
+    report["combined_classification"] = combined
+    apply_decision(report)
+    if parsed.unparsed:
+        # CL-69: visible content the parser could not measure means the
+        # source was only partly read; it cannot clear the delivery.
+        report["clearance"] = "refused_partially_parsed_vector_source"
+        report["cleared"] = False
+    return report
+
+
 def analyze_with_source(
     fixture: GeoFixture,
     source: dict[str, Any] | None = None,
@@ -247,63 +427,26 @@ def analyze_with_source(
     `source=None` is the raster-only fallback. `source` present but
     `source_intercepted=False` models an unintercepted source: the
     C-10 guard refuses clearance regardless of the raster result.
+    The CL-41 JSON object list path of `analyze_rendered_with_source`.
     """
-    raster = analyze_geometric_bytes(fixture.data, declared_context=declared_context)
-    active = threshold_config or load_frozen_thresholds()[0]
-    findings = [raster["finding"]] if raster.get("finding") else []
-
-    def apply_decision(report: dict[str, Any]) -> None:
-        decision = decide_verdict(
-            findings, active, context=DecisionContext(content_hash=fixture.content_hash)
-        )
-        report["decision"] = decision.to_dict()
-        report["cleared"] = bool(findings) and decision.delivery == "permit"
-        report["clearance"] = "cleared" if report["cleared"] else "not_cleared"
-
-    report: dict[str, Any] = {
-        "schema": "covertlens.vector-binding",
-        "schema_version": 1,
-        "bound_content_hash": fixture.content_hash,
-        "bound_fixture_id": fixture.fixture_id,
-        "raster_classification": raster["classification"],
-        "raster_status": raster["status"],
-        "vector_classification": None,
-        "combined_classification": raster["classification"],
-        "clearance": "cleared",
-        "cleared": raster["classification"] == "no_signal",
-        "limitations": list(RASTER_LIMITATIONS),
-        "equated_with_collusion": False,
-    }
-    apply_decision(report)
+    lineage = None
     if store is not None and source is not None:
-        report["lineage"] = register_source_lineage(store, fixture, source)
-        report["bound_rendered_version_id"] = report["lineage"]["rendered_version_id"]
-    if source is None:
-        report["vector_status"] = "absent_raster_fallback"
-        return report
-    if not source_intercepted:
-        # C-10: an unparsed vector source is never cleared by a
-        # clean raster score.
-        report["vector_status"] = "present_not_intercepted"
-        report["clearance"] = "refused_unparsed_vector_source"
-        report["cleared"] = False
-        return report
-    vector_seg = parse_vector_source(source)
-    report["vector_status"] = vector_seg.status
-    if not vector_seg.ok:
-        report["clearance"] = "refused_unparseable_vector_source"
-        report["cleared"] = False
-        return report
-    vector = analyze_geometric(vector_seg, declared_context=declared_context)
-    findings.append(vector["finding"])
-    report["vector_classification"] = vector["classification"]
-    combined = max(
-        (raster["classification"], vector["classification"]),
-        key=lambda c: _SEVERITY[c],
+        captured = source
+
+        def lineage(target: ArtifactStore) -> dict[str, Any]:
+            return register_source_lineage(target, fixture, captured)
+
+    return analyze_rendered_with_source(
+        fixture.data,
+        source,
+        source_kind=VECTOR_SOURCE_SCHEMA,
+        source_intercepted=source_intercepted,
+        store=store,
+        threshold_config=threshold_config,
+        declared_context=declared_context,
+        bound_fixture_id=fixture.fixture_id,
+        _lineage=lineage,
     )
-    report["combined_classification"] = combined
-    apply_decision(report)
-    return report
 
 
 def validate_vector_binding(report: dict[str, Any]) -> list[str]:

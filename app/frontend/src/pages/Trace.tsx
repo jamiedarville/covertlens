@@ -9,7 +9,7 @@
 import { useState } from "react";
 import type { TraceView } from "../types";
 import { ApiError, fetchTraceRun } from "../api";
-import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
 
 export default function Trace() {
@@ -78,7 +78,7 @@ export default function Trace() {
             />
           </label>
         </div>
-        <DemoRoleSelect
+        <RoleControl
           role={role}
           onChange={setRole}
           disabled={busy}

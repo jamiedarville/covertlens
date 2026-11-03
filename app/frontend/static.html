@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- CL-66: everything comes from this origin; connect-src 'self' means
+     the page cannot send an image anywhere else. Pyodide needs
+     'wasm-unsafe-eval' to compile WebAssembly. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="description" content="CovertLens Analyze, running entirely in your browser: the image never leaves your machine.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2317202a'/%3E%3Crect x='2' y='7' width='3' height='7' fill='white'/%3E%3Crect x='6.5' y='4' width='3' height='10' fill='white'/%3E%3Crect x='11' y='9' width='3' height='5' fill='white'/%3E%3C/svg%3E">
+<title>Analyze in your browser — CovertLens</title>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/static/main.tsx"></script>
+</body>
+</html>

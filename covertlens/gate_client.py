@@ -11,7 +11,10 @@ outcomes with the same exceptions as the in-process gate (CL-12).
 The client uses only the standard library (`urllib`), so a harness
 needs no web extra installed. Demo roles are not authentication: an
 optional `demo_role` is sent as `X-Demo-Role`, honoured by the
-service only with `COVERTLENS_DEMO_ROLES=on` (CL-78).
+service only with `COVERTLENS_DEMO_ROLES=on` (CL-78). In OIDC mode
+(CL-67) pass `bearer_token`: a JWT from the deployment's identity
+provider for the harness's service identity, sent as
+`Authorization: Bearer`.
 """
 
 from __future__ import annotations
@@ -41,10 +44,16 @@ class GateClient:
     """One harness's connection to a running CovertLens service."""
 
     def __init__(
-        self, base_url: str, *, demo_role: str | None = None, timeout: float = 30.0
+        self,
+        base_url: str,
+        *,
+        demo_role: str | None = None,
+        bearer_token: str | None = None,
+        timeout: float = 30.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.demo_role = demo_role
+        self.bearer_token = bearer_token
         self.timeout = timeout
 
     # -- low-level helpers -------------------------------------------------
@@ -55,6 +64,8 @@ class GateClient:
         req.add_header("Content-Type", content_type)
         if self.demo_role:
             req.add_header("X-Demo-Role", self.demo_role)
+        if self.bearer_token:
+            req.add_header("Authorization", f"Bearer {self.bearer_token}")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return resp.status, resp.read()

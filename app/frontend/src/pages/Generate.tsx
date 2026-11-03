@@ -3,7 +3,13 @@
 // generation is recorded server-side with source "red_team".
 
 import { useState } from "react";
-import { ApiError, generateImage, type GenerateResult } from "../api";
+import {
+  ApiError,
+  generateImage,
+  submitToLeaderboard,
+  type GenerateResult,
+  type LeaderboardEntry,
+} from "../api";
 import { fmtExact } from "../format";
 
 const SUBFAMILIES = [
@@ -284,8 +290,80 @@ export default function Generate({
             Analyze never shows decoded text; it reports the discovered
             step, structure score, and verdict as evidence.
           </p>
+          <LeaderboardSubmit
+            key={result.artifact_version_id}
+            artifactVersionId={result.artifact_version_id}
+            navigate={navigate}
+          />
         </section>
       )}
     </>
+  );
+}
+
+// Submit this generation to the leaderboard (CL-70). The server
+// re-scores the stored bytes; only the artifact id and a name are sent.
+function LeaderboardSubmit({
+  artifactVersionId,
+  navigate,
+}: {
+  artifactVersionId: string;
+  navigate: (to: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [entry, setEntry] = useState<LeaderboardEntry | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setEntry(await submitToLeaderboard(artifactVersionId, name.trim()));
+    } catch (err) {
+      setMessage(err instanceof ApiError ? err.message : "Submission failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="example-row"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <label htmlFor="leaderboard-name">Leaderboard name</label>
+      <input
+        id="leaderboard-name"
+        value={name}
+        maxLength={40}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="your team"
+        disabled={busy || entry !== null}
+      />
+      <button type="submit" className="button" disabled={busy || entry !== null}>
+        Submit to leaderboard
+      </button>
+      {entry && (
+        <p role="status" className="note">
+          {entry.status === "pending"
+            ? "Submitted: it appears once an operator approves it. "
+            : `Scored ${entry.outcome.verdict} carrying ${entry.outcome.payload.bits} bits. `}
+          <a
+            href="/leaderboard"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/leaderboard");
+            }}
+          >
+            View the leaderboard
+          </a>
+        </p>
+      )}
+      {message && <p className="alert" role="alert">{message}</p>}
+    </form>
   );
 }

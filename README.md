@@ -60,7 +60,17 @@ send any role. The Docker image sets `COVERTLENS_DEMO_ROLES=on`
 because it is a demo; do not expose it beyond one. With the
 setting off (the default when running `uvicorn app.main:app`
 directly), every request is a `viewer`: quarantined originals,
-audit, trace and gate verdicts are closed. Real roles are CL-67.
+audit, trace and gate verdicts are closed. **Real roles (CL-67):**
+build a production image with `--build-arg DEMO_BUILD=off` and run
+with `COVERTLENS_AUTH_MODE=oidc`, `COVERTLENS_OIDC_ISSUER` and
+`COVERTLENS_OIDC_CLIENT_ID`; identities map to roles and run scopes
+through `config/identity-mapping.json`
+([docs/contracts/authentication.md](docs/contracts/authentication.md)).
+
+**Zero-server demo (CL-66):** `cd app/frontend && npm run
+build:static` builds `dist-static/`, the Analyze page running the
+library in your browser with Pyodide; it works offline after the
+first load ([docs/contracts/static-analyze.md](docs/contracts/static-analyze.md)).
 
 ## Known limitations
 
@@ -73,12 +83,15 @@ Independent review:
 (earlier snapshot:
 [docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md)).
 
-- Detection coverage is limited to calibrated payload bands
-  (low/medium) and densities on gradient_noise covers; the high
-  band rests on 1-2 held-out positives per family.
-- Clean smooth/blocks covers fall outside the stability claim
-  (smooth clean PNGs false-fail; blocks JPEGs occasionally
-  withhold).
+- Detection coverage for the pixel families is calibrated on
+  gradient_noise covers (low/medium/high bands, at least 20 held-out
+  positives each, CL-68); one per-family point cannot serve every
+  texture, so smooth and blocks recall is measured, not claimed.
+  DCT enforcement precision misses 0.99 on held-out data (37/38).
+- Clean-run stability excludes smooth PNG covers (false-fail 1.0)
+  and blocks JPEG covers (false-fail 0.025); the other four
+  (texture, medium) cells hold at 1/640. Claiming the low band puts
+  the clean triage flag rate at 0.50 (owners' decision, CL-68).
 - JPEG latency misses the 2 s proposal at >=~1 MP and at
   concurrency 4; the 20 MP JPEG envelope is unmeasured.
 - Adaptive reduced-rate, larger-image, blocks-cover and
@@ -612,6 +625,37 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | No key: panel says the feature is off and the page works normally | `SecondOpinionPanel` off/unavailable/unparseable states in `app/frontend/src/pages/Review.tsx` |
 | Browser traffic contains no API key and (opt-in off) no picture bytes | Key read server-side only (`SecondOpinionConfig.from_env` in `app/main.py`); frontend panel tests |
 
+### CL-66 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| The page works offline after first load and analyses a fixture without any network request to a server | `npm run build:static` (`app/frontend/scripts/build-static.mjs`, `scripts/build_static_bundle.py`, `vite.static.config.ts`): Pyodide worker running `app/analysis_worker.py`, service worker precache, `connect-src 'self'` CSP · `tests/test_static_build.py` (offline Chromium) · `npm run test:pyodide` (parity with CPython) · [docs/contracts/static-analyze.md](docs/contracts/static-analyze.md) |
+
+### CL-67 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Every `EvidenceGateway` permission check uses an authenticated principal; the CL-33 permission tests pass through the HTTP layer | `app/auth.py` (OIDC code flow + PKCE, bearer JWTs, server-side sessions), `covertlens.identity` + [config/identity-mapping.json](config/identity-mapping.json) (roles and dataset scopes), `COVERTLENS_AUTH_MODE`, production build without the demo picker · `tests/test_auth.py` · [docs/contracts/authentication.md](docs/contracts/authentication.md) |
+
+### CL-68 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Each family has at least 20 held-out positives per calibrated band | `covertlens.banded_fixtures` (dozens of pairs per band, family and texture) · `frozen-1.3.0` recalibration · `tests/test_frozen_benchmark.py::test_each_family_has_twenty_held_out_positives_per_calibrated_band` |
+| The stability claim covers all three textures, or the scorecard names the remaining exclusion with measured false-fail rates | per-(texture, medium) stability in `run_frozen_evaluation`; `stability_exclusions` in [config/release-scorecard.json](config/release-scorecard.json) · `tests/test_scorecard.py::test_scorecard_names_stability_exclusions_with_measured_rates` · [docs/contracts/banded-fixtures.md](docs/contracts/banded-fixtures.md) |
+
+### CL-69 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| An SVG and a matplotlib bar chart parse to the same attribute sequences as segmenting their rendered PNGs, within tolerance | `covertlens.svg_source`, `covertlens.mpl_source` (`matplotlib` extra), `analyze_rendered_with_source`, `svg-source-demo` · `tests/test_svg_source.py`, `tests/test_mpl_source.py` · [docs/contracts/vector-source-parsers.md](docs/contracts/vector-source-parsers.md) |
+
+### CL-70 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Changing the detector version starts a new leaderboard; old entries stay visible under their pin hash | `covertlens.leaderboard` (pin-keyed boards, payload ranking per operating point, moderation), `/api/leaderboard*`, Leaderboard page and Generate-page submit · `tests/test_leaderboard.py` · [schemas/leaderboard-entry.schema.json](schemas/leaderboard-entry.schema.json) · [docs/contracts/leaderboard.md](docs/contracts/leaderboard.md) |
+
 ### CL-65 deliverables
 
 | Acceptance criterion | Deliverable |
@@ -661,6 +705,7 @@ python -m covertlens geo-fixtures-demo   # CL-38 geometric paired fixtures
 python -m covertlens segmentation-demo   # CL-39 segmentation + attribute sequences
 python -m covertlens geometric-demo      # CL-40 quantization + structure tests
 python -m covertlens vector-demo         # CL-41 vector source + rendered-version binding
+python -m covertlens svg-source-demo     # CL-69 SVG vector-source parser + binding
 python -m covertlens geo-benchmark-demo  # CL-42 benign controls + geometric benchmark
 pytest
 ```
@@ -684,5 +729,7 @@ pytest
 - Scope is eval-generated PNG/JPEG only. Consumer
   uploads/transports are out of scope.
 - LSB/DCT/metadata thresholds froze in CL-27; CL-54 adds the
-  geometric development-only freeze in `frozen-1.1.0`. The manifest
+  geometric development-only freeze in `frozen-1.1.0`; CL-68
+  recalibrates LSB/DCT/metadata on the banded suite in
+  `frozen-1.3.0` (geometric points unchanged). The manifest
   configuration remains available as an explicit log-only rollback.
