@@ -20,9 +20,9 @@ from typing import Any
 
 from .ablations import run_ablations
 from .calibration import calibrate_thresholds, development_calibration_data
-from .dct import analyze_dct_bytes, benchmark_dct
+from .dct import analyze_dct_bytes, benchmark_dct, benchmark_dct_calibrated
 from .events import REQUIRED_FAMILIES, Event, EventType, ParseStatus, Verdict
-from .fixtures import build_dataset, build_pair, write_dataset
+from .fixtures import build_dataset, build_matching_dataset, build_pair, write_dataset
 from .fixtures import manifest as fixture_manifest
 from .frozen_benchmark import run_frozen_evaluation
 from .gate import InterceptionContext, InterceptionGate, PendingDeliveryError
@@ -38,7 +38,12 @@ from .geometric_fixtures import (
 )
 from .handoff import run_handoff_verification
 from .latency import run_reliability_report
-from .lsb import analyze_lsb_bytes, analyze_lsb_version, benchmark_lsb
+from .lsb import (
+    analyze_lsb_bytes,
+    analyze_lsb_version,
+    benchmark_lsb,
+    benchmark_lsb_pairs,
+)
 from .manifest import load_manifest, validate_manifest
 from .metadata import analyze_all_bytes, benchmark_metadata
 from .metadata_fixtures import build_metadata_dataset
@@ -391,6 +396,29 @@ def cmd_benchmark_dct(args: argparse.Namespace) -> DemoResult:
         }
     )
     return DemoResult(0, payload=report, summary=summary)
+
+
+def cmd_benchmark_matching(args: argparse.Namespace) -> DemoResult:
+    del args
+    dataset = build_matching_dataset()
+    pairs_report = benchmark_lsb_pairs(dataset)
+    calibrated_report = benchmark_dct_calibrated(dataset)
+    payload = {"spatial_lsb": pairs_report, "jpeg_dct": calibrated_report}
+    summary = _dump(
+        {
+            "spatial_lsb": {
+                "pairs_roc_auc": pairs_report["pairs_roc_auc"],
+                "pov_roc_auc": pairs_report["pov_roc_auc"],
+                "pairs_beats_pov": pairs_report["pairs_beats_pov"],
+            },
+            "jpeg_dct": {
+                "calibrated_roc_auc": calibrated_report["calibrated_roc_auc"],
+                "pov_roc_auc": calibrated_report["pov_roc_auc"],
+                "calibrated_beats_pov": calibrated_report["calibrated_beats_pov"],
+            },
+        }
+    )
+    return DemoResult(0, payload=payload, summary=summary)
 
 
 def cmd_trace_demo(args: argparse.Namespace) -> DemoResult:

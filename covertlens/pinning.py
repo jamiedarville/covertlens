@@ -29,11 +29,21 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from . import ids
-from .dct import DCT_DETECTOR_NAME, DCT_DETECTOR_VERSION
+from .dct import (
+    CAL_DETECTOR_NAME,
+    CAL_DETECTOR_VERSION,
+    DCT_DETECTOR_NAME,
+    DCT_DETECTOR_VERSION,
+)
 from .fixtures import Fixture
 from .geometric import GEO_CONFIG_VERSION, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
 from .geometric_fixtures import GeoFixture
-from .lsb import LSB_DETECTOR_NAME, LSB_DETECTOR_VERSION
+from .lsb import (
+    LSB_DETECTOR_NAME,
+    LSB_DETECTOR_VERSION,
+    SPA_DETECTOR_NAME,
+    SPA_DETECTOR_VERSION,
+)
 from .metadata import (
     METADATA_DETECTOR_NAME,
     METADATA_DETECTOR_VERSION,
@@ -65,7 +75,9 @@ def dataset_hash(fixtures: Iterable[Fixture | GeoFixture]) -> str:
 def default_detector_versions() -> list[str]:
     return [
         f"{LSB_DETECTOR_NAME}@{LSB_DETECTOR_VERSION}",
+        f"{SPA_DETECTOR_NAME}@{SPA_DETECTOR_VERSION}",
         f"{DCT_DETECTOR_NAME}@{DCT_DETECTOR_VERSION}",
+        f"{CAL_DETECTOR_NAME}@{CAL_DETECTOR_VERSION}",
         f"{METADATA_DETECTOR_NAME}@{METADATA_DETECTOR_VERSION}",
         f"{GEO_DETECTOR_NAME}@{GEO_DETECTOR_VERSION}",
     ]

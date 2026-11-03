@@ -43,7 +43,7 @@ def test_pin_covers_dataset_detectors_config_and_seeds():
     assert pin["dataset"]["fixture_count"] == 2
     assert pin["threshold_config_version"] == "pin-test-1"
     assert pin["seeds"] == {"replay": 7}
-    assert len(pin["detectors"]) == 4  # + geometric (CL-44)
+    assert len(pin["detectors"]) == 6  # + geometric (CL-44), + CL-61 pair
     assert (
         pin_differences(pin, fixtures(), threshold_config=FROZEN, seeds={"replay": 7})
         == []

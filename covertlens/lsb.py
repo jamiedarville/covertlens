@@ -18,6 +18,13 @@ ROC-AUC and average precision (PR summary) with stratified bootstrap
 confidence intervals. Performance is broken down by the CL-9 payload
 band (`none` / `low` / `medium` / `high`) so a strong high-band result
 never masquerades as a low-band one.
+
+CL-61 adds a second detector in this module, `lsb-sample-pairs`
+(sample-pair analysis over adjacent-pair LSB agreement, gated where
+adjacent-pair correlation is absent), benchmarked against this PoV
+detector on +/-1 matching fixtures by `benchmark_lsb_pairs`. Both
+detectors stay individually visible; nothing here refreezes the
+CL-27/CL-54 thresholds.
 """
 
 from __future__ import annotations
@@ -534,3 +541,387 @@ def analyze_lsb_version(
     if finding is None:
         return result
     return replace(result, findings=(finding,))
+
+
+# ------------------------------------------------------- CL-61 SPA ---
+
+SPA_DETECTOR_NAME = "lsb-sample-pairs"
+SPA_DETECTOR_VERSION = "1.0.0"
+SPA_CONFIG_VERSION = "1.0.0"
+SPA_BENCHMARK_SCHEMA = "covertlens.lsb-pairs-benchmark"
+SPA_BENCHMARK_VERSION = "1.0.0"
+
+_SPA_LIMITATIONS = (
+    "sample-pair statistic over adjacent-pair LSB agreement; it "
+    "requires spatially correlated (smooth) covers and is gated to 0 "
+    "as unreliable where adjacent-pair correlation is absent",
+    "calibrated only on procedural smooth-field covers (CL-61); "
+    "natural-image covers are untested",
+    "score is evidence, not demonstrated collusion (C-02); thresholds "
+    "unfrozen (CL-61 does not refreeze the CL-27/CL-54 points)",
+)
+
+
+@dataclass(frozen=True)
+class SpaConfig:
+    """Versioned sample-pair detector configuration (CL-61)."""
+
+    version: str = SPA_CONFIG_VERSION
+    # Minimum non-overlapping adjacent pairs for a reliable statistic.
+    min_pairs: int = 256
+    # Minimum fraction of pairs with |u - v| <= pair_max_diff for the
+    # cover to count as spatially correlated enough for pair analysis.
+    smooth_min_fraction: float = 0.5
+    pair_max_diff: int = 1
+    # The pair-LSB randomness is scaled by this before it becomes the
+    # score, so the unfrozen detector can at most reach triage-level
+    # evidence under the frozen family points: its maximum score
+    # (0.25) stays below the frozen quarantine point (0.272414), so
+    # it can never by itself cause withholding before a dedicated
+    # freeze calibrates points for it.
+    score_scale: float = 0.25
+
+    def __post_init__(self) -> None:
+        if not self.version:
+            raise ValueError("version is required")
+        if self.min_pairs < 1:
+            raise ValueError("min_pairs must be >= 1")
+        if not 0.0 <= self.smooth_min_fraction <= 1.0:
+            raise ValueError("smooth_min_fraction must lie in [0, 1]")
+        if self.pair_max_diff < 0:
+            raise ValueError("pair_max_diff must be >= 0")
+        if not 0.0 < self.score_scale <= 1.0:
+            raise ValueError("score_scale must lie in (0, 1]")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "min_pairs": self.min_pairs,
+            "smooth_min_fraction": self.smooth_min_fraction,
+            "pair_max_diff": self.pair_max_diff,
+            "score_scale": self.score_scale,
+        }
+
+
+SPA_DEFAULT_CONFIG = SpaConfig()
+
+
+def _spa_statistics(
+    samples: bytes, width: int, height: int, channels: int, config: SpaConfig
+) -> tuple[float, dict[str, Any], dict[str, Any]]:
+    """Return (score, evidence, counts) for adjacent sample pairs.
+
+    Pairs are non-overlapping horizontally adjacent same-channel
+    samples (the sample-pair layout of Dumitrescu-style SPA).
+    Embedding (+/-1 matching or replacement) randomises sample LSBs
+    independently, driving the pair LSB agreement rate toward 0.5;
+    the score is the pair-LSB randomness ``1 - 2*|agreement - 0.5|``
+    where pair analysis is reliable.
+    """
+    pairs = 0
+    agree = 0
+    smooth = 0
+    horizontal = 0
+    for y in range(height):
+        for c in range(channels):
+            base = (y * width) * channels + c
+            prev_u = prev_v = 0
+            for x in range(width):
+                value = samples[base + x * channels]
+                if x % 2 == 0:
+                    prev_u = value
+                else:
+                    prev_v = value
+                    pairs += 1
+                    horizontal += 1
+                    if (prev_u & 1) == (prev_v & 1):
+                        agree += 1
+                    if abs(prev_u - prev_v) <= config.pair_max_diff:
+                        smooth += 1
+    agreement = agree / pairs if pairs else 0.0
+    smooth_fraction = smooth / pairs if pairs else 0.0
+    reliable = pairs >= config.min_pairs and smooth_fraction >= (
+        config.smooth_min_fraction
+    )
+    randomness = min(1.0, max(0.0, 1.0 - 2.0 * abs(agreement - 0.5)))
+    score = randomness * config.score_scale if reliable else 0.0
+    evidence = {
+        "statistic": "sample_pair_lsb_agreement_randomness",
+        "pair_lsb_agreement": round(agreement, 6),
+        "pair_lsb_randomness": round(randomness, 6),
+        "pair_smooth_fraction": round(smooth_fraction, 6),
+        "pairs_examined": pairs,
+        "reliable": reliable,
+        "detector_config_version": config.version,
+    }
+    counts = {
+        "pairs_examined": pairs,
+        "pairs_horizontal": horizontal,
+    }
+    return round(score, 6), evidence, counts
+
+
+def detect_lsb_pairs(
+    result: AnalysisResult, config: SpaConfig | None = None
+) -> Finding | None:
+    """Score one CL-13 result with sample-pair analysis (CL-61).
+
+    A second, individually visible `spatial_lsb` detector alongside
+    `lsb-pov-chisquare`: applicable means a parsed PNG with sample
+    bytes and known geometry. Where adjacent-pair correlation is
+    absent the statistic cannot speak, so the score is gated to 0
+    with the limitation recorded (never read as a clean verdict, C-02).
+    """
+    active = config or SPA_DEFAULT_CONFIG
+    if result.status is not AnalysisStatus.PARSED:
+        return None
+    if result.media_kind != "png" or result.pixels is None:
+        return None
+    image = result.image or {}
+    width = int(image.get("width") or 0)
+    height = int(image.get("height") or 0)
+    channels = int(image.get("channels") or 1)
+    if width < 2 or height < 2:
+        return None
+    samples = result.pixels
+    if len(samples) < width * height * channels:
+        return None
+    score, evidence, counts = _spa_statistics(samples, width, height, channels, active)
+    coverage = {
+        "applicable": True,
+        "media_kind": "png",
+        "samples_examined": len(samples),
+        "pixels_examined": width * height,
+        "channels": channels,
+        "pairs_examined": counts["pairs_examined"],
+        "pairs_horizontal": counts["pairs_horizontal"],
+        "config_version": active.version,
+    }
+    limitations = list(_SPA_LIMITATIONS)
+    if not evidence["reliable"]:
+        limitations.append(
+            "insufficient adjacent-pair correlation; sample-pair score is not reliable"
+        )
+    return Finding(
+        family=FAMILY,
+        detector_name=SPA_DETECTOR_NAME,
+        detector_version=SPA_DETECTOR_VERSION,
+        score=score,
+        coverage=coverage,
+        evidence=evidence,
+        limitations=tuple(limitations),
+    )
+
+
+def analyze_lsb_pairs_bytes(
+    data: bytes,
+    *,
+    limits: ParserLimits | None = None,
+    config: SpaConfig | None = None,
+    artifact_id: str | None = None,
+    artifact_version_id: str | None = None,
+) -> AnalysisResult:
+    """Parse exact bytes (CL-13) and attach the sample-pair finding."""
+    result = analyze_bytes(
+        data,
+        limits=limits,
+        artifact_id=artifact_id,
+        artifact_version_id=artifact_version_id,
+    )
+    finding = detect_lsb_pairs(result, config)
+    if finding is None:
+        return result
+    return replace(result, findings=(finding,))
+
+
+def analyze_lsb_pairs_version(
+    store: ArtifactStore,
+    artifact_version_id: str,
+    *,
+    actor_id: str,
+    limits: ParserLimits | None = None,
+    config: SpaConfig | None = None,
+) -> AnalysisResult:
+    """Score one stored original via its audited, hash-checked read."""
+    result = analyze_version(
+        store, artifact_version_id, actor_id=actor_id, limits=limits
+    )
+    finding = detect_lsb_pairs(result, config)
+    if finding is None:
+        return result
+    return replace(result, findings=(finding,))
+
+
+def benchmark_lsb_pairs(
+    fixtures: Iterable[Fixture],
+    *,
+    config: SpaConfig | None = None,
+    pov_config: LsbConfig | None = None,
+    bootstrap_replicates: int = 1000,
+    bootstrap_seed: int = 20261101,
+) -> dict[str, Any]:
+    """Compare sample-pair vs PoV scores on +/-1 fixtures (CL-61).
+
+    Both detectors stay individually visible: every row carries both
+    scores, and each detector gets its own bootstrap ROC-AUC. The
+    acceptance claim is `pairs_beats_pov` on this suite only.
+    """
+    active = config or SPA_DEFAULT_CONFIG
+    if bootstrap_replicates < 0:
+        raise ValueError("bootstrap_replicates must be >= 0")
+    rows: list[dict[str, Any]] = []
+    skipped = 0
+    for fixture in fixtures:
+        if fixture.family != FAMILY:
+            skipped += 1
+            continue
+        result = analyze_bytes(fixture.data)
+        pairs_finding = detect_lsb_pairs(result, active)
+        pov_finding = detect_lsb(result, pov_config)
+        rows.append(
+            {
+                "fixture_id": fixture.fixture_id,
+                "role": fixture.role,
+                "label": 1 if fixture.role == "encoded" else 0,
+                "payload_band": fixture.payload_band,
+                "payload_bits": fixture.payload_bits,
+                "bits_per_pixel": round(fixture.bits_per_pixel, 6),
+                "applicable": pairs_finding is not None,
+                "pairs_score": (
+                    round(pairs_finding.score, 6) if pairs_finding else None
+                ),
+                "pov_score": round(pov_finding.score, 6) if pov_finding else None,
+            }
+        )
+    scored = [r for r in rows if r["pairs_score"] is not None]
+    pairs_pos = [float(r["pairs_score"]) for r in scored if r["label"] == 1]
+    pairs_neg = [float(r["pairs_score"]) for r in scored if r["label"] == 0]
+    pov_pos = [
+        float(r["pov_score"])
+        for r in scored
+        if r["label"] == 1 and r["pov_score"] is not None
+    ]
+    pov_neg = [
+        float(r["pov_score"])
+        for r in scored
+        if r["label"] == 0 and r["pov_score"] is not None
+    ]
+    pairs_auc = _bootstrap_interval(
+        pairs_pos,
+        pairs_neg,
+        replicates=bootstrap_replicates,
+        seed=bootstrap_seed,
+        metric="roc_auc",
+    )
+    pov_auc = _bootstrap_interval(
+        pov_pos,
+        pov_neg,
+        replicates=bootstrap_replicates,
+        seed=bootstrap_seed,
+        metric="roc_auc",
+    )
+    by_band: dict[str, Any] = {}
+    for band in PAYLOAD_BANDS:
+        band_rows = [r for r in scored if r["payload_band"] == band]
+        band_pos = [float(r["pairs_score"]) for r in band_rows if r["label"] == 1]
+        by_band[band] = {
+            "fixture_count": len(band_rows),
+            "positive_count": len(band_pos),
+            "negative_count": len(band_rows) - len(band_pos),
+            "scores": _score_summary([float(r["pairs_score"]) for r in band_rows]),
+            "roc_auc_vs_negatives": (
+                _roc_auc(band_pos, pairs_neg) if band_pos else None
+            ),
+        }
+    return {
+        "schema": SPA_BENCHMARK_SCHEMA,
+        "schema_version": BENCHMARK_SCHEMA_VERSION,
+        "benchmark_version": SPA_BENCHMARK_VERSION,
+        "detector": {
+            "family": FAMILY,
+            "name": SPA_DETECTOR_NAME,
+            "version": SPA_DETECTOR_VERSION,
+            "config": active.to_dict(),
+        },
+        "comparator": {
+            "family": FAMILY,
+            "name": LSB_DETECTOR_NAME,
+            "version": LSB_DETECTOR_VERSION,
+        },
+        "thresholds_status": "unfrozen_placeholder",
+        "fixture_count": len(rows),
+        "scored_count": len(scored),
+        "skipped_non_lsb": skipped,
+        "positive_count": len(pairs_pos),
+        "negative_count": len(pairs_neg),
+        "rows": rows,
+        "by_payload_band": by_band,
+        "pairs_roc_auc": pairs_auc,
+        "pov_roc_auc": pov_auc,
+        "pairs_beats_pov": bool(
+            pairs_auc.get("estimate") is not None
+            and pov_auc.get("estimate") is not None
+            and float(pairs_auc["estimate"]) > float(pov_auc["estimate"])
+        ),
+        "limitations": list(_SPA_LIMITATIONS)
+        + [
+            "benchmark fixtures are the CL-61 smooth-field +/-1 suite; "
+            "bootstrap intervals are conditional on the observed sample"
+        ],
+    }
+
+
+def validate_lsb_pairs_benchmark(report: dict[str, Any]) -> list[str]:
+    """Return validation errors for one CL-61 pairs benchmark; empty is valid."""
+    errors: list[str] = []
+
+    def need(cond: bool, msg: str) -> None:
+        if not cond:
+            errors.append(msg)
+
+    need(
+        report.get("schema") == SPA_BENCHMARK_SCHEMA,
+        f"schema must be {SPA_BENCHMARK_SCHEMA}",
+    )
+    need(
+        report.get("schema_version") == BENCHMARK_SCHEMA_VERSION,
+        f"schema_version must be {BENCHMARK_SCHEMA_VERSION}",
+    )
+    need(bool(report.get("benchmark_version")), "benchmark_version is required")
+    detector = report.get("detector") or {}
+    need(detector.get("family") == FAMILY, f"detector.family must be {FAMILY}")
+    need(detector.get("name") == SPA_DETECTOR_NAME, "detector.name is required")
+    need(
+        detector.get("version") == SPA_DETECTOR_VERSION,
+        "detector.version is required",
+    )
+    need(
+        (detector.get("config") or {}).get("version") == SPA_CONFIG_VERSION,
+        "detector.config.version is required",
+    )
+    comparator = report.get("comparator") or {}
+    need(
+        comparator.get("name") == LSB_DETECTOR_NAME,
+        "comparator must stay individually visible (lsb-pov-chisquare)",
+    )
+    need(
+        report.get("thresholds_status") == "unfrozen_placeholder",
+        "thresholds_status must stay unfrozen_placeholder (CL-61 refreezes nothing)",
+    )
+    for band in PAYLOAD_BANDS:
+        need(
+            band in (report.get("by_payload_band") or {}),
+            f"by_payload_band.{band} is required",
+        )
+    for key in ("pairs_roc_auc", "pov_roc_auc"):
+        block = report.get(key) or {}
+        estimate = block.get("estimate")
+        if estimate is not None:
+            need(0.0 <= float(estimate) <= 1.0, f"{key}.estimate must lie in [0, 1]")
+            need(
+                float(block.get("ci_low", -1))
+                <= float(estimate)
+                <= float(block.get("ci_high", 2)),
+                f"{key} interval must bracket its estimate",
+            )
+    return errors

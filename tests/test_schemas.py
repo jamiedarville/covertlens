@@ -72,6 +72,10 @@ CASES = {
     "benchmark-lsb": ("lsb-benchmark.schema.json", lambda p: [p]),
     "dct-demo": ("analysis-result.schema.json", lambda p: p),
     "benchmark-dct": ("dct-benchmark.schema.json", lambda p: [p]),
+    "benchmark-matching": (
+        "lsb-pairs-benchmark.schema.json",
+        lambda p: [p["spatial_lsb"]],
+    ),
     "trace-demo": ("trace-join.schema.json", lambda p: [p]),
     "metadata-demo": ("metadata-benchmark.schema.json", lambda p: [p["benchmark"]]),
     "report-demo": ("run-report.schema.json", lambda p: [p]),
