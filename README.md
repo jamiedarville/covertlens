@@ -60,7 +60,9 @@ Release decision: `release_with_limitations`
 contract in
 [docs/contracts/release-scorecard.md](docs/contracts/release-scorecard.md)).
 Independent review:
-[docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md).
+[docs/reviews/2026-11-03-review.md](docs/reviews/2026-11-03-review.md)
+(earlier snapshot:
+[docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md)).
 
 - Detection coverage is limited to calibrated payload bands
   (low/medium) and densities on gradient_noise covers; the high
