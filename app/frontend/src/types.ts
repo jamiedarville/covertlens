@@ -287,6 +287,12 @@ export interface ReviewRole {
   permissions: string[];
 }
 
+export interface DemoRoles {
+  roles: ReviewRole[];
+  // False when the server ignores X-Demo-Role (CL-78).
+  enabled: boolean;
+}
+
 export interface ReviewDelivery extends GateDelivery {
   disposition: string;
   has_candidate_decode: boolean;

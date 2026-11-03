@@ -204,10 +204,14 @@ import app.main as main_module  # noqa: E402
 from app.main import app  # noqa: E402
 from covertlens.geometric_fixtures import build_geo_pair  # noqa: E402
 
+RESEARCHER = {"X-Demo-Role": "researcher"}
+REVIEWER = {"X-Demo-Role": "reviewer"}
+
 
 @pytest.fixture()
 def trace_client(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "GATE_STORE_DIR", tmp_path / "gate-store")
+    monkeypatch.setenv("COVERTLENS_DEMO_ROLES", "on")
     main_module._reset_gate_for_tests()
     with TestClient(app) as client:
         yield client
@@ -232,6 +236,7 @@ def _post(client, data, run_id, verdict=None):
         decided = client.post(
             f"/api/gate/deliveries/{delivery['delivery_id']}/verdict",
             json={"verdict": verdict},
+            headers=RESEARCHER,
         )
         assert decided.status_code == 200, decided.text
     return delivery["delivery_id"]
@@ -242,7 +247,7 @@ def test_trace_api_covers_every_delivery_with_explicit_missing(trace_client):
     decided_id = _post(trace_client, encoded.data, "run_demo", verdict="quarantine")
     pending_id = _post(trace_client, clean.data, "run_demo")
 
-    response = trace_client.get("/api/trace/runs/run_demo")
+    response = trace_client.get("/api/trace/runs/run_demo", headers=RESEARCHER)
     assert response.status_code == 200, response.text
     view = response.json()
     assert view["run_id"] == "run_demo"
@@ -269,7 +274,7 @@ def test_trace_api_covers_every_delivery_with_explicit_missing(trace_client):
     assert view["weak_signals"]["per_sender"][0]["sender_id"] == "agent-a"
     assert view["actions"] == []
 
-    empty = trace_client.get("/api/trace/runs/run_unknown")
+    empty = trace_client.get("/api/trace/runs/run_unknown", headers=REVIEWER)
     assert empty.status_code == 200
     assert empty.json()["deliveries"] == []
     assert empty.json()["run_id"] == "run_unknown"

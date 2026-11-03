@@ -34,16 +34,25 @@ its deliveries, its trace, and its audit.
 
 `access_attempt_report()` no longer returns a hard-coded 0. A
 recipient serve (`outcome == "served"`) counts as unauthorized when
-the delivery's state at serve time was not `permitted`. Reviewer
-serves (R-08) are evidence reads, not recipient deliveries, and never
-count. Correct gate behaviour therefore reports 0 in every test,
-while a serve recorded against a withheld or pending delivery reports
-1 and fails the audit.
+the delivery's state at serve time was not `permitted`.
+
+Reviewer serves (R-08) count too (CL-78). Every R-08 attempt
+records `actor_id` and `authorized`; a `reviewer_served` row counts
+as unauthorized unless it records an authorized actor. Rows written
+before CL-78 have no actor, cannot show authorization, and count.
+The report splits the total into `unauthorized_recipient_served`
+and `unauthorized_reviewer_served`. Correct gate behaviour reports
+0 in every test, while a serve recorded against a withheld or
+pending delivery, or an R-08 serve without an authorized actor,
+reports 1 and fails the audit.
 
 ## Live Gate API (`app/main.py`)
 
 Persistent singleton gate over `COVERTLENS_DATA_DIR/gate/store`.
-Reviewer identities for the demo are `researcher-1` and `reviewer`.
+The reviewer identity is the request's demo role (CL-78; see
+[reviewer-role.md](reviewer-role.md)): only principals the runtime
+policy grants `original.read` on the run (`demo-researcher`,
+`demo-reviewer`) are reviewers. No query parameter names the actor.
 
 | Endpoint | Behaviour |
 |---|---|
@@ -51,10 +60,10 @@ Reviewer identities for the demo are `researcher-1` and `reviewer`.
 | `GET /api/gate/runs` | List known run IDs. |
 | `POST /api/gate/deliveries` | Multipart sender post (`file`, `run_id`, `sender_id`, `recipient_id`, `route_id` R-01…R-07, optional `episode_id`). Creates a pending delivery; R-08 is rejected as a delivery route. |
 | `POST /api/gate/deliveries/{id}/analyze` | Analyse the stored bytes (`gate-analyzer` / `analysis` read). Returns findings, decision and `suggested_verdict`; the delivery stays pending. |
-| `POST /api/gate/deliveries/{id}/verdict` | Record `log` / `flag` / `quarantine` / `fail_run`. `log`/`flag` permit; `quarantine`/`fail_run` withhold. |
+| `POST /api/gate/deliveries/{id}/verdict` | Record `log` / `flag` / `quarantine` / `fail_run`. `log`/`flag` permit; `quarantine`/`fail_run` withhold. Needs `verdict.override` (researcher) and an `application/json` body; other content types → 415 (CL-78). |
 | `GET /api/gate/runs/{run_id}` | Deliveries (with `recipient_message`), events, `access_report`, `access_attempts`, coverage. |
 | `GET /api/gate/deliveries/{id}/recipient-image` | Recipient view. Serves bytes only via `recipient_access` after a permitting verdict; pending → 409, withheld → 403, both with the gate's reason (`recipient_message`) and no image bytes. |
-| `GET /api/gate/deliveries/{id}/reviewer-image` | Reviewer view (R-08). Audited `reviewer_access`; serves withheld originals to authorized reviewers only. |
+| `GET /api/gate/deliveries/{id}/reviewer-image` | Reviewer view (R-08). Audited `reviewer_access` as the demo role's principal; `original.read` only (researcher/reviewer). No role or `viewer` → 403, recorded as `reviewer_denied`. `Cache-Control: no-store`. |
 | `GET /api/gate/runs/{run_id}/events/stream` | SSE timeline (`text/event-stream`): replay, then poll for new seqs; ends after ~5 s idle and browsers reconnect. |
 | `GET /gate` | SPA shell for the Live Gate page. |
 
@@ -70,7 +79,10 @@ apply a verdict; then compare the recipient and reviewer panes. The
 recipient pane fetches only the recipient path: permitted deliveries
 render the served bytes, withheld deliveries render
 **withheld** plus the gate's reason and no image — it never renders
-withheld bytes. The reviewer pane renders the R-08 evidence view.
+withheld bytes. The reviewer pane is closed until the operator
+clicks **Open original**, and then fetches the R-08 evidence view as
+the chosen demo role; a viewer sees the denial, which the audit
+records (CL-78). Applying a verdict needs the researcher role.
 Below, the SSE timeline and the access-attempt audit (including
 computed `unauthorized_served`) update from the same run detail.
 

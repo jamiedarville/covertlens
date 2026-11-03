@@ -32,8 +32,10 @@ that an artifact produced an action (REV-01).
 
 `GET /api/trace/runs/{run_id}` builds the view from the
 persistent gate's trace plus fresh deterministic analysis of the
-stored bytes (the CL-59 recompute pattern). Unknown runs return
-an empty view for the requested ID. The Trace explorer page
+stored bytes (the CL-59 recompute pattern). It needs a demo role
+with `trace.read` on the run (researcher or reviewer; viewer → 403,
+CL-78). Unknown runs return an empty view for the requested ID.
+The Trace explorer page
 (`/trace`, SPA route in `app/main.py`) renders the deliveries
 table with hashes, verdict references and explicit missing
 statuses/reasons, the episode-context and per-sender weak-signal

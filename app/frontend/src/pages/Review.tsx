@@ -10,7 +10,6 @@ import type {
   ReviewAudit,
   ReviewDetail,
   ReviewQueue,
-  ReviewRole,
 } from "../types";
 import {
   ApiError,
@@ -20,9 +19,10 @@ import {
   fetchReviewDetail,
   fetchReviewOriginal,
   fetchReviewQueue,
-  fetchReviewRoles,
   postDisposition,
 } from "../api";
+import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { useDemoRole } from "../demoRole";
 
 const DISPOSITIONS = [
   "benign",
@@ -33,8 +33,7 @@ const DISPOSITIONS = [
 ];
 
 export default function Review() {
-  const [roles, setRoles] = useState<ReviewRole[]>([]);
-  const [role, setRole] = useState("viewer");
+  const [role, setRole] = useDemoRole();
   const [runId, setRunId] = useState("");
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,22 +50,19 @@ export default function Review() {
   const [error, setError] = useState<string | null>(null);
   const [statusLine, setStatusLine] = useState("");
 
-  const activeRole = roles.find((r) => r.role === role);
-
-  useEffect(() => {
-    fetchReviewRoles()
-      .then(setRoles)
-      .catch(() => setRoles([]));
-  }, []);
-
-  const refreshAudit = useCallback(async (id: string) => {
-    if (!id.trim()) return;
-    try {
-      setAudit(await fetchReviewAudit(id.trim()));
-    } catch {
-      setAudit(null);
-    }
-  }, []);
+  // The audit chain needs trace.read (researcher or reviewer, CL-78);
+  // a viewer sees no audit panel.
+  const refreshAudit = useCallback(
+    async (id: string) => {
+      if (!id.trim()) return;
+      try {
+        setAudit(await fetchReviewAudit(id.trim(), role));
+      } catch {
+        setAudit(null);
+      }
+    },
+    [role],
+  );
 
   const onLoad = async () => {
     if (!runId.trim()) {
@@ -227,17 +223,8 @@ export default function Review() {
           evidence principal the API acts as; permissions come from
           the runtime policy and every read is audited.
         </p>
+        <DemoRoleSelect role={role} onChange={setRole} disabled={busy} />
         <div className="form-grid">
-          <label>
-            Acting as
-            <select value={role} onChange={(e) => setRole(e.target.value)} disabled={busy}>
-              {roles.map((r) => (
-                <option key={r.role} value={r.role}>
-                  {r.role} ({r.actor_id})
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             Run ID
             <input
@@ -248,15 +235,6 @@ export default function Review() {
             />
           </label>
         </div>
-        {activeRole && (
-          <p className="note">
-            Permissions for {activeRole.actor_id}:{" "}
-            {activeRole.permissions.length > 0
-              ? activeRole.permissions.join(", ")
-              : "none (deny-by-default)"}
-            .
-          </p>
-        )}
         <p>
           <button type="button" className="button button-primary" onClick={onLoad} disabled={busy}>
             Load quarantined originals

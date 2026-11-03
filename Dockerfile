@@ -15,7 +15,11 @@ FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a7
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     COVERTLENS_DATA_DIR=/data \
-    COVERTLENS_WORKERS=4
+    COVERTLENS_WORKERS=4 \
+    COVERTLENS_DEMO_ROLES=on
+# This image is the demo: X-Demo-Role is trusted (CL-78). Any client
+# can pick any role, so never expose it beyond a demo; run with
+# -e COVERTLENS_DEMO_ROLES=off to close evidence and verdicts.
 ARG GIT_SHA=unknown
 ENV GIT_SHA=$GIT_SHA
 WORKDIR /app

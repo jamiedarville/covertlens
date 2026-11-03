@@ -144,3 +144,77 @@ def test_quarantined_originals_are_reviewer_only():
     # The recipient path stays withheld throughout.
     with pytest.raises(WithheldError):
         gate.recipient_access(delivery.delivery_id)
+
+
+# -- CL-78: R-08 reads count in unauthorized_served --------------------------
+
+
+def test_reviewer_attempts_record_actor_and_authorization():
+    gate, delivery = pending_gate(Verdict.QUARANTINE)
+    gate.reviewer_access(
+        delivery.delivery_id, actor_id="researcher-1", reviewer_ids={"researcher-1"}
+    )
+    with pytest.raises(ReviewerAccessError):
+        gate.reviewer_access(delivery.delivery_id, actor_id="", reviewer_ids={""})
+    r08 = [a for a in gate.access_attempts() if a["via_route"] == "R-08"]
+    assert [(a["actor_id"], a["authorized"], a["outcome"]) for a in r08] == [
+        ("researcher-1", True, "reviewer_served"),
+        ("", False, "reviewer_denied"),
+    ]
+    report = gate.access_attempt_report()
+    assert report["unauthorized_served"] == 0
+    assert report["unauthorized_reviewer_served"] == 0
+
+
+def test_reviewer_serve_without_authorized_actor_counts_as_unauthorized():
+    """A serve that cannot show an authorized actor fails the audit."""
+    gate, delivery = pending_gate(Verdict.QUARANTINE)
+    gate._record_attempt(delivery.delivery_id, "R-08", "reviewer_served")
+    report = gate.access_attempt_report()
+    assert report["unauthorized_reviewer_served"] == 1
+    assert report["unauthorized_recipient_served"] == 0
+    assert report["unauthorized_served"] == 1
+
+
+def test_reviewer_actor_survives_restart_and_old_schema_migrates(tmp_path):
+    import sqlite3
+
+    root = tmp_path / "evidence"
+    gate = InterceptionGate(ArtifactStore(root))
+    handle = gate.intercept_bytes("R-01", PNG, CTX)
+    delivery = gate.attempt_delivery(handle, recipient_id="agent-b")
+    gate.record_verdict(delivery.delivery_id, Verdict.QUARANTINE)
+    gate.reviewer_access(delivery.delivery_id, actor_id="rev", reviewer_ids={"rev"})
+
+    reopened = InterceptionGate(ArtifactStore(root))
+    (attempt,) = [a for a in reopened.access_attempts() if a["via_route"] == "R-08"]
+    assert (attempt["actor_id"], attempt["authorized"]) == ("rev", True)
+    assert reopened.access_attempt_report()["unauthorized_served"] == 0
+
+    # A pre-CL-78 store: attempts table without the actor columns, and
+    # an R-08 serve with no actor. It loads, and the serve counts.
+    db = sqlite3.connect(root / "gate.sqlite3")
+    db.executescript(
+        """
+        ALTER TABLE gate_access_attempts RENAME TO new_attempts;
+        CREATE TABLE gate_access_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            delivery_id TEXT NOT NULL,
+            via_route TEXT,
+            outcome TEXT NOT NULL,
+            delivery_state TEXT
+        );
+        DROP TABLE new_attempts;
+        """
+    )
+    db.execute(
+        "INSERT INTO gate_access_attempts (delivery_id, via_route, outcome,"
+        " delivery_state) VALUES (?, 'R-08', 'reviewer_served', 'withheld')",
+        (delivery.delivery_id,),
+    )
+    db.commit()
+    db.close()
+    legacy = InterceptionGate(ArtifactStore(root))
+    report = legacy.access_attempt_report()
+    assert report["reviewer_served"] == 1
+    assert report["unauthorized_reviewer_served"] == 1

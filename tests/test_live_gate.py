@@ -106,10 +106,15 @@ import app.main as main_module  # noqa: E402
 from app.main import app  # noqa: E402
 from covertlens.geometric_fixtures import build_geo_pair  # noqa: E402
 
+RESEARCHER = {"X-Demo-Role": "researcher"}
+REVIEWER = {"X-Demo-Role": "reviewer"}
+VIEWER = {"X-Demo-Role": "viewer"}
+
 
 @pytest.fixture()
 def gate_client(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "GATE_STORE_DIR", tmp_path / "gate-store")
+    monkeypatch.setenv("COVERTLENS_DEMO_ROLES", "on")
     main_module._reset_gate_for_tests()
     with TestClient(app) as client:
         yield client
@@ -141,6 +146,7 @@ def _post_delivery(client, run_id="run_ui", verdict=None):
         decided = client.post(
             f"/api/gate/deliveries/{delivery['delivery_id']}/verdict",
             json={"verdict": verdict},
+            headers=RESEARCHER,
         )
         assert decided.status_code == 200, decided.text
         delivery = decided.json()
@@ -163,16 +169,33 @@ def test_recipient_pane_contract_withheld_with_reason(gate_client, verdict):
     assert recipient.content != raw
     assert b"\x89PNG" not in recipient.content
 
-    # The reviewer pane path still serves the original (audited R-08).
-    reviewer = gate_client.get(
-        f"/api/gate/deliveries/{delivery['delivery_id']}/reviewer-image"
-    )
-    assert reviewer.status_code == 200
-    assert reviewer.content == raw
+    # The reviewer pane path (audited R-08) serves the original only to
+    # a demo role holding original.read; no parameter picks the actor.
+    url = f"/api/gate/deliveries/{delivery['delivery_id']}/reviewer-image"
+    for headers in ({}, VIEWER):
+        denied = gate_client.get(url, headers=headers)
+        assert denied.status_code == 403
+        assert b"\x89PNG" not in denied.content
+    spoofed = gate_client.get(url, params={"actor_id": "researcher-1"})
+    assert spoofed.status_code == 403
+    for headers in (RESEARCHER, REVIEWER):
+        reviewer = gate_client.get(url, headers=headers)
+        assert reviewer.status_code == 200
+        assert reviewer.content == raw
+        assert reviewer.headers["cache-control"] == "no-store"
 
     detail = gate_client.get("/api/gate/runs/run_ui").json()
-    assert detail["access_report"]["unauthorized_served"] == 0
-    assert detail["access_report"]["withheld_denied"] >= 1
+    report = detail["access_report"]
+    assert report["unauthorized_served"] == 0
+    assert report["unauthorized_reviewer_served"] == 0
+    assert report["withheld_denied"] >= 1
+    assert report["reviewer_served"] == 2
+    assert report["reviewer_denied"] == 3
+    r08 = [a for a in detail["access_attempts"] if a["via_route"] == "R-08"]
+    assert {a["actor_id"] for a in r08 if a["outcome"] == "reviewer_served"} == {
+        "demo-researcher",
+        "demo-reviewer",
+    }
     assert [e["event_type"] for e in detail["events"]] == [
         "artifact.created",
         "delivery.attempted",
@@ -266,4 +289,6 @@ def test_gate_spa_route_served(gate_client, tmp_path, monkeypatch):
     ).read_text()
     assert "withheld" in source
     assert "recipient_message" in source
-    assert "reviewerImageUrl" in source
+    # The reviewer pane fetches as the demo role, never by actor_id (CL-78).
+    assert "fetchReviewerImage" in source
+    assert "actor_id=" not in source

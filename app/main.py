@@ -24,7 +24,17 @@ Thin FastAPI layer over the library:
   CL-11 principals; quarantined originals, reviewer-only candidate
   decodes, CL-25 dispositions, sealed review-package download and
   live audit-chain verification.
-- OpenAPI at `/docs`; the built React frontend is served
+- Demo roles are not authentication (CL-78): `X-Demo-Role` is
+  honoured only when `COVERTLENS_DEMO_ROLES=on` (the Docker image's
+  demo setting); otherwise every request is a `viewer`, which holds
+  no evidence permission. Evidence and state-changing endpoints
+  check the CL-11 runtime policy: reviewer image needs
+  `original.read`, audit and trace need `trace.read`, gate verdicts
+  need `verdict.override`. JSON endpoints accept only
+  `application/json`, and unsafe `/api` requests from another site
+  are rejected (CSRF).
+- OpenAPI at `/docs` (Swagger with its own hash-pinned CSP); the
+  built React frontend is served
   statically at `/` (landing), `/analyze` (CL-48) and
   `/generate` (CL-51), with its hashed assets under `/assets/`.
   API and docs paths are never shadowed by the single-page app.
@@ -38,7 +48,9 @@ and git SHA.
 from __future__ import annotations
 
 import asyncio
+import base64
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -48,6 +60,7 @@ from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -68,7 +81,6 @@ RED_TEAM_INDEX = DATA_DIR / "red-team" / "index.jsonl"
 RED_TEAM_STORE_DIR = DATA_DIR / "red-team" / "store"
 # Live Gate (CL-53): persistent gate over a file-backed store.
 GATE_STORE_DIR = DATA_DIR / "gate" / "store"
-GATE_REVIEWER_IDS = {"researcher-1", "reviewer"}
 MAX_GENERATE_BODY_BYTES = 16 * 1024
 _GENERATED_NAME = re.compile(r"^[0-9a-f]{64}\.(png|jpg)$")
 # The Docker image copies the Vite build to app/static (CL-47);
@@ -83,8 +95,30 @@ MAX_UPLOAD_BYTES = int(
     os.environ.get("COVERTLENS_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))
 )
 RATE_LIMIT_PER_MIN = int(os.environ.get("COVERTLENS_RATE_LIMIT_PER_MIN", "30"))
+# `X-Demo-Role` is trusted only when this is on (CL-78). Read per
+# request so tests and operators can flip it without a restart.
+DEMO_ROLES_ENV = "COVERTLENS_DEMO_ROLES"
+# Extra origins allowed to make state-changing requests, comma
+# separated (e.g. a reverse proxy's public origin).
+ALLOWED_ORIGINS_ENV = "COVERTLENS_ALLOWED_ORIGINS"
 
-app = FastAPI(title="CovertLens", version=covertlens.__version__)
+CSP = (
+    "default-src 'self'; img-src 'self' data: blob:; "
+    "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+    "object-src 'none'; base-uri 'self'; form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+SWAGGER_CDN = "https://cdn.jsdelivr.net"
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Built-in /docs and /redoc are off: /docs is served below with a
+# CSP that allows Swagger's CDN and pins its one inline script.
+app = FastAPI(
+    title="CovertLens",
+    version=covertlens.__version__,
+    docs_url=None,
+    redoc_url=None,
+)
 
 _pool: concurrent.futures.ProcessPoolExecutor | None = None
 _rate_windows: dict[str, deque] = {}
@@ -208,8 +242,47 @@ def _startup() -> None:
     _start_precompute()
 
 
+def _allowed_origin_hosts(request: Request) -> set[str]:
+    hosts = {
+        (request.headers.get("host") or "").lower(),
+        (request.headers.get("x-forwarded-host") or "").lower(),
+    }
+    for origin in os.environ.get(ALLOWED_ORIGINS_ENV, "").split(","):
+        if origin.strip():
+            hosts.add(urlsplit(origin.strip()).netloc.lower())
+    hosts.discard("")
+    return hosts
+
+
+def _is_cross_site(request: Request) -> bool:
+    """True when a browser marks the request as coming from another site.
+
+    `Sec-Fetch-Site` covers current browsers; the `Origin` check covers
+    older ones. Requests with neither (curl, tests) are not browser
+    cross-site requests and pass.
+    """
+    site = (request.headers.get("sec-fetch-site") or "").lower()
+    if site in ("cross-site", "same-site"):
+        return True
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False
+    if origin.strip().lower() == "null":
+        return True
+    return urlsplit(origin).netloc.lower() not in _allowed_origin_hosts(request)
+
+
 @app.middleware("http")
 async def _security_and_rate_limit(request: Request, call_next):
+    if (
+        request.method in _UNSAFE_METHODS
+        and request.url.path.startswith("/api/")
+        and _is_cross_site(request)
+    ):
+        # CSRF (CL-78): no cross-site form or fetch may change state.
+        response = JSONResponse({"detail": "cross_site_request_blocked"}, 403)
+        _apply_security_headers(response)
+        return response
     if request.url.path in ("/api/analyze", "/api/generate"):
         now = time.time()
         window = _rate_windows.setdefault(request.client.host, deque())
@@ -219,12 +292,147 @@ async def _security_and_rate_limit(request: Request, call_next):
             return JSONResponse({"detail": "rate_limited"}, status_code=429)
         window.append(now)
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; "
-        "style-src 'self' 'unsafe-inline'; script-src 'self'"
-    )
-    response.headers["X-Content-Type-Options"] = "nosniff"
+    _apply_security_headers(response)
     return response
+
+
+def _apply_security_headers(response: Response) -> None:
+    # A route may set its own CSP (only /docs does); keep it.
+    if "content-security-policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = CSP
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+
+
+@app.get("/docs", include_in_schema=False)
+def swagger_docs() -> Response:
+    """Swagger UI with a CSP that lets it load (CL-78).
+
+    The page needs Swagger's CDN bundle and one inline bootstrap
+    script; the script is allowed by its SHA-256, not by
+    `'unsafe-inline'`.
+    """
+    from fastapi.openapi.docs import get_swagger_ui_html
+
+    page = get_swagger_ui_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=f"{app.title} - Swagger UI",
+    )
+    html = bytes(page.body).decode()
+    hashes = " ".join(
+        "'sha256-"
+        + base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+        + "'"
+        for script in re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+    )
+    page.headers["Content-Security-Policy"] = (
+        f"default-src 'self'; script-src 'self' {SWAGGER_CDN} {hashes}; "
+        f"style-src 'self' 'unsafe-inline' {SWAGGER_CDN}; "
+        "img-src 'self' data: https://fastapi.tiangolo.com; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    )
+    return page
+
+
+# -- JSON bodies and demo roles (CL-78) ------------------------------------
+
+
+def _is_json(request: Request) -> bool:
+    content_type = request.headers.get("content-type") or ""
+    return content_type.split(";", 1)[0].strip().lower() == "application/json"
+
+
+async def _json_object(request: Request) -> tuple[dict[str, Any], JSONResponse | None]:
+    """Parse a JSON object body; only `application/json` is accepted.
+
+    Browsers send `text/plain` and form bodies cross-site without a
+    preflight, so refusing them closes the forged-request path.
+    """
+    if not _is_json(request):
+        return {}, JSONResponse(
+            {"detail": "content type must be application/json"}, status_code=415
+        )
+    try:
+        body = json.loads((await request.body()) or b"{}")
+    except json.JSONDecodeError:
+        return {}, JSONResponse({"detail": "invalid_json"}, status_code=400)
+    if not isinstance(body, dict):
+        return {}, JSONResponse({"detail": "invalid_json"}, status_code=400)
+    return body, None
+
+
+def _demo_roles_enabled() -> bool:
+    """Whether `X-Demo-Role` is honoured (CL-78).
+
+    The header is a demo convenience, not authentication: any client
+    can send any role. Only the demo deployment (the Docker image)
+    turns it on. When off, every request is a `viewer`. Real roles
+    are CL-67.
+    """
+    value = os.environ.get(DEMO_ROLES_ENV, "off").strip().lower()
+    return value in ("on", "1", "true", "yes")
+
+
+class DemoRoleDenied(PermissionError):
+    """The request's demo role lacks a runtime-policy permission."""
+
+    def __init__(self, role: str, permission: str) -> None:
+        super().__init__(f"demo role {role!r} lacks {permission}")
+        self.role = role
+        self.permission = permission
+
+
+_policy_cache: dict[str, Any] | None = None
+
+
+def _runtime_policy() -> dict[str, Any]:
+    global _policy_cache
+    if _policy_cache is None:
+        from covertlens.runtime import load_runtime_policy
+
+        _policy_cache = load_runtime_policy()
+    return _policy_cache
+
+
+def _require(request: Request, dataset_id: str, permission: str) -> tuple[Any, str]:
+    """Principal for this request, if its role holds `permission`.
+
+    Raises `ValueError` for an unknown role and `DemoRoleDenied` when
+    the runtime policy does not grant the permission on this run.
+    """
+    from covertlens.runtime import can
+
+    principal, role = _demo_principal(request, dataset_id)
+    if not can(_runtime_policy(), principal, dataset_id, permission):
+        raise DemoRoleDenied(role, permission)
+    return principal, role
+
+
+def _denied(exc: DemoRoleDenied) -> JSONResponse:
+    return JSONResponse(
+        {
+            "detail": "permission denied for demo role",
+            "role": exc.role,
+            "needs": exc.permission,
+            "demo_roles_enabled": _demo_roles_enabled(),
+        },
+        status_code=403,
+    )
+
+
+def _original_readers(run_id: str) -> set[str]:
+    """Actor ids the runtime policy lets read originals of this run."""
+    from covertlens.review import DEMO_ROLES, demo_principal
+    from covertlens.runtime import can
+
+    policy = _runtime_policy()
+    readers = set()
+    for role in DEMO_ROLES:
+        principal = demo_principal(role, run_id)
+        if can(policy, principal, run_id, "original.read"):
+            readers.add(principal.actor_id)
+    return readers
 
 
 @app.get("/api/health")
@@ -337,6 +545,10 @@ async def generate(request: Request) -> JSONResponse:
     content_length = request.headers.get("content-length")
     if content_length is not None and int(content_length) > MAX_GENERATE_BODY_BYTES:
         return JSONResponse({"detail": "request_too_large"}, status_code=413)
+    if not _is_json(request):
+        return JSONResponse(
+            {"detail": "content type must be application/json"}, status_code=415
+        )
     body = await request.body()
     if len(body) > MAX_GENERATE_BODY_BYTES:
         return JSONResponse({"detail": "request_too_large"}, status_code=413)
@@ -458,7 +670,14 @@ def _gate_error(exc: Exception) -> JSONResponse:
             status_code=403,
         )
     if isinstance(exc, ReviewerAccessError):
-        return JSONResponse({"detail": "reviewer access denied"}, status_code=403)
+        return JSONResponse(
+            {
+                "detail": "reviewer access denied: the original needs a demo role"
+                " with original.read (researcher or reviewer)",
+                "demo_roles_enabled": _demo_roles_enabled(),
+            },
+            status_code=403,
+        )
     if isinstance(exc, ValueError):
         return JSONResponse({"detail": str(exc)}, status_code=400)
     raise exc
@@ -472,12 +691,9 @@ def gate_runs() -> dict[str, Any]:
 
 @app.post("/api/gate/runs")
 async def gate_create_run(request: Request) -> JSONResponse:
-    try:
-        body = json.loads((await request.body()) or b"{}")
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "invalid_json"}, status_code=400)
-    if not isinstance(body, dict):
-        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
     run_id = str(body.get("run_id") or "").strip()
     if not run_id:
         import uuid
@@ -573,12 +789,19 @@ def gate_analyze_delivery(delivery_id: str) -> JSONResponse:
 
 @app.post("/api/gate/deliveries/{delivery_id}/verdict")
 async def gate_record_verdict(delivery_id: str, request: Request) -> JSONResponse:
+    """Record a gate verdict; needs `verdict.override` (CL-78)."""
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
     gate = _gate()
     try:
-        body = json.loads((await request.body()) or b"{}")
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "invalid_json"}, status_code=400)
-    verdict_value = str((body or {}).get("verdict") or "").strip()
+        record = gate.get_delivery(delivery_id)
+        _require(request, record.run_id, "verdict.override")
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    except Exception as exc:  # noqa: BLE001
+        return _gate_error(exc)
+    verdict_value = str(body.get("verdict") or "").strip()
     from covertlens.events import Verdict
 
     try:
@@ -623,17 +846,30 @@ def gate_recipient_image(delivery_id: str) -> Response:
 
 
 @app.get("/api/gate/deliveries/{delivery_id}/reviewer-image")
-def gate_reviewer_image(delivery_id: str, actor_id: str = "researcher-1") -> Response:
-    """Reviewer view (R-08): audited read for authorized reviewers."""
+def gate_reviewer_image(delivery_id: str, request: Request) -> Response:
+    """Reviewer view (R-08): audited read, `original.read` only (CL-78).
+
+    The caller cannot name the actor. The demo role (viewer when the
+    header is absent or demo roles are off) maps to its CL-11
+    principal, and only principals the runtime policy allows
+    `original.read` on this run count as reviewers. Denied attempts
+    are recorded as `reviewer_denied`.
+    """
     gate = _gate()
     try:
+        record = gate.get_delivery(delivery_id)
+        principal, _role = _demo_principal(request, record.run_id)
         data = gate.reviewer_access(
-            delivery_id, actor_id=actor_id, reviewer_ids=GATE_REVIEWER_IDS
+            delivery_id,
+            actor_id=principal.actor_id,
+            reviewer_ids=_original_readers(record.run_id),
         )
     except Exception as exc:  # noqa: BLE001
         return _gate_error(exc)
     media = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
-    return Response(content=data, media_type=media)
+    return Response(
+        content=data, media_type=media, headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.get("/api/gate/runs/{run_id}/events/stream")
@@ -699,9 +935,12 @@ def _reset_review_for_tests() -> None:
 
 
 def _demo_principal(request: Request, dataset_id: str) -> Any:
+    """Demo principal for the request; `viewer` unless demo roles are on."""
     from covertlens.review import demo_principal
 
-    role = (request.headers.get("x-demo-role") or "viewer").strip().lower()
+    role = "viewer"
+    if _demo_roles_enabled():
+        role = (request.headers.get("x-demo-role") or "viewer").strip().lower()
     return demo_principal(role, dataset_id), role
 
 
@@ -734,7 +973,12 @@ def _review_delivery_row(gate: Any, workspace: Any, record: Any) -> dict[str, An
 def review_roles() -> dict[str, Any]:
     from covertlens.review import role_capabilities
 
-    return {"roles": role_capabilities(), "header": "X-Demo-Role", "default": "viewer"}
+    return {
+        "roles": role_capabilities(),
+        "header": "X-Demo-Role",
+        "default": "viewer",
+        "enabled": _demo_roles_enabled(),
+    }
 
 
 @app.get("/api/review/runs/{run_id}/queue")
@@ -827,19 +1071,18 @@ def review_original(delivery_id: str, request: Request) -> Response:
     except Exception as exc:  # noqa: BLE001
         return _review_error(exc)
     media = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
-    return Response(content=data, media_type=media)
+    return Response(
+        content=data, media_type=media, headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.post("/api/review/deliveries/{delivery_id}/disposition")
 async def review_disposition(delivery_id: str, request: Request) -> JSONResponse:
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
     gate = _gate()
     workspace = _review_workspace()
-    try:
-        body = json.loads((await request.body()) or b"{}")
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "invalid_json"}, status_code=400)
-    if not isinstance(body, dict):
-        return JSONResponse({"detail": "invalid_json"}, status_code=400)
     try:
         record = gate.get_delivery(delivery_id)
         principal, _role = _demo_principal(request, record.run_id)
@@ -876,23 +1119,53 @@ def review_export(run_id: str, request: Request) -> Response:
     return Response(
         content=json.dumps(package, indent=2, sort_keys=True),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="review-{run_id}.json"'},
+        headers={"Content-Disposition": _attachment(f"review-{run_id}.json")},
+    )
+
+
+def _attachment(filename: str) -> str:
+    """`Content-Disposition` with a header-safe filename (CL-78).
+
+    The plain `filename` keeps only `[A-Za-z0-9._-]`; the exact name
+    goes in the RFC 5987 `filename*` form, percent-encoded, so quotes,
+    CR/LF or semicolons in a run id cannot break the header.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", filename)[:120] or "download"
+    return (
+        f"attachment; filename=\"{safe}\"; filename*=UTF-8''{quote(filename, safe='')}"
     )
 
 
 @app.get("/api/review/audit")
-def review_audit(run_id: str | None = None) -> dict[str, Any]:
-    return _review_workspace().audit_payload(run_id)
+def review_audit(request: Request, run_id: str | None = None) -> JSONResponse:
+    """Audit chain entries; needs `trace.read` (CL-78)."""
+    try:
+        _require(request, run_id or "*", "trace.read")
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(_review_workspace().audit_payload(run_id))
 
 
 # -- Trace explorer (CL-60) ----------------------------------------------
 
 
 @app.get("/api/trace/runs/{run_id}")
-def trace_run(run_id: str) -> JSONResponse:
-    """Trace explorer view for one run (CL-60, REV-01/02/03)."""
+def trace_run(run_id: str, request: Request) -> JSONResponse:
+    """Trace explorer view for one run (CL-60, REV-01/02/03).
+
+    Needs `trace.read` on the run (CL-78).
+    """
     from covertlens.metadata import analyze_all_bytes
     from covertlens.trace_explorer import build_trace_explorer
+
+    try:
+        _require(request, run_id, "trace.read")
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
 
     gate = _gate()
     results = []

@@ -1,7 +1,9 @@
 // Live Gate page (CL-53): watch one delivery move pending →
 // analysed → verdict → delivered or withheld. The recipient pane
 // only ever shows bytes the gate served to the recipient; withheld
-// deliveries show the gate's reason and no image.
+// deliveries show the gate's reason and no image. The reviewer
+// pane opens the original only on request, as the chosen demo role;
+// a viewer is denied and the attempt is audited (CL-78).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GateDelivery, GateEvent, GateRunDetail } from "../types";
@@ -10,11 +12,13 @@ import {
   analyzeGateDelivery,
   createGateRun,
   fetchGateRun,
+  fetchReviewerImage,
   postGateDelivery,
   recipientImageUrl,
   recordGateVerdict,
-  reviewerImageUrl,
 } from "../api";
+import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { useDemoRole } from "../demoRole";
 
 const ROUTES = ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07"];
 const VERDICTS = ["log", "flag", "quarantine", "fail_run"];
@@ -35,6 +39,9 @@ export default function LiveGate() {
   const [statusLine, setStatusLine] = useState("");
   const [recipientUrl, setRecipientUrl] = useState<string | null>(null);
   const [recipientNote, setRecipientNote] = useState("");
+  const [role, setRole] = useDemoRole();
+  const [reviewerUrl, setReviewerUrl] = useState<string | null>(null);
+  const [reviewerNote, setReviewerNote] = useState("");
   const sourceRef = useRef<EventSource | null>(null);
 
   const selected: GateDelivery | null =
@@ -104,6 +111,38 @@ export default function LiveGate() {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [selected]);
+
+  // Reviewer pane: closed until the operator opens it, and closed
+  // again whenever the delivery or the demo role changes.
+  const selectedDeliveryId = selected?.delivery_id ?? null;
+  useEffect(() => {
+    setReviewerUrl(null);
+    setReviewerNote("");
+  }, [selectedDeliveryId, role]);
+  useEffect(() => {
+    return () => {
+      if (reviewerUrl) URL.revokeObjectURL(reviewerUrl);
+    };
+  }, [reviewerUrl]);
+
+  const onOpenOriginal = async () => {
+    if (!selected) return;
+    setReviewerNote("");
+    try {
+      const blob = await fetchReviewerImage(selected.delivery_id, role);
+      setReviewerUrl(URL.createObjectURL(blob));
+      setReviewerNote(`Opened as demo-${role} through R-08. The read is audited.`);
+    } catch (err) {
+      setReviewerUrl(null);
+      setReviewerNote(
+        err instanceof ApiError && err.status === 403
+          ? `Denied for the ${role} demo role: opening the original needs researcher or reviewer. The attempt is recorded as reviewer_denied.`
+          : "Original unavailable.",
+      );
+    } finally {
+      await refresh(runId.trim()).catch(() => undefined);
+    }
+  };
 
   const onCreateRun = async () => {
     setBusy(true);
@@ -176,7 +215,7 @@ export default function LiveGate() {
     setBusy(true);
     setError(null);
     try {
-      const updated = await recordGateVerdict(selected.delivery_id, verdictChoice);
+      const updated = await recordGateVerdict(selected.delivery_id, verdictChoice, role);
       await refresh(runId.trim());
       setStatusLine(
         updated.state === "permitted"
@@ -184,7 +223,13 @@ export default function LiveGate() {
           : updated.recipient_message,
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Verdict failed.");
+      setError(
+        err instanceof ApiError && err.status === 403
+          ? `Applying a verdict needs the researcher demo role (acting as ${role}).`
+          : err instanceof ApiError
+            ? err.message
+            : "Verdict failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -253,6 +298,12 @@ export default function LiveGate() {
             />
           </label>
         </div>
+        <DemoRoleSelect
+          role={role}
+          onChange={setRole}
+          disabled={busy}
+          hint="Applying a verdict needs researcher. Opening a withheld original needs researcher or reviewer."
+        />
         <p>
           <button type="button" className="button button-primary" onClick={onCreateRun} disabled={busy}>
             Create run
@@ -414,14 +465,19 @@ export default function LiveGate() {
         <section className="card" aria-labelledby="reviewer-heading">
           <h2 id="reviewer-heading">Reviewer pane</h2>
           {!selected ? (
-            <p className="note">Select a delivery to open it as researcher-1 (R-08, audited).</p>
+            <p className="note">Select a delivery to open its original (R-08, audited).</p>
           ) : (
             <>
-              <img
-                className="skyline-img"
-                src={reviewerImageUrl(selected.delivery_id)}
-                alt="Original opened by the reviewer"
-              />
+              {reviewerUrl ? (
+                <img className="skyline-img" src={reviewerUrl} alt="Original opened by the reviewer" />
+              ) : (
+                <p>
+                  <button type="button" className="button" onClick={onOpenOriginal} disabled={busy}>
+                    Open original as {role}
+                  </button>
+                </p>
+              )}
+              {reviewerNote && <p data-testid="reviewer-note">{reviewerNote}</p>}
               <p className="note">
                 Reviewer evidence view. Recipients never get bytes through
                 this path.
@@ -458,6 +514,8 @@ export default function LiveGate() {
               <div><dt>Served to recipient</dt><dd>{String(report.served ?? 0)}</dd></div>
               <div><dt>Unauthorized served</dt><dd>{String(unauthorized)}</dd></div>
               <div><dt>Withheld denied</dt><dd>{String(report.withheld_denied ?? 0)}</dd></div>
+              <div><dt>Reviewer served (R-08)</dt><dd>{String(report.reviewer_served ?? 0)}</dd></div>
+              <div><dt>Reviewer denied (R-08)</dt><dd>{String(report.reviewer_denied ?? 0)}</dd></div>
             </dl>
             {unauthorized !== 0 && (
               <p className="alert" role="alert">Unauthorized bytes were served.</p>
@@ -467,7 +525,7 @@ export default function LiveGate() {
                 <table>
                   <caption>Every recorded attempt, newest last.</caption>
                   <thead>
-                    <tr><th>Delivery</th><th>Route</th><th>Outcome</th><th>State then</th></tr>
+                    <tr><th>Delivery</th><th>Route</th><th>Outcome</th><th>State then</th><th>Actor</th></tr>
                   </thead>
                   <tbody>
                     {detail.access_attempts.map((a, i) => (
@@ -476,6 +534,7 @@ export default function LiveGate() {
                         <td>{String(a.via_route ?? "—")}</td>
                         <td>{String(a.outcome ?? "")}</td>
                         <td>{String(a.delivery_state ?? "—")}</td>
+                        <td>{String(a.actor_id ?? "—")}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -100,6 +100,7 @@ VIEWER = {"X-Demo-Role": "viewer"}
 @pytest.fixture()
 def review_client(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "GATE_STORE_DIR", tmp_path / "gate-store")
+    monkeypatch.setenv("COVERTLENS_DEMO_ROLES", "on")
     main_module._reset_gate_for_tests()
     with TestClient(app) as client:
         yield client
@@ -124,6 +125,7 @@ def _quarantined_delivery(client, run_id=RUN):
     decided = client.post(
         f"/api/gate/deliveries/{delivery['delivery_id']}/verdict",
         json={"verdict": "quarantine"},
+        headers=RESEARCHER,
     )
     assert decided.status_code == 200, decided.text
     assert decided.json()["state"] == "withheld"
@@ -192,7 +194,9 @@ def test_researcher_decode_denied_and_audited(review_client):
         assert "candidate_decode" not in _keys(detail.json())
         assert candidate_text not in json.dumps(detail.json())
 
-    audit = review_client.get("/api/review/audit", params={"run_id": RUN}).json()
+    audit = review_client.get(
+        "/api/review/audit", params={"run_id": RUN}, headers=REVIEWER
+    ).json()
     assert audit["chain_valid"] is True
     denials = [
         e
@@ -302,7 +306,9 @@ def test_full_demo_session_export_and_audit(review_client):
     package["decisions"][0]["disposition"] = "benign"
     assert validate_review_package(package) != []
 
-    audit = review_client.get("/api/review/audit", params={"run_id": RUN}).json()
+    audit = review_client.get(
+        "/api/review/audit", params={"run_id": RUN}, headers=REVIEWER
+    ).json()
     assert audit["chain_valid"] is True
     assert audit["denied"] >= 2  # decode denial + export denial
     actions = {(e["action"], e["outcome"]) for e in audit["entries"]}
@@ -324,7 +330,9 @@ def test_review_state_survives_api_restart(review_client, tmp_path, monkeypatch)
     main_module._reset_gate_for_tests()
     queue = review_client.get(f"/api/review/runs/{RUN}/queue", headers=VIEWER)
     assert queue.json()["quarantined"][0]["disposition"] == "benign"
-    audit = review_client.get("/api/review/audit", params={"run_id": RUN}).json()
+    audit = review_client.get(
+        "/api/review/audit", params={"run_id": RUN}, headers=REVIEWER
+    ).json()
     assert audit["chain_valid"] is True
     assert (tmp_path / "gate-store" / "review.sqlite3").exists()
 
@@ -343,7 +351,7 @@ def test_review_spa_route_served(review_client, tmp_path, monkeypatch):
     assert "X-Demo-Role" not in source  # header lives in the API client
     assert "Demo role" in source
     assert "candidate" in source
-    api_source = (
-        Path(main_module.__file__).parent / "frontend" / "src" / "api.ts"
-    ).read_text()
-    assert "X-Demo-Role" in api_source
+    src = Path(main_module.__file__).parent / "frontend" / "src"
+    # The header is built in one place (CL-78) and used by the client.
+    assert "X-Demo-Role" in (src / "demoRole.ts").read_text()
+    assert "roleHeaders(role)" in (src / "api.ts").read_text()
