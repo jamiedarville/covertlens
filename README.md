@@ -538,6 +538,14 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | Every delivery in a demo run appears with content hash, verdict reference and parse/next-action link or explicit missing status | `covertlens.trace_explorer` (`build_trace_explorer` over the CL-16 join + CL-24 context, `missing_reasons` per absent link) + `GET /api/trace/runs/{run_id}` · [docs/contracts/trace-explorer.md](docs/contracts/trace-explorer.md) |
 | No page element implies causation between an artifact and an action | Trace explorer page (`/trace`) with candidate-input wording and `causation_claimed: false` on the view, every action and every next-action record; causal-phrase guard in tests |
 
+### CL-61 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| On +/-1 embedded fixtures, the new spatial detector's ROC-AUC beats PoV chi-square, with bootstrap intervals reported | `covertlens.lsb` (`lsb-sample-pairs` v1.0.0, gated pair-LSB randomness) vs `lsb-pov-chisquare` in `benchmark_lsb_pairs` over the CL-61 smooth-field +/-1 suite: 0.597 vs 0.499 with bootstrap intervals · [docs/contracts/stronger-pixel-detectors.md](docs/contracts/stronger-pixel-detectors.md) · [schemas/lsb-pairs-benchmark.schema.json](schemas/lsb-pairs-benchmark.schema.json) |
+| Calibrated-histogram DCT detector alongside PoV; both detectors individually visible | `covertlens.dct` (`dct-calibrated-histogram` v1.0.0, neighbor-calibrated histogram TV distance) in `benchmark_dct_calibrated`: 0.833 vs 0.715; both findings attached by `analyze_all_bytes` · [schemas/dct-calibrated-benchmark.schema.json](schemas/dct-calibrated-benchmark.schema.json) |
+| No regression on the existing frozen benchmark | Frozen score selection and calibration pinned by detector name to the originally calibrated PoV/metadata detectors; new detectors gate to 0 on the frozen suite's uncorrelated covers; `benchmark-matching` CLI demo |
+
 ## Development quickstart
 
 The library has zero runtime dependencies (Python ≥3.11, standard library only); the web service deps live in the `web` extra and `app/requirements.txt`. Every demo command accepts `--json` (full payload instead of the human summary) and `--out PATH` (also write the payload to a file). Quality gates (CL-50): `ruff check covertlens tests app scripts`, `ruff format --check covertlens tests app scripts`, `mypy covertlens`, `pytest -q`.

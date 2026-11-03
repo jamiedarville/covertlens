@@ -60,7 +60,10 @@ def test_analyze_all_bytes_attaches_geometric_for_png(geo_pair):
     assert validate_result(result) == []
     families = [f.family for f in result.findings]
     assert "geometric" in families
-    assert len(families) == len(set(families))  # at most one per family
+    # At most one finding per (family, detector): CL-61 added a second
+    # detector per pixel family, so family names may now repeat.
+    detectors = [(f.family, f.detector_name) for f in result.findings]
+    assert len(detectors) == len(set(detectors))
     geometric = next(f for f in result.findings if f.family == "geometric")
     assert validate_finding(geometric) == []
 

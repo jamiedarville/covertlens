@@ -17,8 +17,10 @@ score is evidence, not a decoded message or proof of collusion
 (C-02/C-09 analogue for this channel).
 
 `analyze_all_bytes` is the integrated pipeline: one CL-13 parse, then
-LSB (PNG), DCT (JPEG), metadata and geometric (PNG/JPEG, CL-52) findings
-attached to the single result, each family individually visible.
+LSB (PNG, PoV plus CL-61 sample-pair), DCT (JPEG, PoV plus CL-61
+calibrated histogram), metadata and geometric (PNG/JPEG, CL-52)
+findings attached to the single result, each detector individually
+visible.
 `analyze_and_decide` runs that result through the CL-17 ladder with
 a pinned threshold config.
 """
@@ -29,10 +31,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from .dct import detect_dct
+from .dct import detect_dct, detect_dct_calibrated
 from .fixtures import Fixture
 from .geometric import detect_geometric
-from .lsb import _roc_auc, _score_summary, _wilson, detect_lsb
+from .lsb import _roc_auc, _score_summary, _wilson, detect_lsb, detect_lsb_pairs
 from .metadata_fixtures import (
     ALLOWED_TASK_METADATA,
     PAYLOAD_KEYWORD,
@@ -201,7 +203,9 @@ def analyze_all_bytes(
     findings: list[Finding] = []
     for finding in (
         detect_lsb(result),
+        detect_lsb_pairs(result),
         detect_dct(result),
+        detect_dct_calibrated(result),
         detect_metadata(data, result),
         detect_geometric(data, result),
     ):

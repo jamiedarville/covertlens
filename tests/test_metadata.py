@@ -90,7 +90,13 @@ def test_all_families_individually_visible_on_one_result():
     _, encoded_jpeg = build_metadata_pair("jpeg", payload_bytes=64)
     result_j = analyze_all_bytes(encoded_jpeg.data)
     assert {f.family for f in result_j.findings} == {"jpeg_dct", "metadata"}
-    assert len(result_j.findings) == 2  # not blended into one score
+    # CL-61: both jpeg_dct detectors stay individually visible
+    # alongside metadata — never blended into one score.
+    assert len(result_j.findings) == 3
+    assert [f.detector_name for f in result_j.findings if f.family == "jpeg_dct"] == [
+        "dct-coefficient-pov-chisquare",
+        "dct-calibrated-histogram",
+    ]
 
 
 def test_all_three_families_run_through_pinned_thresholds():

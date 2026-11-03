@@ -45,6 +45,7 @@ _COMMAND_HELP: list[tuple[str, str]] = [
     ("benchmark-lsb", "threshold-free LSB benchmark (CL-14)"),
     ("dct-demo", "DCT scoring demo (CL-15)"),
     ("benchmark-dct", "paired DCT benchmark by band (CL-15)"),
+    ("benchmark-matching", "+/-1 matching detector comparison (CL-61)"),
     ("trace-demo", "trace join demo (CL-16)"),
     ("verdict-demo", "verdict ladder demo (CL-17)"),
     ("replay-demo", "delivered-vs-withheld replay (CL-21)"),
