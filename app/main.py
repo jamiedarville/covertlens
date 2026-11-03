@@ -16,6 +16,11 @@ Thin FastAPI layer over the library:
 - `GET /api/benchmarks/{name}` — cached precompute output.
 - `GET /api/comparison` — cached landing-page skyline pair (CL-48).
 - `GET /api/scorecard`, `GET /api/version`, `GET /api/health`.
+- `/api/review/*` — Reviewer page API (CL-59): demo roles
+  (`viewer`/`researcher`/`reviewer` via `X-Demo-Role`) mapped to
+  CL-11 principals; quarantined originals, reviewer-only candidate
+  decodes, CL-25 dispositions, sealed review-package download and
+  live audit-chain verification.
 - OpenAPI at `/docs`; the built React frontend is served
   statically at `/` (landing), `/analyze` (CL-48) and
   `/generate` (CL-51), with its hashed assets under `/assets/`.
@@ -391,9 +396,10 @@ def _gate() -> Any:
 
 
 def _reset_gate_for_tests() -> None:
-    global _gate_instance
+    global _gate_instance, _review_instance
     with _gate_lock:
         _gate_instance = None
+        _review_instance = None
 
 
 def _delivery_payload(record: Any) -> dict[str, Any]:
@@ -661,6 +667,221 @@ async def gate_event_stream(run_id: str, request: Request) -> StreamingResponse:
     )
 
 
+# -- Reviewer (CL-59) ---------------------------------------------------
+
+_review_instance: Any = None
+
+
+def _review_workspace() -> Any:
+    """Review workspace over the persistent gate store (CL-59)."""
+    global _review_instance
+    if _review_instance is not None:
+        return _review_instance
+    from covertlens.review import ReviewWorkspace
+
+    gate = _gate()
+    with _gate_lock:
+        if _review_instance is None:
+            GATE_STORE_DIR.mkdir(parents=True, exist_ok=True)
+            _review_instance = ReviewWorkspace(
+                gate.store, db_path=GATE_STORE_DIR / "review.sqlite3"
+            )
+        return _review_instance
+
+
+def _reset_review_for_tests() -> None:
+    global _review_instance
+    with _gate_lock:
+        _review_instance = None
+
+
+def _demo_principal(request: Request, dataset_id: str) -> Any:
+    from covertlens.review import demo_principal
+
+    role = (request.headers.get("x-demo-role") or "viewer").strip().lower()
+    return demo_principal(role, dataset_id), role
+
+
+def _review_error(exc: Exception) -> JSONResponse:
+    from covertlens.gate import UnknownDeliveryError
+
+    if isinstance(exc, UnknownDeliveryError) or isinstance(exc, KeyError):
+        return JSONResponse({"detail": "delivery_not_found"}, status_code=404)
+    if isinstance(exc, PermissionError):
+        return JSONResponse(
+            {"detail": "permission denied for demo role"}, status_code=403
+        )
+    if isinstance(exc, ValueError):
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    raise exc
+
+
+def _review_delivery_row(gate: Any, workspace: Any, record: Any) -> dict[str, Any]:
+    row = _delivery_payload(record)
+    decode_id = None
+    if record.state == "withheld":
+        decode_id = workspace.ensure_candidate_decode(record.run_id, record)
+    row["disposition"] = workspace.disposition(record.run_id, record.delivery_id)
+    row["has_candidate_decode"] = decode_id is not None
+    row["decode_id"] = decode_id
+    return row
+
+
+@app.get("/api/review/roles")
+def review_roles() -> dict[str, Any]:
+    from covertlens.review import role_capabilities
+
+    return {"roles": role_capabilities(), "header": "X-Demo-Role", "default": "viewer"}
+
+
+@app.get("/api/review/runs/{run_id}/queue")
+def review_queue(run_id: str, request: Request) -> JSONResponse:
+    try:
+        _principal, _role = _demo_principal(request, run_id)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    gate = _gate()
+    workspace = _review_workspace()
+    rows = [
+        _review_delivery_row(gate, workspace, record)
+        for record in gate.deliveries(run_id)
+    ]
+    return JSONResponse(
+        {
+            "run_id": run_id,
+            "deliveries": rows,
+            "quarantined": [r for r in rows if r["state"] == "withheld"],
+        }
+    )
+
+
+@app.get("/api/review/deliveries/{delivery_id}")
+def review_delivery_detail(delivery_id: str, request: Request) -> JSONResponse:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        record = gate.get_delivery(delivery_id)
+        _principal, _role = _demo_principal(request, record.run_id)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    from covertlens.geometric import analyze_geometric_bytes
+    from covertlens.metadata import analyze_all_bytes
+
+    data = gate.store.get_original(
+        record.artifact_version_id, actor_id="review-detail", purpose="analysis"
+    )
+    analysis = analyze_all_bytes(data, artifact_version_id=record.artifact_version_id)
+    geometric = analyze_geometric_bytes(data)
+    geometric.pop("candidate_decode", None)  # reviewer-only (CL-46/CL-59)
+    geometric.pop("finding", None)
+    segmentation = geometric.get("segmentation")
+    if isinstance(segmentation, dict):
+        segmentation.pop("decoded_message", None)
+    row = _review_delivery_row(gate, workspace, record)
+    return JSONResponse(
+        {
+            **row,
+            "analysis": analysis.to_dict(),
+            "geometric": geometric,
+        }
+    )
+
+
+@app.get("/api/review/deliveries/{delivery_id}/candidate-decode")
+def review_candidate_decode(delivery_id: str, request: Request) -> JSONResponse:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        record = gate.get_delivery(delivery_id)
+        principal, _role = _demo_principal(request, record.run_id)
+        decode_id = workspace.ensure_candidate_decode(record.run_id, record)
+        if decode_id is None:
+            return JSONResponse(
+                {"detail": "no candidate decode for this delivery"}, status_code=404
+            )
+        decode = workspace.read_candidate_decode(principal, record.run_id, decode_id)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    return JSONResponse(decode)
+
+
+@app.get("/api/review/deliveries/{delivery_id}/original")
+def review_original(delivery_id: str, request: Request) -> Response:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        record = gate.get_delivery(delivery_id)
+        principal, _role = _demo_principal(request, record.run_id)
+        data = workspace.read_original(
+            principal, record.run_id, record.artifact_version_id
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    media = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+    return Response(content=data, media_type=media)
+
+
+@app.post("/api/review/deliveries/{delivery_id}/disposition")
+async def review_disposition(delivery_id: str, request: Request) -> JSONResponse:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        body = json.loads((await request.body()) or b"{}")
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"detail": "invalid_json"}, status_code=400)
+    try:
+        record = gate.get_delivery(delivery_id)
+        principal, _role = _demo_principal(request, record.run_id)
+        review = workspace.apply_disposition(
+            principal,
+            record.run_id,
+            delivery_id,
+            disposition=str(body.get("disposition") or ""),
+            note=str(body.get("note") or ""),
+            demonstrated_basis=(
+                str(body["demonstrated_basis"])
+                if body.get("demonstrated_basis")
+                else None
+            ),
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    return JSONResponse({"delivery_id": delivery_id, **review})
+
+
+@app.get("/api/review/runs/{run_id}/export")
+def review_export(run_id: str, request: Request) -> Response:
+    gate = _gate()
+    workspace = _review_workspace()
+    try:
+        principal, _role = _demo_principal(request, run_id)
+        package = workspace.export_package(principal, gate, run_id)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        return _review_error(exc)
+    return Response(
+        content=json.dumps(package, indent=2, sort_keys=True),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="review-{run_id}.json"'},
+    )
+
+
+@app.get("/api/review/audit")
+def review_audit(run_id: str | None = None) -> dict[str, Any]:
+    return _review_workspace().audit_payload(run_id)
+
+
 @app.get("/api/benchmarks/{name}")
 def benchmark(name: str) -> Response:
     from scripts.precompute import REPORT_COMMANDS
@@ -731,6 +952,15 @@ def analyze_page() -> Response:
 @app.get("/generate")
 def generate_page() -> Response:
     """SPA route for the Generate / red-team page (CL-51)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/review")
+def review_page() -> Response:
+    """SPA route for the Reviewer page (CL-59)."""
     response = _index_response()
     if response is not None:
         return response

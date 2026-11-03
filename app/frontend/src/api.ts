@@ -1,9 +1,14 @@
 import type {
   AnalyzePayload,
+  CandidateDecode,
   Comparison,
   FixtureEntry,
   GateDelivery,
   GateRunDetail,
+  ReviewAudit,
+  ReviewDetail,
+  ReviewQueue,
+  ReviewRole,
 } from "./types";
 
 // Same-origin API client. The Analyze overlay renders from the
@@ -178,6 +183,124 @@ export async function recordGateVerdict(
     throw new ApiError(response.status, String(body.detail ?? "Verdict failed."));
   }
   return body as unknown as GateDelivery;
+}
+
+// -- Reviewer (CL-59) ---------------------------------------------------
+
+function roleHeaders(role: string): Record<string, string> {
+  return { "X-Demo-Role": role };
+}
+
+export async function fetchReviewRoles(): Promise<ReviewRole[]> {
+  const response = await fetch("/api/review/roles");
+  if (!response.ok) throw new ApiError(response.status, "Could not load demo roles.");
+  const body = (await readJson(response)) as Record<string, unknown>;
+  return body.roles as ReviewRole[];
+}
+
+export async function fetchReviewQueue(
+  runId: string,
+  role: string,
+): Promise<ReviewQueue> {
+  const response = await fetch(
+    `/api/review/runs/${encodeURIComponent(runId)}/queue`,
+    { headers: roleHeaders(role) },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Could not load the queue."));
+  }
+  return body as unknown as ReviewQueue;
+}
+
+export async function fetchReviewDetail(
+  deliveryId: string,
+  role: string,
+): Promise<ReviewDetail> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}`,
+    { headers: roleHeaders(role) },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Could not load the delivery."));
+  }
+  return body as unknown as ReviewDetail;
+}
+
+export async function fetchCandidateDecode(
+  deliveryId: string,
+  role: string,
+): Promise<CandidateDecode> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}/candidate-decode`,
+    { headers: roleHeaders(role) },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Decode unavailable."));
+  }
+  return body as unknown as CandidateDecode;
+}
+
+export async function fetchReviewOriginal(
+  deliveryId: string,
+  role: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}/original`,
+    { headers: roleHeaders(role) },
+  );
+  if (!response.ok) {
+    const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError(response.status, String(body.detail ?? "Original unavailable."));
+  }
+  return response.blob();
+}
+
+export async function postDisposition(
+  deliveryId: string,
+  role: string,
+  payload: { disposition: string; note: string; demonstrated_basis?: string },
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `/api/review/deliveries/${encodeURIComponent(deliveryId)}/disposition`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...roleHeaders(role) },
+      body: JSON.stringify(payload),
+    },
+  );
+  const body = (await readJson(response)) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(response.status, String(body.detail ?? "Disposition failed."));
+  }
+  return body;
+}
+
+export async function downloadReviewPackage(
+  runId: string,
+  role: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `/api/review/runs/${encodeURIComponent(runId)}/export`,
+    { headers: roleHeaders(role) },
+  );
+  if (!response.ok) {
+    const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError(response.status, String(body.detail ?? "Export unavailable."));
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob: await response.blob(), filename: match?.[1] ?? `review-${runId}.json` };
+}
+
+export async function fetchReviewAudit(runId: string): Promise<ReviewAudit> {
+  const response = await fetch(
+    `/api/review/audit?run_id=${encodeURIComponent(runId)}`,
+  );
+  if (!response.ok) throw new ApiError(response.status, "Could not load the audit chain.");
+  return (await readJson(response)) as unknown as ReviewAudit;
 }
 
 export function recipientImageUrl(deliveryId: string): string {

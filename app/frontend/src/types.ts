@@ -200,6 +200,46 @@ export interface GateEvent {
   recipient_id: string | null;
 }
 
+export interface ReviewRole {
+  role: string;
+  actor_id: string;
+  label: string;
+  permissions: string[];
+}
+
+export interface ReviewDelivery extends GateDelivery {
+  disposition: string;
+  has_candidate_decode: boolean;
+  decode_id: string | null;
+}
+
+export interface ReviewQueue {
+  run_id: string;
+  deliveries: ReviewDelivery[];
+  quarantined: ReviewDelivery[];
+}
+
+export interface ReviewDetail extends ReviewDelivery {
+  analysis: AnalysisBody | null;
+  geometric: Geometric | null;
+}
+
+export interface CandidateDecode {
+  decode_id: string;
+  dataset_id: string;
+  artifact_version_id: string | null;
+  code: string | null;
+  text: string;
+}
+
+export interface ReviewAudit {
+  chain_valid: boolean;
+  entry_count: number;
+  denied: number;
+  head_hash: string;
+  entries: Record<string, unknown>[];
+}
+
 export interface GateRunDetail {
   run_id: string;
   deliveries: GateDelivery[];
