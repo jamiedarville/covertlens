@@ -4,6 +4,7 @@ import Analyze from "./pages/Analyze";
 import Generate from "./pages/Generate";
 import LiveGate from "./pages/LiveGate";
 import Review from "./pages/Review";
+import Trace from "./pages/Trace";
 import Benchmarks from "./pages/Benchmarks";
 import Scorecard from "./pages/Scorecard";
 import { fetchVersionLine } from "./api";
@@ -35,7 +36,9 @@ export default function App() {
           ? "gate"
           : path === "/review"
             ? "review"
-            : path === "/benchmarks"
+            : path === "/trace"
+              ? "trace"
+              : path === "/benchmarks"
             ? "benchmarks"
             : path === "/scorecard"
               ? "scorecard"
@@ -51,7 +54,9 @@ export default function App() {
             ? "Live Gate — CovertLens"
             : page === "review"
               ? "Reviewer — CovertLens"
-              : page === "benchmarks"
+              : page === "trace"
+                ? "Trace explorer — CovertLens"
+                : page === "benchmarks"
               ? "Benchmarks — CovertLens"
               : page === "scorecard"
                 ? "Scorecard — CovertLens"
@@ -112,6 +117,13 @@ export default function App() {
             Reviewer
           </a>
           <a
+            href="/trace"
+            onClick={go("/trace")}
+            aria-current={page === "trace" ? "page" : undefined}
+          >
+            Trace
+          </a>
+          <a
             href="/benchmarks"
             onClick={go("/benchmarks")}
             aria-current={page === "benchmarks" ? "page" : undefined}
@@ -137,6 +149,8 @@ export default function App() {
           <LiveGate />
         ) : page === "review" ? (
           <Review />
+        ) : page === "trace" ? (
+          <Trace />
         ) : page === "benchmarks" ? (
           <Benchmarks />
         ) : page === "scorecard" ? (
