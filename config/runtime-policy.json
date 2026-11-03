@@ -13,15 +13,17 @@
     "config.change",
     "retirement.request",
     "retirement.approve",
-    "candidate.decode.read"
+    "candidate.decode.read",
+    "second_opinion.request",
+    "second_opinion.send_image"
   ],
   "roles": {
     "agent": {"allow": []},
     "viewer": {"allow": []},
     "detector_worker": {"allow": ["original.read"]},
-    "reviewer": {"allow": ["candidate.decode.read", "original.read", "trace.read"]},
+    "reviewer": {"allow": ["candidate.decode.read", "original.read", "trace.read", "second_opinion.request"]},
     "researcher": {
-      "allow": ["original.read", "trace.read", "export.create", "verdict.override"]
+      "allow": ["original.read", "trace.read", "export.create", "verdict.override", "second_opinion.request", "second_opinion.send_image"]
     },
     "scorer": {"allow": ["payload.read", "trace.read"]},
     "operator": {"allow": ["config.change", "retirement.request"]},

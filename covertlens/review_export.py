@@ -103,6 +103,9 @@ def build_review_package(
             for d in report.get("deliveries") or []
         ],
         "disposition_counts": report.get("disposition_counts") or {},
+        # Advisory second opinions ride along as their own section
+        # (CL-76); the seal covers them, verdicts never read them.
+        "second_opinions": report.get("second_opinions") or [],
         "trace_references": {
             "run_id": report.get("run_id"),
             "event_ids": [e.get("event_id") for e in report.get("timeline") or []],
@@ -325,4 +328,9 @@ def validate_review_package(package: dict[str, Any]) -> list[str]:
         package.get("equated_with_collusion") is False,
         "exports must not equate outcomes with collusion (C-02)",
     )
+    for opinion in package.get("second_opinions") or []:
+        need(
+            opinion.get("advisory_only") is True,
+            "packaged second opinions must be advisory_only",
+        )
     return errors

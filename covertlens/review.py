@@ -97,6 +97,7 @@ class ReviewWorkspace:
         self._audit = AuditLog()
         self._gateway = EvidenceGateway(store, self._audit, policy=self._policy)
         self._reviews: dict[tuple[str, str], dict[str, Any]] = {}
+        self._opinions: dict[str, dict[str, Any]] = {}
         self._decode_versions: set[str] = set()
         self._synced = 0
         self._lock = threading.RLock()
@@ -143,6 +144,12 @@ class ReviewWorkspace:
                 artifact_version_id TEXT,
                 code TEXT,
                 text TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS review_opinions (
+                opinion_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                delivery_id TEXT,
+                record_json TEXT NOT NULL
             );
             """
         )
@@ -196,6 +203,10 @@ class ReviewWorkspace:
             }
             if row[2]:
                 self._decode_versions.add(row[2])
+        for row in self._db.execute(
+            "SELECT opinion_id, record_json FROM review_opinions"
+        ).fetchall():
+            self._opinions[row[0]] = json.loads(row[1])
 
     def _sync_audit(self) -> None:
         entries = self._audit.entries
@@ -403,6 +414,154 @@ class ReviewWorkspace:
             self._sync_audit()
             return dict(review)
 
+    # -- second opinions (CL-74..CL-77, advisory only) --------------------
+
+    def record_second_opinion(self, record: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            self._opinions[record["opinion_id"]] = record
+            if self._db is not None:
+                self._db.execute(
+                    "INSERT OR REPLACE INTO review_opinions"
+                    " (opinion_id, run_id, delivery_id, record_json)"
+                    " VALUES (?, ?, ?, ?)",
+                    (
+                        record["opinion_id"],
+                        record["run_id"],
+                        record.get("delivery_id"),
+                        json.dumps(record, sort_keys=True, default=str),
+                    ),
+                )
+            return dict(record)
+
+    def second_opinions(
+        self, run_id: str, delivery_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = [
+                dict(r)
+                for r in self._opinions.values()
+                if r.get("run_id") == run_id
+                and (delivery_id is None or r.get("delivery_id") == delivery_id)
+            ]
+            return sorted(rows, key=lambda r: str(r.get("created_at")))
+
+    def request_second_opinion(
+        self,
+        principal: Principal,
+        gate: InterceptionGate,
+        run_id: str,
+        delivery_id: str,
+        *,
+        provider: Any = None,
+        config: Any = None,
+        tracker: Any = None,
+        include_image: bool = False,
+    ) -> dict[str, Any]:
+        """Run one advisory opinion for a delivery (CL-77 path).
+
+        Needs `second_opinion.request`. Images leave only when the
+        caller asked, the manifest opted the run in, and the
+        gateway's `second_opinion.send_image` check passes; every
+        allowed send is audited. The verdict and disposition are
+        never touched.
+        """
+        from ._validation import canonical_hash
+        from .manifest import load_manifest, second_opinion_allows_images
+        from .second_opinion import (
+            SecondOpinionConfig,
+            provider_from_config,
+        )
+        from .second_opinion import (
+            request_second_opinion as _request,
+        )
+
+        with self._lock:
+            try:
+                if not can(self._policy, principal, run_id, "second_opinion.request"):
+                    self._audit.append(
+                        actor_id=principal.actor_id,
+                        action="second_opinion.request",
+                        dataset_id=run_id,
+                        outcome="denied",
+                        detail={"delivery_id": delivery_id},
+                    )
+                    raise PermissionError(
+                        f"{principal.actor_id} lacks second_opinion.request on {run_id}"
+                    )
+                record_row = gate.get_delivery(delivery_id)
+                report = self.build_report(gate, run_id)
+                pin = self.build_pin_for(gate, run_id)
+                from .review_export import build_review_package
+
+                package = build_review_package(
+                    report, pin, dataset_id=run_id, policy=self._policy
+                )
+                active_config = config or SecondOpinionConfig.from_env()
+                active_provider = (
+                    provider
+                    if provider is not None
+                    else provider_from_config(active_config)
+                )
+                # Candidate text, if any, is fenced as untrusted data.
+                candidate_texts: dict[str, str] = {}
+                decode_id = self.ensure_candidate_decode(run_id, record_row)
+                if decode_id is not None:
+                    decode = self._gateway._candidate_decodes.get(decode_id)  # noqa: SLF001
+                    if decode is not None:
+                        candidate_texts[delivery_id] = str(decode["text"])
+                image_bytes: bytes | None = None
+                image_authorized = False
+                opt_in = second_opinion_allows_images(load_manifest())
+                if include_image and opt_in:
+                    data = self._store.get_original(
+                        record_row.artifact_version_id,
+                        actor_id="second-opinion",
+                        purpose="analysis",
+                    )
+                    image_hash = canonical_hash(
+                        {"image_len": len(data), "run_id": run_id}
+                    )
+                    try:
+                        self._gateway.authorize_second_opinion_image(
+                            principal,
+                            run_id,
+                            record_row.artifact_version_id,
+                            image_hash,
+                        )
+                        image_authorized = True
+                        image_bytes = data
+                    except PermissionError:
+                        image_authorized = False
+                record = _request(
+                    active_provider,
+                    active_config,
+                    report,
+                    package,
+                    run_id=run_id,
+                    delivery_id=delivery_id,
+                    candidate_texts=candidate_texts or None,
+                    tracker=tracker,
+                    image_bytes=image_bytes,
+                    image_opt_in=opt_in,
+                    image_authorized=image_authorized,
+                )
+                self._audit.append(
+                    actor_id=principal.actor_id,
+                    action="second_opinion.request",
+                    dataset_id=run_id,
+                    outcome="recorded",
+                    detail={
+                        "delivery_id": delivery_id,
+                        "opinion_id": record["opinion_id"],
+                        "status": record["status"],
+                        "image_sent": record["image_sent"],
+                    },
+                )
+                stored = self.record_second_opinion(record)
+                return stored
+            finally:
+                self._sync_audit()
+
     def build_report(self, gate: InterceptionGate, run_id: str) -> dict[str, Any]:
         """Current run report with stored dispositions applied."""
         with self._lock:
@@ -432,6 +591,7 @@ class ReviewWorkspace:
                     note=str(review["note"]),
                     demonstrated_basis=review["demonstrated_basis"],
                 )
+            report["second_opinions"] = self.second_opinions(run_id)
             return report
 
     def build_pin_for(self, gate: InterceptionGate, run_id: str) -> dict[str, Any]:

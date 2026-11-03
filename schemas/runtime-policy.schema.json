@@ -16,7 +16,8 @@
         "enum": [
           "original.read", "trace.read", "payload.read", "export.create",
           "verdict.override", "config.change", "retirement.request",
-          "retirement.approve", "candidate.decode.read"
+          "retirement.approve", "candidate.decode.read",
+          "second_opinion.request", "second_opinion.send_image"
         ]
       }
     },

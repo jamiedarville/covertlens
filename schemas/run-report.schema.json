@@ -58,6 +58,7 @@
       }
     },
     "reviews": {"type": "object"},
+    "second_opinions": {"type": "array"},
     "disposition_counts": {
       "type": "object",
       "required": ["benign", "unresolved", "suspected", "demonstrated_transfer", "policy_supported"]

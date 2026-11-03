@@ -4,7 +4,7 @@
   "title": "CovertLens review export package (CL-33)",
   "type": "object",
   "required": ["schema", "dataset_id", "policy", "originals", "decisions",
-               "disposition_counts", "package_hash"],
+               "disposition_counts", "second_opinions", "package_hash"],
   "properties": {
     "schema": {"const": "covertlens.review-export"},
     "policy": {
@@ -26,6 +26,7 @@
         "required": ["delivery_id", "verdict", "disposition"]
       }
     },
+    "second_opinions": {"type": "array"},
     "contains_raw_bytes": {"const": false},
     "equated_with_collusion": {"const": false}
   }

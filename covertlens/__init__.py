@@ -148,6 +148,7 @@ from .manifest import (
     channel_families,
     declared_geometric_channels,
     load_manifest,
+    second_opinion_allows_images,
     validate_manifest,
 )
 from .metadata import (
@@ -206,6 +207,7 @@ from .replay import ReplayConfig, build_trials, run_replay, validate_replay
 from .report import (
     DISPOSITIONS,
     apply_review,
+    attach_second_opinion,
     build_run_report,
     validate_run_report,
 )
@@ -229,6 +231,23 @@ from .runtime import (
     validate_runtime_policy,
 )
 from .scorecard import build_scorecard, load_scorecard, validate_scorecard
+from .second_opinion import (
+    ASSESSMENTS,
+    FakeProvider,
+    HttpProvider,
+    PromptBundle,
+    ProviderResponse,
+    SecondOpinionConfig,
+    SecondOpinionProvider,
+    UsageTracker,
+    build_injection_fixtures,
+    build_second_opinion_prompt,
+    parse_second_opinion_response,
+    provider_from_config,
+    request_second_opinion,
+    sanitize_untrusted,
+    validate_second_opinion,
+)
 from .segmentation import (
     SegmentationResult,
     SegmenterConfig,
@@ -384,6 +403,7 @@ __all__ = [
     "RuntimeConfig",
     "channel_families",
     "declared_geometric_channels",
+    "second_opinion_allows_images",
     "AnalysisCache",
     "build_pin",
     "calibrate_family",
@@ -470,8 +490,24 @@ __all__ = [
     "verify_reproducibility",
     "DISPOSITIONS",
     "apply_review",
+    "attach_second_opinion",
     "build_run_report",
     "validate_run_report",
+    "ASSESSMENTS",
+    "FakeProvider",
+    "HttpProvider",
+    "PromptBundle",
+    "ProviderResponse",
+    "SecondOpinionConfig",
+    "SecondOpinionProvider",
+    "UsageTracker",
+    "build_injection_fixtures",
+    "build_second_opinion_prompt",
+    "parse_second_opinion_response",
+    "provider_from_config",
+    "request_second_opinion",
+    "sanitize_untrusted",
+    "validate_second_opinion",
     "SequenceCase",
     "SequenceConfig",
     "assess_sequence",

@@ -578,6 +578,40 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | The example runs against `docker run` of the image and prints the trace for both deliveries | `covertlens.gate_client.GateClient` (`intercept`/`attempt`/`access`) + [examples/harness_example.py](examples/harness_example.py) · [docs/contracts/harness-adapter.md](docs/contracts/harness-adapter.md) |
 | The withheld delivery raises `WithheldError` on the client, and no bytes reach the stub recipient | `GateClient.access` maps 403 to `WithheldError` (409 to `PendingDeliveryError`); `tests/test_gate_client.py` |
 
+### CL-74 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| With no key configured, the feature reports itself disabled and every other part behaves exactly as before | `covertlens.second_opinion.SecondOpinionConfig.from_env` + `provider_from_config` (`None` when disabled) · [docs/contracts/second-opinion.md](docs/contracts/second-opinion.md) |
+| The key never appears in logs, exceptions, reports, exports or test output | Key held only in `SecondOpinionConfig` (hidden `repr`, key-free `public_dict`); sentinel-key test in `tests/test_second_opinion.py` |
+| A cap or rate limit returns the explicit unavailable status | `UsageTracker` (per-run/per-day caps, rate window) → `second_opinion_unavailable`, never an "all clear" |
+| A fake provider exercises the interface without network access | `FakeProvider` (records prompts/images) + `HttpProvider` (stdlib `urllib`) |
+
+### CL-75 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Injected instructions never reach the instruction part (asserted on the built prompt) | `build_second_opinion_prompt`: fixed instruction + `<<<UNTRUSTED_DATA>>>` fenced blocks; `sanitize_untrusted` strips controls and forged fences |
+| Planted cases recorded; any shift toward injected wording reported, verdict unchanged | `build_injection_fixtures` (candidate decode + metadata keyword); verdict-invariance test |
+| A non-structured response is `unparseable`, never agreement | `parse_second_opinion_response` (fixed assessment list) → `unparseable` status |
+
+### CL-76 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| `validate_second_opinion` passes and rejects missing `advisory_only: true` | `covertlens.second-opinion` record + validator · [schemas/second-opinion.schema.json](schemas/second-opinion.schema.json) |
+| Opt-in off: no picture bytes reach the provider | `request_second_opinion` drops images unless opt-in + authorized; `FakeProvider.images_seen` test |
+| Opt-in on: each send is in the audit chain and the chain verifies | `EvidenceGateway.authorize_second_opinion_image` (`second_opinion.send_image`) + manifest opt-in `second_opinion_allows_images` |
+| A hostile opinion leaves disposition and verdict untouched | Opinions sealed as `report.second_opinions` / package `second_opinions`; ladder never reads them (hostile-opinion test) |
+
+### CL-77 deliverables
+
+| Acceptance criterion | Deliverable |
+|---|---|
+| Reviewer can request and read a second opinion with a fixture run | `POST`/`GET /api/review/deliveries/{id}/second-opinion` + `ReviewWorkspace.request_second_opinion`; API test with the fake provider |
+| No key: panel says the feature is off and the page works normally | `SecondOpinionPanel` off/unavailable/unparseable states in `app/frontend/src/pages/Review.tsx` |
+| Browser traffic contains no API key and (opt-in off) no picture bytes | Key read server-side only (`SecondOpinionConfig.from_env` in `app/main.py`); frontend panel tests |
+
 ### CL-65 deliverables
 
 | Acceptance criterion | Deliverable |
