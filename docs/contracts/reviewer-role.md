@@ -17,7 +17,27 @@ which CL-11 principal the API acts as, and is labelled
 The role travels in the `X-Demo-Role` header (default `viewer`;
 unknown roles are rejected with 400) and is scoped to one
 run-as-dataset, so permission on one run says nothing about
-another. `covertlens.review.demo_principal` is the mapping;
+another.
+
+The header is honoured only when `COVERTLENS_DEMO_ROLES=on`
+(CL-78). The Docker image and `docker-compose.yml` turn it on
+because they are the demo; anywhere else it defaults to off, the
+header is ignored, and every request is a `viewer`.
+`GET /api/review/roles` reports the setting as `enabled`, and the
+role picker on the Live Gate, Trace and Reviewer pages shows a
+warning when it is off. Real roles replace this in CL-67.
+
+### Permission checks outside the review workspace (CL-78)
+
+| Endpoint | Needs | Denied |
+|---|---|---|
+| `GET /api/gate/deliveries/{id}/reviewer-image` | `original.read` | 403; gate records `reviewer_denied` with the actor |
+| `POST /api/gate/deliveries/{id}/verdict` | `verdict.override` | 403 (`needs: verdict.override`) |
+| `GET /api/review/audit` | `trace.read` | 403 (`needs: trace.read`) |
+| `GET /api/trace/runs/{run_id}` | `trace.read` | 403 (`needs: trace.read`) |
+
+So a verdict needs `researcher`; reviewer image, audit and trace
+accept `researcher` or `reviewer`; `viewer` gets none of them. `covertlens.review.demo_principal` is the mapping;
 `viewer` was added to `config/runtime-policy.json` with an empty
 allow list, leaving the deny-by-default policy and the
 scorer-only `payload.read` rule unchanged.
@@ -51,7 +71,7 @@ never the text (CL-46).
 | `GET /api/review/deliveries/{id}/original` | Original bytes via the gateway (`original.read`): researcher/reviewer served, viewer → 403 (audited). |
 | `POST /api/review/deliveries/{id}/disposition` | One of the five CL-25 dispositions. Researcher/reviewer only (viewer → 403, audited); `demonstrated_transfer` requires `demonstrated_basis` (400 without it); unknown disposition → 400. |
 | `GET /api/review/runs/{run_id}/export` | Sealed review package download (`create_review_export`, attachment). Researcher only — reviewer/viewer → 403, audited. |
-| `GET /api/review/audit?run_id=` | Live audit payload: entries for the run, denied count, head hash, and `chain_valid` from `AuditLog.verify_chain()`. |
+| `GET /api/review/audit?run_id=` | Live audit payload: entries for the run, denied count, head hash, and `chain_valid` from `AuditLog.verify_chain()`. Needs `trace.read` (CL-78). |
 | `GET /review` | SPA shell for the Reviewer page. |
 
 ## Reviewer page (`/review`)

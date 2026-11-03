@@ -82,6 +82,32 @@ is exercised by `python -m covertlens handoff-demo`
   config/policy versions, audit head), then deletes. There is no
   other deletion path.
 
+### Web service and CI (CL-78)
+
+- **Demo roles are not authentication.** `X-Demo-Role` is honoured
+  only with `COVERTLENS_DEMO_ROLES=on`, which the Docker image and
+  `docker-compose.yml` set because they are the demo. For any
+  deployment beyond a demo, run with `COVERTLENS_DEMO_ROLES=off`:
+  every request is then a `viewer`, and quarantined originals,
+  audit, trace and gate verdicts are closed until real roles land
+  (CL-67).
+- **Behind a reverse proxy**, state-changing `/api` requests must
+  carry an `Origin` that matches `Host` or `X-Forwarded-Host`, or
+  is listed in `COVERTLENS_ALLOWED_ORIGINS` (comma separated).
+- **Fork pull requests and the self-hosted runner.** The fork guard
+  in `.github/workflows/test.yml` is in the PR's own copy of the
+  workflow, so a fork can edit it. The control that holds is the
+  repository setting *Settings → Actions → General → Fork pull
+  request workflows from outside collaborators → Require approval
+  for all outside collaborators*. Check it with
+  `gh api repos/jamiedarville/covertlens/actions/permissions/fork-pr-contributor-approval`
+  (expect `all_external_contributors`); set it with the same path
+  and `-X PUT -f approval_policy=all_external_contributors`. Never
+  approve a fork PR's workflow run without reading its workflow
+  diff first. Runner groups are an organization feature; while the
+  repository is owned by a personal account, keep self-hosted
+  runners registered to this repository only.
+
 ## 6. Handoff
 
 **Harness engineers:** integrate at the gate (`InterceptionGate`)

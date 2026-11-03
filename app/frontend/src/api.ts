@@ -2,6 +2,7 @@ import type {
   AnalyzePayload,
   CandidateDecode,
   Comparison,
+  DemoRoles,
   FixtureEntry,
   GateDelivery,
   GateRunDetail,
@@ -11,6 +12,7 @@ import type {
   ReviewRole,
   TraceView,
 } from "./types";
+import { roleHeaders } from "./demoRole";
 
 // Same-origin API client. The Analyze overlay renders from the
 // single POST /api/analyze response; the only other reads are the
@@ -170,12 +172,13 @@ export async function analyzeGateDelivery(
 export async function recordGateVerdict(
   deliveryId: string,
   verdict: string,
+  role: string,
 ): Promise<GateDelivery> {
   const response = await fetch(
     `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/verdict`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...roleHeaders(role) },
       body: JSON.stringify({ verdict }),
     },
   );
@@ -188,9 +191,10 @@ export async function recordGateVerdict(
 
 // -- Trace explorer (CL-60) ----------------------------------------------
 
-export async function fetchTraceRun(runId: string): Promise<TraceView> {
+export async function fetchTraceRun(runId: string, role: string): Promise<TraceView> {
   const response = await fetch(
     `/api/trace/runs/${encodeURIComponent(runId)}`,
+    { headers: roleHeaders(role) },
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
@@ -201,15 +205,11 @@ export async function fetchTraceRun(runId: string): Promise<TraceView> {
 
 // -- Reviewer (CL-59) ---------------------------------------------------
 
-function roleHeaders(role: string): Record<string, string> {
-  return { "X-Demo-Role": role };
-}
-
-export async function fetchReviewRoles(): Promise<ReviewRole[]> {
+export async function fetchDemoRoles(): Promise<DemoRoles> {
   const response = await fetch("/api/review/roles");
   if (!response.ok) throw new ApiError(response.status, "Could not load demo roles.");
   const body = (await readJson(response)) as Record<string, unknown>;
-  return body.roles as ReviewRole[];
+  return { roles: body.roles as ReviewRole[], enabled: body.enabled !== false };
 }
 
 export async function fetchReviewQueue(
@@ -309,9 +309,10 @@ export async function downloadReviewPackage(
   return { blob: await response.blob(), filename: match?.[1] ?? `review-${runId}.json` };
 }
 
-export async function fetchReviewAudit(runId: string): Promise<ReviewAudit> {
+export async function fetchReviewAudit(runId: string, role: string): Promise<ReviewAudit> {
   const response = await fetch(
     `/api/review/audit?run_id=${encodeURIComponent(runId)}`,
+    { headers: roleHeaders(role) },
   );
   if (!response.ok) throw new ApiError(response.status, "Could not load the audit chain.");
   return (await readJson(response)) as unknown as ReviewAudit;
@@ -321,8 +322,18 @@ export function recipientImageUrl(deliveryId: string): string {
   return `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/recipient-image`;
 }
 
-export function reviewerImageUrl(deliveryId: string): string {
-  return `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/reviewer-image?actor_id=researcher-1`;
+// Reviewer evidence view (R-08). The server picks the actor from the
+// demo role; a viewer is denied and the attempt is audited (CL-78).
+export async function fetchReviewerImage(deliveryId: string, role: string): Promise<Blob> {
+  const response = await fetch(
+    `/api/gate/deliveries/${encodeURIComponent(deliveryId)}/reviewer-image`,
+    { headers: roleHeaders(role) },
+  );
+  if (!response.ok) {
+    const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError(response.status, String(body.detail ?? "Original unavailable."));
+  }
+  return response.blob();
 }
 
 export async function fetchGeneratedFile(imageUrl: string, name: string): Promise<File> {

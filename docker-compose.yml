@@ -9,6 +9,8 @@ services:
       - "8000:8000"
     environment:
       COVERTLENS_WORKERS: "4"
+      # Demo only: trusts X-Demo-Role from any client (CL-78).
+      COVERTLENS_DEMO_ROLES: "on"
     volumes:
       - covertlens-data:/data
 

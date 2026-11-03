@@ -53,6 +53,15 @@ run it with the same ports and volume. The landing page shows a
 precomputed clean-vs-encoded skyline comparison; **Try your own**
 opens the Analyze page with the geometric overlay.
 
+**Demo roles are not authentication.** The Live Gate, Trace and
+Reviewer pages act as a demo role (`viewer`, `researcher`,
+`reviewer`) sent in the `X-Demo-Role` header, and any client can
+send any role. The Docker image sets `COVERTLENS_DEMO_ROLES=on`
+because it is a demo; do not expose it beyond one. With the
+setting off (the default when running `uvicorn app.main:app`
+directly), every request is a `viewer`: quarantined originals,
+audit, trace and gate verdicts are closed. Real roles are CL-67.
+
 ## Known limitations
 
 Release decision: `release_with_limitations`
@@ -423,7 +432,7 @@ criterion to code, contract doc, schema, and tests. History in
 | Acceptance criterion | Deliverable |
 |---|---|
 | Runnable web service with the required endpoints | `app/main.py` (FastAPI): `POST /api/analyze`, `GET /api/fixtures`, `GET /api/fixtures/{digest}.png`, `GET /api/benchmarks/{name}` (cached), `GET /api/scorecard`, `GET /api/version`, `GET /api/health`, OpenAPI at `/docs`; reviewer-only fields stripped from responses |
-| Analysis is bounded | ProcessPoolExecutor (`COVERTLENS_WORKERS`, default 4) with a wall-clock deadline → `timeout` status; pixel limit → explicit `oversized` status; upload size limited before read (413); per-IP rate limit (429); CSP + nosniff headers |
+| Analysis is bounded | ProcessPoolExecutor (`COVERTLENS_WORKERS`, default 4) with a wall-clock deadline → `timeout` status; pixel limit → explicit `oversized` status; upload size limited before read (413); per-IP rate limit (429); CSP (`frame-ancestors 'none'`), `X-Frame-Options`, `Referrer-Policy`, nosniff; JSON-only bodies and cross-site blocking on state-changing `/api` requests (CL-78) |
 | Benchmarks/reports precomputed once, keyed by version + git SHA | `scripts/precompute.py` writes `/data/cache/*.json`; the service runs it in a background thread at first start so `/api/health` answers immediately |
 | One-command image | Multi-stage `Dockerfile` (node frontend build → `python:3.12-slim`, pinned digests, non-root `appuser`, `VOLUME /data`, `HEALTHCHECK`) and `docker-compose.yml` with a named volume; a placeholder static frontend ships until CL-48 replaces it with the React app |
 | CI publishes the image | `.github/workflows/image.yml` on version tags: library tests inside the image, health + analyze smoke, push to `ghcr.io/jamiedarville/covertlens:<tag>` |

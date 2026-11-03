@@ -3,11 +3,14 @@
 // parse/next-action linkage, with an explicit reason wherever a
 // link is missing. Actions list candidate input artifacts; the
 // view states causation_claimed: false and words every link as a
-// candidate, never as a cause.
+// candidate, never as a cause. Reading a trace needs a demo role
+// with trace.read (researcher or reviewer, CL-78).
 
 import { useState } from "react";
 import type { TraceView } from "../types";
 import { ApiError, fetchTraceRun } from "../api";
+import { DemoRoleSelect } from "../components/DemoRoleSelect";
+import { useDemoRole } from "../demoRole";
 
 export default function Trace() {
   const [runId, setRunId] = useState("");
@@ -15,6 +18,7 @@ export default function Trace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusLine, setStatusLine] = useState("");
+  const [role, setRole] = useDemoRole();
 
   const onLoad = async () => {
     if (!runId.trim()) {
@@ -24,7 +28,7 @@ export default function Trace() {
     setBusy(true);
     setError(null);
     try {
-      const next = await fetchTraceRun(runId.trim());
+      const next = await fetchTraceRun(runId.trim(), role);
       setView(next);
       setStatusLine(
         next.deliveries.length === 0
@@ -32,7 +36,13 @@ export default function Trace() {
           : `${next.deliveries.length} deliver${next.deliveries.length === 1 ? "y" : "ies"} joined for run ${next.run_id}.`,
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the trace.");
+      setError(
+        err instanceof ApiError && err.status === 403
+          ? `Reading a trace needs the researcher or reviewer demo role (acting as ${role}).`
+          : err instanceof ApiError
+            ? err.message
+            : "Could not load the trace.",
+      );
     } finally {
       setBusy(false);
     }
@@ -68,6 +78,12 @@ export default function Trace() {
             />
           </label>
         </div>
+        <DemoRoleSelect
+          role={role}
+          onChange={setRole}
+          disabled={busy}
+          hint="Reading a trace needs researcher or reviewer."
+        />
         <p>
           <button type="button" className="button button-primary" onClick={onLoad} disabled={busy}>
             Load trace

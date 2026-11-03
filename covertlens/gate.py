@@ -161,7 +161,9 @@ class InterceptionGate:
                 delivery_id TEXT NOT NULL,
                 via_route TEXT,
                 outcome TEXT NOT NULL,
-                delivery_state TEXT
+                delivery_state TEXT,
+                actor_id TEXT,
+                authorized INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_gate_attempts_delivery
                 ON gate_access_attempts(delivery_id);
@@ -210,6 +212,16 @@ class InterceptionGate:
             );
             """
         )
+        # Stores created before CL-78 lack the R-08 actor columns.
+        columns = {
+            row[1]
+            for row in self._db.execute("PRAGMA table_info(gate_access_attempts)")
+        }
+        for name, kind in (("actor_id", "TEXT"), ("authorized", "INTEGER")):
+            if name not in columns:
+                self._db.execute(
+                    f"ALTER TABLE gate_access_attempts ADD COLUMN {name} {kind}"
+                )
 
     def _load_state(self) -> None:
         if self._db is None:
@@ -243,10 +255,12 @@ class InterceptionGate:
                 "via_route": r[1],
                 "outcome": r[2],
                 "delivery_state": r[3],
+                "actor_id": r[4],
+                "authorized": None if r[5] is None else bool(r[5]),
             }
             for r in db.execute(
-                "SELECT delivery_id, via_route, outcome, delivery_state"
-                " FROM gate_access_attempts ORDER BY id"
+                "SELECT delivery_id, via_route, outcome, delivery_state,"
+                " actor_id, authorized FROM gate_access_attempts ORDER BY id"
             ).fetchall()
         ]
         # Trace events grouped by run, in seq order.
@@ -362,16 +376,22 @@ class InterceptionGate:
             ),
         )
 
-    def _persist_attempt_row(
-        self, delivery_id: str, via_route: str | None, outcome: str, state: str | None
-    ) -> None:
+    def _persist_attempt_row(self, attempt: dict[str, Any]) -> None:
         if self._db is None:
             return
+        authorized = attempt.get("authorized")
         self._db.execute(
             "INSERT INTO gate_access_attempts"
-            " (delivery_id, via_route, outcome, delivery_state)"
-            " VALUES (?, ?, ?, ?)",
-            (delivery_id, via_route, outcome, state),
+            " (delivery_id, via_route, outcome, delivery_state, actor_id, authorized)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                attempt["delivery_id"],
+                attempt["via_route"],
+                attempt["outcome"],
+                attempt["delivery_state"],
+                attempt.get("actor_id"),
+                None if authorized is None else int(bool(authorized)),
+            ),
         )
 
     def _persist_event(self, event: Event) -> None:
@@ -685,19 +705,27 @@ class InterceptionGate:
     # -- CL-18: uniform enforcement on every access path -------------------
 
     def _record_attempt(
-        self, delivery_id: str, via_route: str | None, outcome: str
+        self,
+        delivery_id: str,
+        via_route: str | None,
+        outcome: str,
+        *,
+        actor_id: str | None = None,
+        authorized: bool | None = None,
     ) -> None:
         record = self._deliveries.get(delivery_id)
         state = record.state if record is not None else None
-        self._access_attempts.append(
-            {
-                "delivery_id": delivery_id,
-                "via_route": via_route,
-                "outcome": outcome,
-                "delivery_state": state,
-            }
-        )
-        self._persist_attempt_row(delivery_id, via_route, outcome, state)
+        attempt: dict[str, Any] = {
+            "delivery_id": delivery_id,
+            "via_route": via_route,
+            "outcome": outcome,
+            "delivery_state": state,
+        }
+        if actor_id is not None:
+            attempt["actor_id"] = actor_id
+            attempt["authorized"] = authorized
+        self._access_attempts.append(attempt)
+        self._persist_attempt_row(attempt)
 
     def serve_via_route(self, route_id: str, delivery_id: str) -> bytes:
         """Serve a decided delivery through any gated route (R-01..R-07).
@@ -748,15 +776,30 @@ class InterceptionGate:
         This is the R-08 evidence path, not a delivery: only actors in
         `reviewer_ids` may use it, recipients never gain bytes through
         it, and the read is audited by the store's access history.
+        Each attempt records the actor and whether it was authorized,
+        so `access_attempt_report` can count R-08 serves (CL-78).
         """
         with self._lock:
             record = self._delivery(delivery_id)
-            if actor_id not in reviewer_ids:
-                self._record_attempt(delivery_id, "R-08", "reviewer_denied")
+            authorized = bool(actor_id) and actor_id in reviewer_ids
+            if not authorized:
+                self._record_attempt(
+                    delivery_id,
+                    "R-08",
+                    "reviewer_denied",
+                    actor_id=actor_id,
+                    authorized=False,
+                )
                 raise ReviewerAccessError(
                     f"{actor_id} is not an authorized reviewer for quarantined evidence"
                 )
-            self._record_attempt(delivery_id, "R-08", "reviewer_served")
+            self._record_attempt(
+                delivery_id,
+                "R-08",
+                "reviewer_served",
+                actor_id=actor_id,
+                authorized=True,
+            )
             return self._store.get_original(
                 record.artifact_version_id, actor_id=actor_id, purpose="review"
             )
@@ -764,23 +807,32 @@ class InterceptionGate:
     def access_attempt_report(self) -> dict[str, Any]:
         """Zero-unauthorized-access audit over every recorded attempt.
 
-        ``unauthorized_served`` is computed (CL-53): a recipient serve
-        counts as unauthorized when the delivery's state at serve time
-        was not ``permitted``. Reviewer serves (R-08) are evidence
-        reads, not recipient deliveries, and never count here.
+        ``unauthorized_served`` is computed (CL-53) over both serve
+        kinds. A recipient serve counts as unauthorized when the
+        delivery's state at serve time was not ``permitted``. A
+        reviewer serve (R-08) counts as unauthorized unless its
+        attempt records an authorized actor (CL-78); R-08 rows written
+        before actors were recorded have no proof of authorization and
+        therefore count.
         """
         with self._lock:
             attempts = list(self._access_attempts)
             deliveries = dict(self._deliveries)
         served = [a for a in attempts if a["outcome"] == "served"]
-        unauthorized = 0
+        unauthorized_recipient = 0
         for attempt in served:
             state = attempt.get("delivery_state")
             if state is None:
                 record = deliveries.get(str(attempt.get("delivery_id")))
                 state = record.state if record is not None else None
             if state != "permitted":
-                unauthorized += 1
+                unauthorized_recipient += 1
+        unauthorized_reviewer = sum(
+            1
+            for a in attempts
+            if a["outcome"] == "reviewer_served" and a.get("authorized") is not True
+        )
+        unauthorized = unauthorized_recipient + unauthorized_reviewer
         return {
             "attempts": len(attempts),
             "served": len(served),
@@ -797,6 +849,8 @@ class InterceptionGate:
                 1 for a in attempts if a["outcome"] == "reviewer_denied"
             ),
             "unauthorized_served": unauthorized,
+            "unauthorized_recipient_served": unauthorized_recipient,
+            "unauthorized_reviewer_served": unauthorized_reviewer,
             "by_route": sorted(
                 {str(a["via_route"]) for a in attempts if a["via_route"]}
             ),
