@@ -62,6 +62,25 @@ def generate_cover(
 ) -> bytes:
     """Return deterministic RGB cover pixels (row-major, 3 bytes/pixel)."""
     rng = _Lcg(seed)
+    if pattern == "smooth_field":
+        # Low-frequency sinusoid field with no per-sample noise: adjacent
+        # samples are spatially correlated, as in natural smooth image
+        # regions. Pair-based detectors (CL-61) need this correlation;
+        # the noisy patterns above destroy it at the LSB level.
+        phases = [rng.byte() / 255.0 * 2 * math.pi for _ in range(6)]
+        field = bytearray(width * height * 3)
+        for y in range(height):
+            for x in range(width):
+                i = (y * width + x) * 3
+                for c in range(3):
+                    value = (
+                        128
+                        + 58 * math.sin(x / 53.0 + phases[c])
+                        + 42 * math.cos(y / 44.0 + phases[c + 3])
+                        + 26 * math.sin((x + y) / 67.0 + phases[c])
+                    )
+                    field[i + c] = _clamp(int(round(value)))
+        return bytes(field)
     pixels = bytearray(width * height * 3)
     for y in range(height):
         for x in range(width):
@@ -224,6 +243,66 @@ def decode_lsb_png(data: bytes, n_bits: int) -> bytes:
     for i in range(n_bits):
         current = (current << 1) | (pixels[i] & 1)
         if i % 8 == 7:
+            out.append(current)
+            current = 0
+    return bytes(out)
+
+
+def _lcg_below(rng: _Lcg, n: int) -> int:
+    """Uniform integer in [0, n) from the deterministic LCG stream."""
+    value = 0
+    for _ in range(4):
+        value = (value << 8) | rng.byte()
+    return value % n
+
+
+def _scatter_order(count: int, seed: int) -> list[int]:
+    """Seeded Fisher-Yates sample order (stable across Python versions)."""
+    order = list(range(count))
+    rng = _Lcg(seed * 2654435761 % (1 << 31))
+    for i in range(count - 1, 0, -1):
+        j = _lcg_below(rng, i + 1)
+        order[i], order[j] = order[j], order[i]
+    return order
+
+
+def encode_lsb_matching_png(
+    pixels: bytes, width: int, height: int, payload: bytes, *, seed: int
+) -> bytes:
+    """Save a PNG embedding ``payload`` by LSB matching (+/-1, scattered).
+
+    Each payload bit goes to one scattered sample: when the sample LSB
+    already matches, the sample is untouched; otherwise its value moves
+    by one step (direction seeded, forced inward at 0/255), so the LSB
+    becomes the payload bit without the pairs-of-values equalisation
+    that LSB replacement produces (CL-61).
+    """
+    bits = list(_bits(payload))
+    if len(bits) > len(pixels):
+        raise ValueError("payload exceeds LSB capacity (1 bit per channel byte)")
+    out = bytearray(pixels)
+    rng = _Lcg(seed * 2246822519 % (1 << 31))
+    for pos, index in enumerate(_scatter_order(len(pixels), seed)[: len(bits)]):
+        if (out[index] & 1) == bits[pos]:
+            continue
+        if out[index] == 0:
+            out[index] = 1
+        elif out[index] == 255:
+            out[index] = 254
+        else:
+            out[index] += 1 if rng.byte() & 1 else -1
+    return _save_png(bytes(out), width, height)
+
+
+def decode_lsb_matching_png(data: bytes, n_bits: int, *, seed: int) -> bytes:
+    """Independently recover scattered LSB-matching payload bits."""
+    pixels, _, _ = _load_png(data)
+    order = _scatter_order(len(pixels), seed)
+    out = bytearray()
+    current = 0
+    for pos in range(n_bits):
+        current = (current << 1) | (pixels[order[pos]] & 1)
+        if pos % 8 == 7:
             out.append(current)
             current = 0
     return bytes(out)
@@ -559,6 +638,85 @@ def _embed_dct(coeff_planes: list[list[list[int]]], payload: bytes) -> None:
         raise ValueError("payload exceeds DCT carrier capacity (|AC| >= 2)")
 
 
+def _embed_dct_matching(
+    coeff_planes: list[list[list[int]]], payload: bytes, *, seed: int
+) -> None:
+    """Embed by +/-1 coefficient matching; carrier magnitudes stay >= 2."""
+    bits = list(_bits(payload))
+    pos = 0
+    rng = _Lcg(seed * 2246822519 % (1 << 31))
+    ordered = [
+        coeff_planes[comp][bi]
+        for bi in range(len(coeff_planes[0]))
+        for comp in range(3)
+    ]
+    for block in ordered:
+        for zi in range(1, 64):
+            if pos >= len(bits):
+                return
+            idx = _ZIGZAG[zi]
+            coeff = block[idx]
+            magnitude = abs(coeff)
+            if magnitude >= 2 and (magnitude & 1) != bits[pos]:
+                if magnitude == 2:
+                    magnitude = 3
+                else:
+                    magnitude += 1 if rng.byte() & 1 else -1
+                block[idx] = magnitude if coeff > 0 else -magnitude
+                pos += 1
+            elif magnitude >= 2:
+                pos += 1
+    if pos < len(bits):
+        raise ValueError("payload exceeds DCT carrier capacity (|AC| >= 2)")
+
+
+def encode_dct_matching_jpeg(
+    pixels: bytes,
+    width: int,
+    height: int,
+    payload: bytes,
+    *,
+    quality: int = 90,
+    seed: int = 0,
+) -> bytes:
+    """Encode a baseline JPEG (4:4:4) with +/-1 coefficient matching (CL-61)."""
+    q_luma, q_chroma = (
+        _scaled_quant(_Q_LUMA, quality),
+        _scaled_quant(_Q_CHROMA, quality),
+    )
+    planes = _to_ycbcr(pixels)
+    coeff_planes: list[list[list[int]]] = []
+    for plane, quant in zip(planes, (q_luma, q_chroma, q_chroma)):
+        coeff_planes.append(
+            [_fdct_quant(b, quant) for b in _blocks(plane, width, height)]
+        )
+    if payload:
+        _embed_dct_matching(coeff_planes, payload, seed=seed)
+    writer = _BitWriter()
+    prev = [0, 0, 0]
+    n_blocks = len(coeff_planes[0])
+    for bi in range(n_blocks):
+        for comp in range(3):
+            prev[comp] = _encode_block(writer, coeff_planes[comp][bi], prev[comp])
+    entropy = writer.finish()
+    out = bytearray(b"\xff\xd8")
+    out += _segment(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+    out += _segment(0xDB, bytes([0]) + bytes(q_luma))
+    out += _segment(0xDB, bytes([1]) + bytes(q_chroma))
+    sof_body = (
+        b"\x08"
+        + struct.pack(">HHB", height, width, 3)
+        + bytes([1, 0x11, 0, 2, 0x11, 1, 3, 0x11, 1])
+    )
+    out += _segment(0xC0, sof_body)
+    out += _segment(0xC4, _dht(0x00, _DC_LENGTHS))
+    out += _segment(0xC4, _dht(0x10, _AC_LENGTHS))
+    out += _segment(0xDA, bytes([3, 1, 0, 2, 0, 3, 0, 0, 63, 0]))
+    out += entropy
+    out += b"\xff\xd9"
+    return bytes(out)
+
+
 def encode_dct_jpeg(
     pixels: bytes, width: int, height: int, payload: bytes, *, quality: int = 90
 ) -> bytes:
@@ -764,6 +922,12 @@ class Fixture:
     def verify_payload(self) -> bool:
         """Independent decode of the saved bytes must match ground truth."""
         if self.family == "spatial_lsb":
+            if (self.encoder or {}).get("name") == "lsb-matching-png":
+                seed = int((self.encoder or {}).get("seed") or 0)
+                return (
+                    decode_lsb_matching_png(self.data, self.payload_bits, seed=seed)
+                    == self.payload
+                )
             return decode_lsb_png(self.data, self.payload_bits) == self.payload
         return decode_dct_jpeg(self.data, self.payload_bits) == self.payload
 
@@ -879,6 +1043,122 @@ def build_pair(
     if not encoded.verify_payload():
         raise ValueError("encoded fixture failed payload verification")
     return clean, encoded
+
+
+def build_matching_pair(
+    family: str,
+    *,
+    width: int = 64,
+    height: int = 48,
+    payload_bytes: int = 64,
+    cover_seed: int = 101,
+    payload_seed: int = 202,
+    pattern: str = "smooth_field",
+    quality: int = 90,
+) -> tuple[Fixture, Fixture]:
+    """Build one clean/+/-1-matching pair (CL-61) on a smooth-field cover."""
+    if family not in FAMILIES:
+        raise ValueError(f"family must be one of {FAMILIES}")
+    cover = generate_cover(width, height, pattern=pattern, seed=cover_seed)
+    payload = make_payload(payload_seed, payload_bytes)
+    generator = {
+        "name": GENERATOR_NAME,
+        "version": GENERATOR_VERSION,
+        "seed": cover_seed,
+        "pattern": pattern,
+        "width": width,
+        "height": height,
+    }
+    pair_id = f"pair-{family}-matching-{cover_seed}-{pattern}"
+    if family == "spatial_lsb":
+        clean_data = _save_png(cover, width, height)
+        encoded_data = encode_lsb_matching_png(
+            cover, width, height, payload, seed=payload_seed
+        )
+        encoder = {
+            "name": "lsb-matching-png",
+            "version": ENCODER_VERSION,
+            "seed": payload_seed,
+            "config": {
+                "embedding": "lsb_matching_pm1",
+                "order": "seeded_scatter_rgb_msb_first",
+                "channels": "RGB",
+            },
+        }
+    else:
+        clean_data = encode_dct_jpeg(cover, width, height, b"", quality=quality)
+        encoded_data = encode_dct_matching_jpeg(
+            cover, width, height, payload, quality=quality, seed=payload_seed
+        )
+        encoder = {
+            "name": "dct-matching-jpeg",
+            "version": ENCODER_VERSION,
+            "seed": payload_seed,
+            "config": {
+                "quality": quality,
+                "component": "Y+Cb+Cr",
+                "coefficient_rule": "ac_magnitude>=2_pm1_matching",
+                "quantization": "jpeg_standard_scaled",
+                "subsampling": "4:4:4",
+            },
+        }
+    clean = _fixture(
+        family,
+        "clean",
+        pair_id,
+        width,
+        height,
+        clean_data,
+        b"",
+        payload_seed,
+        generator,
+        encoder,
+    )
+    encoded = _fixture(
+        family,
+        "encoded",
+        pair_id,
+        width,
+        height,
+        encoded_data,
+        payload,
+        payload_seed,
+        generator,
+        encoder,
+    )
+    if not encoded.verify_payload():
+        raise ValueError("matching fixture failed payload verification")
+    return clean, encoded
+
+
+def build_matching_dataset() -> list[Fixture]:
+    """The CL-61 +/-1 suite: smooth-field pairs for both pixel families."""
+    fixtures: list[Fixture] = []
+    for base_seed in (101, 202, 303, 404, 505, 606, 707, 808):
+        for j, n_bytes in enumerate((12, 64, 192)):
+            fixtures.extend(
+                build_matching_pair(
+                    "spatial_lsb",
+                    width=64,
+                    height=48,
+                    payload_bytes=n_bytes,
+                    cover_seed=base_seed + j * 1000,
+                    payload_seed=base_seed + j * 1000 + 7,
+                )
+            )
+    for base_seed in (101, 202, 303, 404, 505, 606):
+        for j, n_bytes in enumerate((8, 16)):
+            fixtures.extend(
+                build_matching_pair(
+                    "jpeg_dct",
+                    width=64,
+                    height=48,
+                    payload_bytes=n_bytes,
+                    cover_seed=base_seed + j * 1000,
+                    payload_seed=base_seed + j * 1000 + 7,
+                )
+            )
+    return fixtures
 
 
 def _negative(

@@ -17,6 +17,13 @@ positives (clean/benign fixtures scoring at or above a candidate
 threshold) and recall broken down by payload band at every swept
 threshold, with Wilson score intervals, plus threshold-free ROC-AUC /
 average-precision summaries with bootstrap intervals (DET-04).
+
+CL-61 adds a second detector in this module, `dct-calibrated-histogram`
+(a neighbor-calibrated histogram total-variation test, gated where
+neighbor calibration is unreliable), benchmarked against this PoV
+detector on +/-1 matching fixtures by `benchmark_dct_calibrated`.
+Both detectors stay individually visible; nothing here refreezes the
+CL-27/CL-54 thresholds.
 """
 
 from __future__ import annotations
@@ -420,6 +427,420 @@ def benchmark_dct(
             "perfect separation)"
         ],
     }
+
+
+CAL_DETECTOR_NAME = "dct-calibrated-histogram"
+CAL_DETECTOR_VERSION = "1.0.0"
+CAL_CONFIG_VERSION = "1.0.0"
+CAL_BENCHMARK_SCHEMA = "covertlens.dct-calibrated-benchmark"
+CAL_BENCHMARK_VERSION = "1.0.0"
+
+_CAL_LIMITATIONS = (
+    "calibrated histogram estimated in the coefficient domain from "
+    "same-frequency adjacent-block coefficients (no IDCT, pixel "
+    "reconstruction or recompression is performed)",
+    "neighbor calibration requires spatially correlated blocks in a "
+    "4:4:4 or grayscale block layout; subsampled or uncorrelated "
+    "JPEGs are gated to 0 as unreliable",
+    "calibrated only on procedural smooth-field covers (CL-61) at "
+    "the recorded encoder configuration; other quality factors and "
+    "natural-image covers are untested",
+    "score is evidence, not demonstrated collusion (C-02); thresholds "
+    "unfrozen (CL-61 does not refreeze the CL-27/CL-54 points)",
+)
+
+
+@dataclass(frozen=True)
+class DctCalibratedConfig:
+    """Versioned calibrated-histogram configuration (CL-61)."""
+
+    version: str = CAL_CONFIG_VERSION
+    # Total-variation reference: score = TV distance / this, capped.
+    tv_reference: float = 0.1
+    # Minimum adjacent-block coefficient agreement for calibration
+    # to count as reliable.
+    neighbor_agreement_min: float = 0.8
+    # Hard score cap: this unfrozen detector stays below the frozen
+    # quarantine point (0.122108), so it can never by itself cause
+    # withholding before a dedicated freeze calibrates points for it.
+    score_cap: float = 0.09
+
+    def __post_init__(self) -> None:
+        if not self.version:
+            raise ValueError("version is required")
+        if self.tv_reference <= 0:
+            raise ValueError("tv_reference must be > 0")
+        if not 0.0 <= self.neighbor_agreement_min <= 1.0:
+            raise ValueError("neighbor_agreement_min must lie in [0, 1]")
+        if not 0.0 < self.score_cap <= 1.0:
+            raise ValueError("score_cap must lie in (0, 1]")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "tv_reference": self.tv_reference,
+            "neighbor_agreement_min": self.neighbor_agreement_min,
+            "score_cap": self.score_cap,
+        }
+
+
+CAL_DEFAULT_CONFIG = DctCalibratedConfig()
+
+
+def _calibrated_statistics(
+    coefficients: tuple[tuple[int, ...], ...],
+    *,
+    blocks_x: int,
+    stride: int,
+    config: DctCalibratedConfig,
+) -> tuple[float, dict[str, Any], dict[str, int]]:
+    """Return (score, evidence, counts) for the calibrated histogram test.
+
+    The calibrated histogram predicts each AC coefficient as the rounded
+    mean of the same-frequency coefficients in its left/right neighbor
+    blocks (same component slot); embedding noise breaks that spatial
+    prediction, so the total-variation distance between the observed
+    AC magnitude histogram and the calibrated histogram grows.
+    """
+    rows = len(coefficients) // (blocks_x * stride) if blocks_x and stride else 0
+
+    def block_at(mx: int, my: int, slot: int) -> tuple[int, ...]:
+        return coefficients[(my * blocks_x + mx) * stride + slot]
+
+    observed: dict[int, int] = {}
+    calibrated: dict[int, int] = {}
+    neighbor_pairs = 0
+    neighbor_equal = 0
+    for my in range(rows):
+        for mx in range(blocks_x):
+            for slot in range(stride):
+                block = block_at(mx, my, slot)
+                neighbors = []
+                if mx > 0:
+                    neighbors.append(block_at(mx - 1, my, slot))
+                if mx < blocks_x - 1:
+                    neighbors.append(block_at(mx + 1, my, slot))
+                if my > 0:
+                    neighbors.append(block_at(mx, my - 1, slot))
+                if my < rows - 1:
+                    neighbors.append(block_at(mx, my + 1, slot))
+                if not neighbors:
+                    neighbors = [block]
+                if mx < blocks_x - 1:
+                    other = block_at(mx + 1, my, slot)
+                    for k in range(1, 64):
+                        neighbor_pairs += 1
+                        if block[k] == other[k]:
+                            neighbor_equal += 1
+                for k in range(1, 64):
+                    magnitude = abs(int(block[k]))
+                    observed[magnitude] = observed.get(magnitude, 0) + 1
+                    estimate = int(
+                        round(sum(int(nb[k]) for nb in neighbors) / len(neighbors))
+                    )
+                    cal_mag = abs(estimate)
+                    calibrated[cal_mag] = calibrated.get(cal_mag, 0) + 1
+    total = sum(observed.values())
+    tv = 0.0
+    if total:
+        keys = set(observed) | set(calibrated)
+        tv = (
+            0.5
+            * sum(abs(observed.get(k, 0) - calibrated.get(k, 0)) for k in keys)
+            / total
+        )
+    agreement = neighbor_equal / neighbor_pairs if neighbor_pairs else 0.0
+    reliable = (
+        rows >= 2
+        and blocks_x >= 2
+        and neighbor_pairs > 0
+        and agreement >= config.neighbor_agreement_min
+    )
+    score = min(config.score_cap, tv / config.tv_reference) if reliable else 0.0
+    evidence = {
+        "statistic": "calibrated_histogram_total_variation",
+        "tv_distance": round(tv, 6),
+        "neighbor_agreement": round(agreement, 6),
+        "neighbor_pairs": neighbor_pairs,
+        "reliable": reliable,
+        "detector_config_version": config.version,
+    }
+    counts = {
+        "blocks_examined": len(coefficients),
+        "ac_coefficients_examined": total,
+        "neighbor_pairs": neighbor_pairs,
+    }
+    return round(score, 6), evidence, counts
+
+
+def detect_dct_calibrated(
+    result: AnalysisResult, config: DctCalibratedConfig | None = None
+) -> Finding | None:
+    """Score one CL-13 result with the calibrated histogram test (CL-61).
+
+    A second, individually visible `jpeg_dct` detector alongside
+    `dct-coefficient-pov-chisquare`. Applicable means a parsed JPEG
+    with coefficient blocks in a 4:4:4 or grayscale layout; other
+    layouts and uncorrelated blocks are gated to 0 with the limitation
+    recorded (never read as a clean verdict, C-02).
+    """
+    active = config or CAL_DEFAULT_CONFIG
+    if result.status is not AnalysisStatus.PARSED:
+        return None
+    if result.media_kind != "jpeg" or result.coefficients is None:
+        return None
+    image = result.image or {}
+    width = int(image.get("width") or 0)
+    height = int(image.get("height") or 0)
+    components = int(image.get("components") or 3)
+    sampling = str(image.get("sampling") or "")
+    stride = components if components in (1, 3) else 3
+    blocks_x = (width + 7) // 8 if width else 0
+    layout_ok = sampling in ("4:4:4", "grayscale") and blocks_x >= 2
+    if layout_ok and len(result.coefficients) % (blocks_x * stride) != 0:
+        layout_ok = False
+    if layout_ok:
+        score, evidence, counts = _calibrated_statistics(
+            result.coefficients, blocks_x=blocks_x, stride=stride, config=active
+        )
+    else:
+        score = 0.0
+        evidence = {
+            "statistic": "calibrated_histogram_total_variation",
+            "tv_distance": 0.0,
+            "neighbor_agreement": 0.0,
+            "neighbor_pairs": 0,
+            "reliable": False,
+            "detector_config_version": active.version,
+        }
+        counts = {
+            "blocks_examined": len(result.coefficients),
+            "ac_coefficients_examined": len(result.coefficients) * 63,
+            "neighbor_pairs": 0,
+        }
+    coverage = {
+        "applicable": True,
+        "media_kind": "jpeg",
+        "domain": "quantized_coefficients",
+        "blocks_examined": counts["blocks_examined"],
+        "coefficients_examined": counts["blocks_examined"] * 64,
+        "ac_coefficients_examined": counts["ac_coefficients_examined"],
+        "neighbor_pairs": counts["neighbor_pairs"],
+        "width": width,
+        "height": height,
+        "components": components,
+        "sampling": sampling,
+        "config_version": active.version,
+    }
+    limitations = list(_CAL_LIMITATIONS)
+    if not evidence["reliable"]:
+        limitations.append(
+            "insufficient neighbor calibration; calibrated score is not reliable"
+        )
+    return Finding(
+        family=FAMILY,
+        detector_name=CAL_DETECTOR_NAME,
+        detector_version=CAL_DETECTOR_VERSION,
+        score=score,
+        coverage=coverage,
+        evidence=evidence,
+        limitations=tuple(limitations),
+    )
+
+
+def analyze_dct_calibrated_bytes(
+    data: bytes,
+    *,
+    limits: ParserLimits | None = None,
+    config: DctCalibratedConfig | None = None,
+    artifact_id: str | None = None,
+    artifact_version_id: str | None = None,
+) -> AnalysisResult:
+    """Parse exact bytes (CL-13) and attach the calibrated finding."""
+    result = analyze_bytes(
+        data,
+        limits=limits,
+        artifact_id=artifact_id,
+        artifact_version_id=artifact_version_id,
+    )
+    finding = detect_dct_calibrated(result, config)
+    if finding is None:
+        return result
+    return replace(result, findings=(finding,))
+
+
+def benchmark_dct_calibrated(
+    fixtures: Iterable[Fixture],
+    *,
+    config: DctCalibratedConfig | None = None,
+    pov_config: DctConfig | None = None,
+    bootstrap_replicates: int = 1000,
+    bootstrap_seed: int = 20261101,
+) -> dict[str, Any]:
+    """Compare calibrated-histogram vs PoV scores on +/-1 fixtures (CL-61).
+
+    Both detectors stay individually visible: every row carries both
+    scores, and each detector gets its own bootstrap ROC-AUC.
+    """
+    from .lsb import _bootstrap_interval, _roc_auc, _score_summary
+
+    active = config or CAL_DEFAULT_CONFIG
+    if bootstrap_replicates < 0:
+        raise ValueError("bootstrap_replicates must be >= 0")
+    rows: list[dict[str, Any]] = []
+    skipped = 0
+    for fixture in fixtures:
+        if fixture.family != FAMILY:
+            skipped += 1
+            continue
+        result = analyze_bytes(fixture.data)
+        cal_finding = detect_dct_calibrated(result, active)
+        pov_finding = detect_dct(result, pov_config)
+        rows.append(
+            {
+                "fixture_id": fixture.fixture_id,
+                "role": fixture.role,
+                "label": 1 if fixture.role == "encoded" else 0,
+                "payload_band": fixture.payload_band,
+                "payload_bits": fixture.payload_bits,
+                "bits_per_pixel": round(fixture.bits_per_pixel, 6),
+                "applicable": cal_finding is not None,
+                "calibrated_score": (
+                    round(cal_finding.score, 6) if cal_finding else None
+                ),
+                "pov_score": round(pov_finding.score, 6) if pov_finding else None,
+            }
+        )
+    scored = [r for r in rows if r["calibrated_score"] is not None]
+    cal_pos = [float(r["calibrated_score"]) for r in scored if r["label"] == 1]
+    cal_neg = [float(r["calibrated_score"]) for r in scored if r["label"] == 0]
+    pov_pos = [
+        float(r["pov_score"])
+        for r in scored
+        if r["label"] == 1 and r["pov_score"] is not None
+    ]
+    pov_neg = [
+        float(r["pov_score"])
+        for r in scored
+        if r["label"] == 0 and r["pov_score"] is not None
+    ]
+    cal_auc = _bootstrap_interval(
+        cal_pos,
+        cal_neg,
+        replicates=bootstrap_replicates,
+        seed=bootstrap_seed,
+        metric="roc_auc",
+    )
+    pov_auc = _bootstrap_interval(
+        pov_pos,
+        pov_neg,
+        replicates=bootstrap_replicates,
+        seed=bootstrap_seed,
+        metric="roc_auc",
+    )
+    by_band: dict[str, Any] = {}
+    for band in PAYLOAD_BANDS:
+        band_rows = [r for r in scored if r["payload_band"] == band]
+        band_pos = [float(r["calibrated_score"]) for r in band_rows if r["label"] == 1]
+        by_band[band] = {
+            "fixture_count": len(band_rows),
+            "positive_count": len(band_pos),
+            "negative_count": len(band_rows) - len(band_pos),
+            "scores": _score_summary([float(r["calibrated_score"]) for r in band_rows]),
+            "roc_auc_vs_negatives": (_roc_auc(band_pos, cal_neg) if band_pos else None),
+        }
+    return {
+        "schema": CAL_BENCHMARK_SCHEMA,
+        "schema_version": BENCHMARK_SCHEMA_VERSION,
+        "benchmark_version": CAL_BENCHMARK_VERSION,
+        "detector": {
+            "family": FAMILY,
+            "name": CAL_DETECTOR_NAME,
+            "version": CAL_DETECTOR_VERSION,
+            "config": active.to_dict(),
+        },
+        "comparator": {
+            "family": FAMILY,
+            "name": DCT_DETECTOR_NAME,
+            "version": DCT_DETECTOR_VERSION,
+        },
+        "thresholds_status": "unfrozen_placeholder",
+        "fixture_count": len(rows),
+        "scored_count": len(scored),
+        "skipped_non_dct": skipped,
+        "positive_count": len(cal_pos),
+        "negative_count": len(cal_neg),
+        "rows": rows,
+        "by_payload_band": by_band,
+        "calibrated_roc_auc": cal_auc,
+        "pov_roc_auc": pov_auc,
+        "calibrated_beats_pov": bool(
+            cal_auc.get("estimate") is not None
+            and pov_auc.get("estimate") is not None
+            and float(cal_auc["estimate"]) > float(pov_auc["estimate"])
+        ),
+        "limitations": list(_CAL_LIMITATIONS)
+        + [
+            "benchmark fixtures are the CL-61 smooth-field +/-1 suite; "
+            "bootstrap intervals are conditional on the observed sample"
+        ],
+    }
+
+
+def validate_dct_calibrated_benchmark(report: dict[str, Any]) -> list[str]:
+    """Return validation errors for one CL-61 calibrated benchmark."""
+    errors: list[str] = []
+
+    def need(cond: bool, msg: str) -> None:
+        if not cond:
+            errors.append(msg)
+
+    need(
+        report.get("schema") == CAL_BENCHMARK_SCHEMA,
+        f"schema must be {CAL_BENCHMARK_SCHEMA}",
+    )
+    need(
+        report.get("schema_version") == BENCHMARK_SCHEMA_VERSION,
+        f"schema_version must be {BENCHMARK_SCHEMA_VERSION}",
+    )
+    need(bool(report.get("benchmark_version")), "benchmark_version is required")
+    detector = report.get("detector") or {}
+    need(detector.get("family") == FAMILY, f"detector.family must be {FAMILY}")
+    need(detector.get("name") == CAL_DETECTOR_NAME, "detector.name is required")
+    need(
+        detector.get("version") == CAL_DETECTOR_VERSION,
+        "detector.version is required",
+    )
+    need(
+        (detector.get("config") or {}).get("version") == CAL_CONFIG_VERSION,
+        "detector.config.version is required",
+    )
+    comparator = report.get("comparator") or {}
+    need(
+        comparator.get("name") == DCT_DETECTOR_NAME,
+        "comparator must stay individually visible (dct-coefficient-pov-chisquare)",
+    )
+    need(
+        report.get("thresholds_status") == "unfrozen_placeholder",
+        "thresholds_status must stay unfrozen_placeholder (CL-61 refreezes nothing)",
+    )
+    for band in PAYLOAD_BANDS:
+        need(
+            band in (report.get("by_payload_band") or {}),
+            f"by_payload_band.{band} is required",
+        )
+    for key in ("calibrated_roc_auc", "pov_roc_auc"):
+        block = report.get(key) or {}
+        estimate = block.get("estimate")
+        if estimate is not None:
+            need(0.0 <= float(estimate) <= 1.0, f"{key}.estimate must lie in [0, 1]")
+            need(
+                float(block.get("ci_low", -1))
+                <= float(estimate)
+                <= float(block.get("ci_high", 2)),
+                f"{key} interval must bracket its estimate",
+            )
+    return errors
 
 
 def validate_dct_benchmark(report: dict[str, Any]) -> list[str]:

@@ -74,10 +74,24 @@ def _rate(numerator: int, denominator: int) -> dict[str, Any]:
     }
 
 
+_FROZEN_DETECTORS = {
+    "spatial_lsb": "lsb-pov-chisquare",
+    "jpeg_dct": "dct-coefficient-pov-chisquare",
+    "metadata": "metadata-ancillary-entries",
+}
+
+
 def _family_score(fixture: Fixture, family: str) -> float | None:
+    """Frozen-benchmark score: the detector the frozen points calibrate.
+
+    CL-61 added second detectors per pixel family; the frozen
+    evaluation stays pinned to the originally calibrated detector by
+    name so its numbers cannot drift when detectors are added.
+    """
     result = analyze_all_bytes(fixture.data)
+    wanted = _FROZEN_DETECTORS.get(family)
     for finding in result.findings:
-        if finding.family == family:
+        if finding.family == family and finding.detector_name == wanted:
             return finding.score
     return None
 

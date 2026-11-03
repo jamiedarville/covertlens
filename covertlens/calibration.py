@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from .fixtures import Fixture
-from .geometric import DEFAULT_GEO_CONFIG, GEO_DETECTOR_VERSION
+from .geometric import DEFAULT_GEO_CONFIG, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
 from .geometric_fixtures import GeoFixture
 from .metadata import analyze_all_bytes
 from .pinning import dataset_hash
@@ -151,9 +151,19 @@ def calibrate_thresholds(
         family: {"positive": [], "negative": []} for family in FAMILIES
     }
     bands: dict[str, set[str]] = {family: set() for family in FAMILIES}
+    # Calibration stays pinned to the detectors the frozen points were
+    # calibrated for (CL-61 second detectors never tune these points).
+    calibrated_detectors = {
+        "lsb-pov-chisquare",
+        "dct-coefficient-pov-chisquare",
+        "metadata-ancillary-entries",
+        GEO_DETECTOR_NAME,
+    }
     for fixture in rows:
         result = analyze_all_bytes(fixture.data)
         for finding in result.findings:
+            if finding.detector_name not in calibrated_detectors:
+                continue
             bucket = scores[finding.family]
             if fixture.family == finding.family or finding.family == "metadata":
                 # Family fixtures score their own family; every parsed
