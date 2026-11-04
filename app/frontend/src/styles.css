@@ -663,3 +663,14 @@ fieldset.decision-choices, .generate-form fieldset { border: 0; padding: 0; marg
 .point-choice { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 1rem 0.7rem; margin: 0.6rem 0 1rem; }
 .point-choice legend { font-weight: 700; padding: 0 0.3rem; }
 .point-choice label { display: flex; align-items: center; gap: 0.5rem; min-height: 40px; }
+
+/* The three demo stages stack on phones and read left to right on wide screens. */
+.agent-demo-flow { display: grid; gap: 1.25rem; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.agent-demo-flow label { display: block; margin-bottom: 1rem; }
+.agent-demo-flow select, .agent-demo-flow input { display: block; width: 100%; margin-top: .4rem; }
+.agent-demo-flow .card { min-width: 0; }
+.agent-demo-flow .verdict { display: block; padding: 1rem; }
+.agent-demo-flow .traffic-light { width: 48px; }
+.demo-message { font-size: 1.4rem; font-weight: 700; overflow-wrap: anywhere; }
+.demo-json { max-height: 30rem; overflow: auto; font-size: .8rem; white-space: pre-wrap; }
+@media (max-width: 1100px) { .agent-demo-flow { grid-template-columns: 1fr; } }
