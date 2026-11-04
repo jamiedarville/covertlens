@@ -10,3 +10,5 @@ node_modules/
 app/frontend/public-static/
 app/frontend/dist-static/
 app/frontend/.static-build/
+.ruff_cache/
+.mypy_cache/
