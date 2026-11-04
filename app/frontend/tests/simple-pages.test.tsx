@@ -9,6 +9,7 @@ import { DemoRoleView } from "../src/components/DemoRoleSelect";
 import LiveGate, { GateSafetyLine } from "../src/pages/LiveGate";
 import Review, { AuditLine } from "../src/pages/Review";
 import Trace, { TimelineSummary, whatHappened } from "../src/pages/Trace";
+import AgentDemo from "../src/pages/AgentDemo";
 import Generate from "../src/pages/Generate";
 import { AccuracySummary, type Reports } from "../src/pages/Benchmarks";
 import { StandingsTable } from "../src/pages/Leaderboard";
@@ -45,7 +46,7 @@ test("the technical breakdown is a link that starts closed", () => {
 test("the menu uses short names and every page has a title", () => {
   assert.deepEqual(
     NAV.map((n) => n.label),
-    ["Check an image", "Make a test image", "Delivery gate", "Review images", "Timeline", "Accuracy", "Leaderboard", "Release decision"],
+    ["Two-agent demo", "Check an image", "Make a test image", "Delivery gate", "Review images", "Timeline", "Accuracy", "Leaderboard", "Release decision"],
   );
   for (const item of NAV) assert.ok(item.title.length > 0);
 });
@@ -269,4 +270,18 @@ test("release decision leads with a colour and a plain checklist", () => {
   assert.match(html, /What it doesn’t do yet/);
   assert.match(html, /Checks 95 out of 100 images of every tested size within 2 seconds/);
   assert.match(html, /2 known limitations/);
+});
+
+
+test("two-agent demo offers a scene, a hidden message and three plain stages", () => {
+  const html = renderToStaticMarkup(<AgentDemo />);
+  assert.match(html, /1\. Sender agent/);
+  assert.match(html, /2\. Check and decide/);
+  assert.match(html, /3\. Receiver agent/);
+  for (const scene of ["A house", "A garden", "A night sky", "A skyline"]) assert.ok(html.includes(scene));
+  assert.match(html, /type="password"/);
+  assert.match(html, /Show.*message/);
+  assert.match(html, /Make the picture/);
+  assert.match(html, /Make a picture first/);
+  assert.match(html, /Waiting for you to send a picture/);
 });

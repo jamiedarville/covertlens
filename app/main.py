@@ -81,6 +81,7 @@ from covertlens.manifest import load_manifest
 from covertlens.pinning import default_detector_versions
 
 from . import auth
+from .agent_demo import AgentDemo, demo_config
 from .analysis_worker import analyze_bytes, frozen_config, public_geometric
 from .generation_worker import generate_image
 
@@ -441,9 +442,10 @@ async def _security_and_rate_limit(request: Request, call_next):
         response = JSONResponse({"detail": "cross_site_request_blocked"}, 403)
         _apply_security_headers(response)
         return response
-    if (request.method, request.url.path) in RATE_LIMITED and _rate_limited(
-        _client_key(request)
-    ):
+    expensive = (request.method, request.url.path) in RATE_LIMITED or (
+        request.method == "POST" and request.url.path.startswith("/api/agent-demo")
+    )
+    if expensive and _rate_limited(_client_key(request)):
         response = JSONResponse({"detail": "rate_limited"}, status_code=429)
         _apply_security_headers(response)
         return response
@@ -941,6 +943,104 @@ def generated_image(filename: str) -> Response:
     if not target.is_relative_to(GENERATED_DIR.resolve()) or not target.is_file():
         return JSONResponse({"detail": "generated_not_found"}, status_code=404)
     return FileResponse(target)
+
+
+# The interactive demo keeps its state alongside the existing persistent gate.
+_agent_demo_instance: AgentDemo | None = None
+
+
+def _agent_demo() -> AgentDemo:
+    global _agent_demo_instance
+    gate = _gate()
+    with _gate_lock:
+        if _agent_demo_instance is None or _agent_demo_instance.gate is not gate:
+            _agent_demo_instance = AgentDemo(DATA_DIR / "agent-demo", gate)
+        return _agent_demo_instance
+
+
+def _demo_permission(request: Request, run_id: str) -> JSONResponse | None:
+    if not auth.demo_build():
+        return JSONResponse(
+            {"detail": "The agent demo is available in demo builds."}, 403
+        )
+    try:
+        _require(request, run_id, "verdict.override")
+        _require(request, run_id, "original.read")
+    except DemoRoleDenied as exc:
+        return _denied(exc)
+    return None
+
+
+@app.get("/api/agent-demo/config")
+def agent_demo_config() -> dict[str, Any]:
+    return demo_config()
+
+
+@app.post("/api/agent-demo")
+async def agent_demo_create(request: Request) -> JSONResponse:
+    denied = _demo_permission(request, "agent-demo")
+    if denied is not None:
+        return denied
+    body, error = await _json_object(request)
+    if error is not None:
+        return error
+    try:
+        result = await asyncio.to_thread(
+            _agent_demo().create, body.get("scene", "house"), body.get("message", "")
+        )
+        return JSONResponse(result)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, 400)
+    except Exception:
+        return JSONResponse(
+            {
+                "detail": "The sender could not make the image. Check the API connection and try again."
+            },
+            502,
+        )
+
+
+@app.get("/api/agent-demo/{demo_id}")
+def agent_demo_get(demo_id: str, request: Request) -> JSONResponse:
+    denied = _demo_permission(request, "demo_" + demo_id)
+    if denied is not None:
+        return denied
+    try:
+        service = _agent_demo()
+        return JSONResponse(service.public(service.load(demo_id)))
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, 404)
+
+
+@app.post("/api/agent-demo/{demo_id}/{operation}")
+async def agent_demo_step(
+    demo_id: str, operation: str, request: Request
+) -> JSONResponse:
+    denied = _demo_permission(request, "demo_" + demo_id)
+    if denied is not None:
+        return denied
+    service = _agent_demo()
+    try:
+        if operation == "image":
+            result = service.image(demo_id)
+        elif operation == "show":
+            result = {"message": service.load(demo_id)["message"]}
+        elif operation == "analyze":
+            result = await asyncio.to_thread(service.analyze, demo_id)
+        elif operation in ("block", "send"):
+            result = await asyncio.to_thread(service.decide, demo_id, operation)
+        else:
+            return JSONResponse({"detail": "Unknown demo action."}, 404)
+        return JSONResponse(result)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, 409)
+    except Exception:
+        return JSONResponse(
+            {
+                "detail": "This step could not finish. Reload the demo to see its last saved state."
+            },
+            502,
+        )
 
 
 # -- Live Gate (CL-53) -------------------------------------------------
@@ -2405,6 +2505,7 @@ def review_page() -> Response:
     return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
 
 
+@app.get("/demo")
 @app.get("/gate")
 def gate_page() -> Response:
     """SPA route for the Live Gate page (CL-53)."""

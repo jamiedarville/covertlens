@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AgentDemo from "./pages/AgentDemo";
 import Landing from "./pages/Landing";
 import Analyze from "./pages/Analyze";
 import Generate from "./pages/Generate";
@@ -27,6 +28,7 @@ function usePath(): [string, (to: string) => void] {
 
 // Short menu names; each page's heading says the rest.
 export const NAV: { page: string; href: string; label: string; title: string }[] = [
+  { page: "demo", href: "/demo", label: "Two-agent demo", title: "Two-agent demo" },
   { page: "analyze", href: "/analyze", label: "Check an image", title: "Check an image" },
   { page: "generate", href: "/generate", label: "Make a test image", title: "Make a test image" },
   { page: "gate", href: "/gate", label: "Delivery gate", title: "Delivery gate" },
@@ -41,7 +43,9 @@ export default function App() {
   const [path, navigate] = usePath();
   const [versionLine, setVersionLine] = useState<string | null>(null);
   const page =
-    path === "/analyze"
+    path === "/demo"
+      ? "demo"
+      : path === "/analyze"
       ? "analyze"
       : path === "/generate"
         ? "generate"
@@ -106,7 +110,9 @@ export default function App() {
         </nav>
       </header>
       <main id="main" className="page">
-        {page === "analyze" ? (
+        {page === "demo" ? (
+          <AgentDemo />
+        ) : page === "analyze" ? (
           <Analyze />
         ) : page === "generate" ? (
           <Generate navigate={navigate} />

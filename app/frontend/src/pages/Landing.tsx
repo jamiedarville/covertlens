@@ -39,6 +39,7 @@ function SkylineSide({
 // Every other page, described in one plain sentence each, so nothing
 // in the menu is a mystery.
 const OTHER_PAGES: [string, string, string][] = [
+  ["/demo", "Two-agent demo", "Watch a sender hide two words in a picture, check it, then see what a receiver can read."],
   ["/generate", "Make a test image", "create an image with a hidden message in it, to see whether CovertLens catches it."],
   ["/gate", "Delivery gate", "watch images being checked as one AI agent sends them to another, and decide which ones get through."],
   ["/review", "Review images", "look at the images that were stopped, and record what you think of each one."],
