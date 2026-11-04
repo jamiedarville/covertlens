@@ -188,10 +188,27 @@ def _byte_digits(data: bytes, base: int, digits: int) -> list[int]:
 
 
 def _encode_payload(
-    subfamily: str, mode: str, text: str, count: int, payload_seed: int, alphabet: int
+    subfamily: str,
+    mode: str,
+    text: str,
+    count: int,
+    payload_seed: int,
+    alphabet: int,
+    *,
+    alphabet_base: int = 0,
+    level_stride: int = 1,
 ) -> tuple[int, ...]:
-    """Symbol stream for one payload mode (generator-side, CL-46)."""
+    """Symbol stream for one payload mode (generator-side, CL-46).
+
+    `alphabet_base` shifts the height letter code (A=0 or A=1, CL-78);
+    `level_stride` > 1 makes a random payload use only every n-th
+    level, so the fundamental grid step is never observed (CL-78).
+    """
     if mode == "random":
+        if level_stride > 1:
+            levels = list(range(0, alphabet, level_stride))
+            rng = random.Random(payload_seed)
+            return tuple(rng.choice(levels) for _ in range(count))
         return _symbols(payload_seed, count, alphabet)
     if mode not in PAYLOAD_MODES:
         raise ValueError(f"payload_mode must be one of {PAYLOAD_MODES}")
@@ -199,9 +216,16 @@ def _encode_payload(
     if mode == "morse":
         stream = _morse_stream(text, alphabet)
     elif subfamily == "height_position" and mode == "word":
-        stream = [ord(c) - 65 for c in text.upper() if "A" <= c <= "H"]
+        top = chr(ord("A") + alphabet - 1 - alphabet_base)
+        letters = [c for c in text.upper() if "A" <= c <= top]
+        if len(letters) != len([c for c in text if c.isalpha()]):
+            raise ValueError(
+                f"word payload for height_position (A={alphabet_base}) "
+                f"needs letters A-{top}"
+            )
+        stream = [ord(c) - 65 + alphabet_base for c in letters]
         if not stream:
-            raise ValueError("word payload for height_position needs A-H letters")
+            raise ValueError("word payload for height_position needs letters")
     elif subfamily == "gap_timing":
         stream = _morse_stream(text, alphabet)
     elif subfamily == "lit_dark":
@@ -243,10 +267,20 @@ def _scene_elements(
     grid: dict[str, Any] | None = None,
     payload_mode: str = "random",
     payload_text: str = "DECAF",
+    alphabet_base: int = 0,
+    level_stride: int = 1,
+    jitter_px: int = 0,
 ) -> tuple[list[dict[str, Any]], tuple[int, ...], tuple[float, ...]]:
-    """Element attribute plan for one scene (renderer-side only)."""
+    """Element attribute plan for one scene (renderer-side only).
+
+    `jitter_px` > 0 nudges each encoded height or gap by a uniform
+    integer in [-jitter_px, +jitter_px] (CL-78): the cheapest evasion,
+    still readable by a receiver that rounds to the nearest level while
+    the jitter stays under half a step.
+    """
     grid = {**GRIDS[subfamily], **(grid or {})}
     rng = random.Random(scene_seed)
+    jitter_rng = random.Random(scene_seed * 31 + 7 + jitter_px)
     symbols: tuple[int, ...] = ()
     if subfamily == "gap_timing":
         count = n_elements - 1
@@ -260,8 +294,15 @@ def _scene_elements(
             count,
             payload_seed,
             int(grid["alphabet"]),
+            alphabet_base=alphabet_base,
+            level_stride=level_stride,
         )
-        if grid.get("attacker") and payload_mode == "random" and len(symbols) >= 3:
+        if (
+            grid.get("attacker")
+            and payload_mode == "random"
+            and level_stride == 1
+            and len(symbols) >= 3
+        ):
             # Attacker fixtures exist to prove step *recovery*: if a
             # payload used only every-other level, the fundamental
             # step would be ambiguous (2x would fit equally well).
@@ -290,6 +331,8 @@ def _scene_elements(
         if subfamily == "height_position":
             if encoded:
                 value = grid["base"] + symbols[i] * grid["step"]
+                if jitter_px:
+                    value += jitter_rng.randint(-jitter_px, jitter_px)
             else:
                 # Clearance just beyond rendering rounding (0.5px):
                 # a wider exclusion arc would make clean residues
@@ -306,6 +349,8 @@ def _scene_elements(
         elif subfamily == "gap_timing" and i < n_elements - 1:
             if encoded:
                 value = grid["base"] + symbols[i] * grid["step"]
+                if jitter_px:
+                    value += jitter_rng.randint(-jitter_px, jitter_px)
             else:
                 value = _off_grid(
                     rng,
@@ -519,10 +564,16 @@ def verify_geo_fixture(fixture: GeoFixture) -> bool:
     attributes, symbols = measure_attributes(
         pixels, width, height, fixture.subfamily, grid=recorded
     )
-    if fixture.role == "encoded":
+    jitter = int((fixture.encoder.get("config") or {}).get("jitter_px") or 0)
+    if fixture.role == "encoded" and not jitter:
         return tuple(symbols) == fixture.symbols
     if len(attributes) != len(fixture.attributes):
         return False
+    if jitter:
+        # Jittered encodings are verified by attribute, not by rounding
+        # to the grid: past half a step a receiver cannot read them,
+        # and that is what the benchmark row measures (CL-78).
+        return all(abs(a - b) <= 1.6 for a, b in zip(attributes, fixture.attributes))
     # Angle re-measurement carries a pixel-regression bias toward
     # upright at steep tilts (up to ~5 degrees at 35 degrees), so
     # clean attribute verification uses a wider angle tolerance;
@@ -552,6 +603,9 @@ def _fixture(
     negative_kind: str | None = None,
     grid: dict[str, Any] | None = None,
     payload_mode: str = "random",
+    alphabet_base: int = 0,
+    level_stride: int = 1,
+    jitter_px: int = 0,
 ) -> GeoFixture:
     effective_grid = {**GRIDS[subfamily], **(grid or {})}
     digest = ids.content_hash(data)
@@ -564,21 +618,33 @@ def _fixture(
         "height": height,
         "context": context,
     }
+    config: dict[str, Any] = {
+        "subfamily": subfamily,
+        "unit": effective_grid["unit"],
+        "alphabet": effective_grid["alphabet"],
+        "payload_mode": payload_mode if role == "encoded" else "none",
+        "grid": {
+            k: v
+            for k, v in effective_grid.items()
+            if k in ("base", "step", "levels", "attacker", "palette")
+            and (k != "palette" or bool(grid and "palette" in grid))
+        },
+    }
+    if role == "encoded":
+        # Encoder settings (CL-78), recorded like the attacker grid. The
+        # payload text itself is ground truth and is never recorded here:
+        # this config is exported in the detector-facing manifest.
+        if alphabet_base:
+            config["alphabet_base"] = alphabet_base
+        if level_stride > 1:
+            config["level_stride"] = level_stride
+        if jitter_px:
+            config["jitter_px"] = jitter_px
     encoder = {
         "name": GEO_ENCODER_NAME if role == "encoded" else "none",
         "version": GEO_ENCODER_VERSION,
         "seed": payload_seed,
-        "config": {
-            "subfamily": subfamily,
-            "unit": effective_grid["unit"],
-            "alphabet": effective_grid["alphabet"],
-            "payload_mode": payload_mode if role == "encoded" else "none",
-            "grid": {
-                k: v
-                for k, v in effective_grid.items()
-                if k in ("base", "step", "levels", "attacker")
-            },
-        },
+        "config": config,
     }
     return GeoFixture(
         fixture_id=f"geometric-{subfamily}-{role}-{digest.split(':', 1)[1][:12]}",
@@ -663,8 +729,14 @@ def build_attacker_geo_pair(
     payload_seed: int = 202,
     grid_seed: int = 777,
     n_elements: int = 12,
+    level_stride: int = 1,
 ) -> tuple[GeoFixture, GeoFixture]:
-    """Clean/encoded pair on a random attacker grid (CL-43)."""
+    """Clean/encoded pair on a random attacker grid (CL-43).
+
+    `level_stride=2` is the every-other-level attacker (CL-78): the
+    payload never uses two adjacent levels, so the encoder's step is
+    never observed and the detector can only find twice the step.
+    """
     grid = attacker_grid(subfamily, grid_seed)
     return build_geo_pair(
         subfamily,
@@ -672,6 +744,7 @@ def build_attacker_geo_pair(
         payload_seed=payload_seed,
         n_elements=n_elements,
         grid=grid,
+        level_stride=level_stride,
     )
 
 
@@ -686,6 +759,9 @@ def build_geo_pair(
     grid: dict[str, Any] | None = None,
     payload_mode: str = "random",
     payload_text: str = "DECAF",
+    alphabet_base: int = 0,
+    level_stride: int = 1,
+    jitter_px: int = 0,
 ) -> tuple[GeoFixture, GeoFixture]:
     """One clean/encoded pair: same scene plan, grid vs off-grid attributes."""
     if subfamily not in SUBFAMILIES:
@@ -703,6 +779,10 @@ def build_geo_pair(
     pair_id = f"pair-geometric-{subfamily}-{scene_seed}"
     if grid and grid.get("attacker"):
         pair_id += f"-attacker-{grid['step']}"
+    if level_stride > 1:
+        pair_id += f"-stride{level_stride}"
+    if jitter_px:
+        pair_id += f"-jitter{jitter_px}"
     built = []
     for role, encoded in (("clean", False), ("encoded", True)):
         elements, symbols, attributes = _scene_elements(
@@ -714,6 +794,9 @@ def build_geo_pair(
             grid=grid,
             payload_mode=payload_mode,
             payload_text=payload_text,
+            alphabet_base=alphabet_base,
+            level_stride=level_stride,
+            jitter_px=jitter_px,
         )
         # Clean and encoded share the scene seed family but must not
         # share jitter: encoded uses grid values; clean was sampled
@@ -733,6 +816,9 @@ def build_geo_pair(
                 height=height,
                 grid=grid,
                 payload_mode=payload_mode,
+                alphabet_base=alphabet_base,
+                level_stride=level_stride,
+                jitter_px=jitter_px,
             )
         )
     clean, encoded_fx = built

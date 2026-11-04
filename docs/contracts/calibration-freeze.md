@@ -25,6 +25,16 @@ see [banded-fixtures.md](banded-fixtures.md)) in
   families have frozen points, so CL-17 enforcement decisions are no
   longer log-only. Any detector or dataset change requires a new
   freeze version; CL-26 pin differences name that drift.
+- **Geometric enforcement floor (CL-78).** The geometric quarantine
+  point must lie strictly above the detector's non-structure score
+  ceiling (0.5), so quantization without structure can never be
+  calibrated into withholding however the development scores fall.
+- **Making a freeze.** `make refreeze` (or `python scripts/refreeze.py
+  [--version frozen-x.y.z]`) recalibrates from development data, bumps
+  the version, writes this file with its owners and coverage blocks,
+  and rebuilds `config/release-scorecard.json` with its `pin_hash`
+  (CL-65). `COVERTLENS_FROZEN_CONFIG` loads a different frozen file
+  (rollback); see the operations runbook and `docs/campaign-log.md`.
 - **Development sample is tiny** (2–4 positives per family): the
   frozen points meet the targets on development data with zero
   observed false positives, and CL-28 must report frozen performance

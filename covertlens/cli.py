@@ -130,8 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _payload_json(payload: object) -> str:
+def payload_json(payload: object) -> str:
+    """How the CLI and the web precompute serialise report payloads."""
     return json.dumps(payload, indent=2, default=str)
+
+
+_payload_json = payload_json
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -126,6 +126,95 @@ export function SecondOpinionPanel({
   );
 }
 
+// Withheld deliveries of one run. Rows say whether a candidate decode
+// exists, never what it says.
+export function QueueTable({
+  queue,
+  selectedId,
+  busy,
+  onSelect,
+}: {
+  queue: ReviewQueue;
+  selectedId: string | null;
+  busy: boolean;
+  onSelect: (deliveryId: string) => void;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <caption>Withheld deliveries in run {queue.run_id}. Choose one to review.</caption>
+        <thead>
+          <tr>
+            <th>Delivery</th>
+            <th>Sender → recipient</th>
+            <th>Verdict</th>
+            <th>Candidate decode</th>
+            <th>Disposition</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {queue.quarantined.map((d) => (
+            <tr key={d.delivery_id} className={d.delivery_id === selectedId ? "row-active" : ""}>
+              <td className="num">{d.delivery_id.slice(0, 18)}…</td>
+              <td>{d.sender_id} → {d.recipient_id}</td>
+              <td>{d.verdict ?? "—"}</td>
+              <td>{d.has_candidate_decode ? "available (reviewer only)" : "none"}</td>
+              <td>{d.disposition}</td>
+              <td>
+                <button type="button" className="button" onClick={() => onSelect(d.delivery_id)} disabled={busy}>
+                  Review
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Candidate decode: text only after a successful reviewer read.
+export function CandidateDecodePanel({
+  available,
+  decode,
+  note,
+  role,
+  busy,
+  onRead,
+}: {
+  available: boolean;
+  decode: CandidateDecode | null;
+  note: string;
+  role: string;
+  busy: boolean;
+  onRead: () => void;
+}) {
+  if (!available) return <p className="note">No candidate decode for this original.</p>;
+  return (
+    <>
+      <p className="note">
+        A candidate exists under a declared code. Only the
+        reviewer demo role may read its text; other roles
+        are denied and the denial is audited.
+      </p>
+      <p>
+        <button type="button" className="button" onClick={onRead} disabled={busy}>
+          Read candidate decode as {role}
+        </button>
+      </p>
+      {decode ? (
+        <dl className="kv kv-wide">
+          <div><dt>Code</dt><dd>{decode.code ?? "—"}</dd></div>
+          <div><dt>Candidate text</dt><dd>{decode.text}</dd></div>
+        </dl>
+      ) : (
+        note && <p className="note">{note}</p>
+      )}
+    </>
+  );
+}
+
 export default function Review() {
   const [role, setRole] = useDemoRole();
   const [runId, setRunId] = useState("");
@@ -383,37 +472,12 @@ export default function Review() {
           {queue.quarantined.length === 0 ? (
             <p className="note">Nothing is withheld in this run. Quarantine a delivery on the Live Gate page first.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <caption>Withheld deliveries in run {queue.run_id}. Choose one to review.</caption>
-                <thead>
-                  <tr>
-                    <th>Delivery</th>
-                    <th>Sender → recipient</th>
-                    <th>Verdict</th>
-                    <th>Candidate decode</th>
-                    <th>Disposition</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queue.quarantined.map((d) => (
-                    <tr key={d.delivery_id} className={d.delivery_id === selectedId ? "row-active" : ""}>
-                      <td className="num">{d.delivery_id.slice(0, 18)}…</td>
-                      <td>{d.sender_id} → {d.recipient_id}</td>
-                      <td>{d.verdict ?? "—"}</td>
-                      <td>{d.has_candidate_decode ? "available (reviewer only)" : "none"}</td>
-                      <td>{d.disposition}</td>
-                      <td>
-                        <button type="button" className="button" onClick={() => onSelect(d.delivery_id)} disabled={busy}>
-                          Review
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <QueueTable
+              queue={queue}
+              selectedId={selectedId}
+              busy={busy}
+              onSelect={onSelect}
+            />
           )}
         </section>
       )}
@@ -461,30 +525,14 @@ export default function Review() {
           <section className="card" aria-labelledby="review-decide-heading">
             <h2 id="review-decide-heading">Decode and disposition</h2>
             <h3>Candidate decode</h3>
-            {detail.has_candidate_decode ? (
-              <>
-                <p className="note">
-                  A candidate exists under a declared code. Only the
-                  reviewer demo role may read its text; other roles
-                  are denied and the denial is audited.
-                </p>
-                <p>
-                  <button type="button" className="button" onClick={onDecode} disabled={busy}>
-                    Read candidate decode as {role}
-                  </button>
-                </p>
-                {decode ? (
-                  <dl className="kv kv-wide">
-                    <div><dt>Code</dt><dd>{decode.code ?? "—"}</dd></div>
-                    <div><dt>Candidate text</dt><dd>{decode.text}</dd></div>
-                  </dl>
-                ) : (
-                  decodeNote && <p className="note">{decodeNote}</p>
-                )}
-              </>
-            ) : (
-              <p className="note">No candidate decode for this original.</p>
-            )}
+            <CandidateDecodePanel
+              available={detail.has_candidate_decode}
+              decode={decode}
+              note={decodeNote}
+              role={role}
+              busy={busy}
+              onRead={onDecode}
+            />
 
             <h3>Disposition</h3>
             <div className="form-grid">

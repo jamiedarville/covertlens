@@ -6,13 +6,15 @@ from typing import Any
 
 from .geometric import SIGNAL_STRUCTURE, analyze_geometric_bytes
 from .geometric_fixtures import (
+    DEFAULT_HEIGHT,
     SUBFAMILIES,
     GeoFixture,
     assign_geo_splits,
     build_geo_dataset,
-    build_geo_pair,
     validate_geo_splits,
 )
+from .splits import SplitPolicy
+from .splits import split_for_group as _split_for_group
 from .verdicts import ThresholdConfig, decide_verdict
 
 
@@ -21,25 +23,32 @@ def geometric_calibration_dataset() -> tuple[list[GeoFixture], dict[str, str]]:
 
     Structured and unstructured encodings are both positives. This exposes
     enforcement misses on random payloads rather than redefining them benign.
-    """
-    from .geo_benchmark import STRUCTURED_SPECS
 
+    Structured pairs vary payload, letter code, grid and palette (CL-78).
+    Each pair's lineage split is known before it is built, and a held-out
+    pair draws its payload from the held-out pool, so no held-out payload
+    is ever seen by calibration.
+    """
+    from .geo_benchmark import STRUCTURED_SPECS, build_structured_pair
+
+    policy = SplitPolicy()
     fixtures = build_geo_dataset()
     for subfamily in SUBFAMILIES:
+        spec = STRUCTURED_SPECS[subfamily]
         for index in range(12):
-            spec = STRUCTURED_SPECS[subfamily]
+            width = spec["width"] + 3 * index
+            group = f"scene:{subfamily}:{20000 + 977 * index}:{width}x{DEFAULT_HEIGHT}"
+            pool = (
+                "held_out"
+                if _split_for_group(group, policy) == "held_out"
+                else "development"
+            )
             fixtures.extend(
-                build_geo_pair(
-                    subfamily,
-                    payload_mode="word",
-                    payload_text=spec["payload_text"],
-                    n_elements=spec["n_elements"],
-                    width=spec["width"] + 3 * index,
-                    scene_seed=20000 + 977 * index,
-                    payload_seed=555,
+                build_structured_pair(
+                    subfamily, index, pool=pool, width_offset=3 * index
                 )
             )
-    assignments = assign_geo_splits(fixtures)
+    assignments = assign_geo_splits(fixtures, policy)
     errors = validate_geo_splits(fixtures, assignments)
     if errors:
         raise ValueError("; ".join(errors))
@@ -112,7 +121,8 @@ def evaluate_geometric_held_out(
         "universal_claim": False,
         "limitations": [
             "Procedural synthetic PNG scenes only; no natural-image or JPEG calibration claim.",
-            "Small lineage-held-out sample; repeated structured words are not held-out codebooks or vocabulary.",
+            "Small lineage-held-out sample; held-out structured payloads come from a pool calibration never sees, but the codes and grids are the same families.",
+            "The A-H letter-position height code is weak with the 313-word trigram model: many real A-H words do not beat the shuffle null.",
             "Unstructured encoded payloads may flag but do not establish structure for enforcement.",
         ],
     }

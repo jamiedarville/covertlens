@@ -47,3 +47,25 @@ def unfilter_row(
     elif kind == 2:
         values += np.frombuffer(prev, dtype=np.uint8)
     return bytearray((values % 256).astype(np.uint8).tobytes())
+
+
+def spa_pair_counts(
+    samples: bytes, width: int, height: int, channels: int, max_diff: int
+) -> tuple[int, int, int] | None:
+    """(pairs, LSB-agreeing pairs, smooth pairs) for SPA, or None (CL-78).
+
+    Same pairs as the reference loop in `lsb._spa_statistics`:
+    non-overlapping horizontally adjacent same-channel samples.
+    """
+    np = numpy_backend()
+    if np is None:
+        return None
+    grid = np.frombuffer(samples, dtype=np.uint8)[: width * height * channels]
+    grid = grid.reshape(height, width, channels)
+    even = (width // 2) * 2
+    u = grid[:, 0:even:2, :].astype(np.int16)
+    v = grid[:, 1:even:2, :].astype(np.int16)
+    pairs = int(u.size)
+    agree = int(np.count_nonzero(((u ^ v) & 1) == 0))
+    smooth = int(np.count_nonzero(np.abs(u - v) <= max_diff))
+    return pairs, agree, smooth

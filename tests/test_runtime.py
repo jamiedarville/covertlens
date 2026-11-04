@@ -144,3 +144,36 @@ def test_retirement_requires_separate_approval_and_preserves_bundle(tmp_path):
     assert not root.exists()  # approved deletion removed the dataset bytes
     assert any(e.action == "retirement.execute" for e in audit.entries)
     assert audit.verify_chain() is True  # audit + bundle record survive deletion
+
+
+def test_retirement_refuses_a_path_that_is_not_the_store_root(tmp_path):
+    store = ArtifactStore(tmp_path / "evidence")
+    audit = AuditLog()
+    elsewhere = tmp_path / "precious"
+    elsewhere.mkdir()
+    (elsewhere / "keep.txt").write_text("not evidence")
+    with pytest.raises(ValueError, match="not the root"):
+        DatasetRetirement(store, audit, store_root=elsewhere)
+    with pytest.raises(ValueError, match="not the root"):
+        DatasetRetirement(ArtifactStore(), audit, store_root=elsewhere)
+    assert (elsewhere / "keep.txt").exists()
+
+
+def test_retirement_rechecks_the_root_before_deleting(tmp_path):
+    root = tmp_path / "evidence"
+    store = ArtifactStore(root)
+    store.put_original(PNG, run_id="run_t", producer_id="agent-1")
+    audit = AuditLog()
+    retirement = DatasetRetirement(store, audit, store_root=root)
+    retirement.request(OPERATOR, DATASET, reason="dataset superseded")
+    retirement.approve(APPROVER, DATASET)
+    # Swap the directory for a symlink to something else after approval.
+    target = tmp_path / "precious"
+    target.mkdir()
+    (target / "keep.txt").write_text("not evidence")
+    moved = tmp_path / "moved"
+    root.rename(moved)
+    root.symlink_to(target)
+    with pytest.raises(ValueError, match="symlink"):
+        retirement.execute(APPROVER, DATASET)
+    assert (target / "keep.txt").exists()

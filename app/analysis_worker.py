@@ -114,7 +114,7 @@ def _periodogram(
         points.append(
             {
                 "step": round(float(discovered_step), 4),
-                "rayleigh_R": channel.get("rayleigh_R"),
+                "rayleigh_R": float(channel.get("rayleigh_R") or 0.0),
             }
         )
         points.sort(key=lambda p: p["step"])
@@ -159,7 +159,7 @@ def _overlay_block(geometric: dict[str, Any]) -> dict[str, Any] | None:
         "gap": ("gap_to_next", "px", config.residual_tolerance),
         "lit": ("brightness", "grey levels", config.brightness_tolerance),
         "angle": ("angle_deg", "degrees", config.angle_residual_tolerance),
-        "colour": ("colour_index", "palette index", config.colour_distance_tolerance),
+        "colour": ("colour_index", "palette index", config.colour_cluster_radius),
     }
     primary = geometric.get("primary_channel")
     out: dict[str, Any] = {}
@@ -180,7 +180,8 @@ def _overlay_block(geometric: dict[str, Any]) -> dict[str, Any] | None:
             entry["periodogram"] = {
                 "available": False,
                 "reason": (
-                    "colour is scored by exact palette repetition, not a Rayleigh grid"
+                    "colour is scored by discovered, well-separated palette "
+                    "clusters, not a Rayleigh grid"
                 ),
                 "discovered_step": None,
                 "discovered_rayleigh_R": channel.get("rayleigh_R"),
@@ -202,12 +203,52 @@ def _overlay_block(geometric: dict[str, Any]) -> dict[str, Any] | None:
     return {"version": OVERLAY_VERSION, "channels": out}
 
 
-def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
-    """Analyze one uploaded artifact; explicit oversized status (CL-47)."""
+_FROZEN: Any = None
+
+
+def frozen_config() -> Any:
+    """The shipped freeze; web decisions use it, not the log-only default."""
+    global _FROZEN
+    if _FROZEN is None:
+        from covertlens.calibration import load_frozen_thresholds
+
+        _FROZEN = load_frozen_thresholds()[0]
+    return _FROZEN
+
+
+def public_geometric(geometric: dict[str, Any]) -> dict[str, Any]:
+    """A geometric report with every reviewer-only field removed.
+
+    The candidate decode belongs to the EvidenceGateway reviewer path
+    (CL-46); the finding is already in `analysis.findings`; and no
+    decoded-text slot crosses the API, not even an empty one (CL-48).
+    Channel symbol sequences never reach the report (CL-78).
+    """
+    out = dict(geometric)
+    out.pop("candidate_decode", None)
+    out.pop("finding", None)
+    segmentation = out.get("segmentation")
+    if isinstance(segmentation, dict):
+        segmentation = dict(segmentation)
+        segmentation.pop("decoded_message", None)
+        out["segmentation"] = segmentation
+    return out
+
+
+def analyze_bytes(
+    data: bytes,
+    max_pixels: int | None = None,
+    declared_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Analyze one uploaded artifact; explicit oversized status (CL-47).
+
+    `declared_context` is the caller's geometric scene declaration
+    (CL-45/CL-78). The geometric report is computed once and reused for
+    the finding and the overlay. Decisions use the shipped freeze.
+    """
     if max_pixels is None:
         max_pixels = _max_pixels()
-    from covertlens.geometric import analyze_geometric_bytes
-    from covertlens.metadata import analyze_all_bytes
+    from covertlens.metadata import analyze_all_with_geometric
     from covertlens.parsing import analyze_bytes as parse_bytes
     from covertlens.verdicts import decide_verdict
 
@@ -217,6 +258,7 @@ def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
         "analysis": None,
         "geometric": None,
         "decision": None,
+        "declared_context": declared_context,
     }
     if parsed.status.value != "parsed":
         return base
@@ -233,21 +275,16 @@ def analyze_bytes(data: bytes, max_pixels: int | None = None) -> dict[str, Any]:
             )
             return base
 
-    result = analyze_all_bytes(data)
+    result, geometric = analyze_all_with_geometric(
+        data, declared_context=declared_context
+    )
     base["analysis"] = result.to_dict()
-    if parsed.media_kind in ("png", "jpeg"):
-        geometric = analyze_geometric_bytes(data)
-        geometric.pop("candidate_decode", None)  # reviewer-only (CL-46)
-        geometric.pop("finding", None)  # already in analysis.findings
-        segmentation = geometric.get("segmentation")
-        if isinstance(segmentation, dict):
-            # No decoded text crosses the API, not even an empty
-            # slot a future change could fill (CL-48).
-            segmentation.pop("decoded_message", None)
-        overlay = _overlay_block(geometric)
+    if geometric is not None:
+        public = public_geometric(geometric)
+        overlay = _overlay_block(public)
         if overlay is not None:
-            geometric["overlay"] = overlay
-        base["geometric"] = geometric
+            public["overlay"] = overlay
+        base["geometric"] = public
     if result.findings:
-        base["decision"] = decide_verdict(result.findings).to_dict()
+        base["decision"] = decide_verdict(result.findings, frozen_config()).to_dict()
     return base

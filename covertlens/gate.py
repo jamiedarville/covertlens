@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import threading
 from collections.abc import Callable
@@ -33,7 +34,7 @@ from typing import Any
 from . import ids
 from ._validation import now_iso as _now
 from .events import Event, EventType, ParseStatus, TraceLog, Verdict
-from .manifest import load_manifest
+from .manifest import GEOMETRIC_CHANNEL_NAMES, load_manifest
 from .routes import ROUTES, Route
 from .store import ArtifactStore, ArtifactVersion
 
@@ -79,6 +80,9 @@ class DeliveryRecord:
     infrastructure_error: str | None = None  # CL-19: withheld without a verdict
 
 
+_log = logging.getLogger(__name__)
+
+
 class InterceptionGate:
     """One gate for every inventoried image path, over the CL-8 store.
 
@@ -114,6 +118,10 @@ class InterceptionGate:
         self._lock = threading.RLock()
         self._access_attempts: list[dict[str, Any]] = []
         self._cached_links: dict[str, str] = {}
+        # CL-78: per-run scene context declared before the run (CL-45),
+        # and versions a reload could not restore.
+        self._scene_context: dict[str, dict[str, Any]] = {}
+        self._reload_skipped: list[dict[str, str]] = []
         self._db: sqlite3.Connection | None = None
         store_root = getattr(store, "root", None)
         if store_root is not None:
@@ -205,6 +213,12 @@ class InterceptionGate:
             );
             CREATE TABLE IF NOT EXISTS gate_known_versions (
                 artifact_version_id TEXT PRIMARY KEY
+            );
+            CREATE TABLE IF NOT EXISTS gate_scene_context (
+                run_id TEXT PRIMARY KEY,
+                declared_channels TEXT NOT NULL,
+                context TEXT,
+                declared_at TEXT NOT NULL
             );
             """
         )
@@ -333,18 +347,28 @@ class InterceptionGate:
                 "SELECT artifact_version_id FROM gate_known_versions"
             ).fetchall()
         }
-        # Rebuild handles from the store's persisted versions.
-        for version_id in self._known_versions:
+        for r in db.execute(
+            "SELECT run_id, declared_channels, context, declared_at"
+            " FROM gate_scene_context"
+        ).fetchall():
+            self._scene_context[r[0]] = {
+                "declared_channels": json.loads(r[1]),
+                "context": r[2],
+                "declared_at": r[3],
+            }
+        # Rebuild handles from the store's persisted versions. A version
+        # the store cannot load is logged and counted, never silently
+        # dropped (CL-78): a damaged store must be visible.
+        for version_id in sorted(self._known_versions | set(self._version_context)):
+            if version_id in self._handles:
+                continue
             try:
                 self._handles[version_id] = self._store.get_version(version_id)
-            except Exception:
-                continue
-        for version_id in self._version_context:
-            if version_id not in self._handles:
-                try:
-                    self._handles[version_id] = self._store.get_version(version_id)
-                except Exception:
-                    continue
+            except (KeyError, OSError, ValueError) as exc:
+                self._reload_skipped.append(
+                    {"artifact_version_id": version_id, "error": type(exc).__name__}
+                )
+                _log.warning("gate reload skipped version %s: %s", version_id, exc)
 
     def _persist_delivery(self, record: DeliveryRecord) -> None:
         if self._db is None:
@@ -876,6 +900,60 @@ class InterceptionGate:
         if run_id is not None:
             rows = [r for r in rows if r.run_id == run_id]
         return sorted(rows, key=lambda r: r.delivery_id)
+
+    def reload_report(self) -> dict[str, Any]:
+        """Versions the last reload could not restore (CL-78)."""
+        with self._lock:
+            skipped = [dict(row) for row in self._reload_skipped]
+        return {"skipped_versions": len(skipped), "versions": skipped}
+
+    # -- scene context (CL-45, CL-78) -----------------------------------------
+
+    def declare_scene_context(
+        self,
+        run_id: str,
+        declared_channels: list[str],
+        context: str | None = None,
+    ) -> dict[str, Any]:
+        """Declare a run's legitimate geometric channels before it starts.
+
+        A declared channel's quantization logs and its structure is
+        tested at a stricter level (CL-78). A declaration made after the
+        run has deliveries is refused: it could excuse what was seen.
+        """
+        names = sorted(set(declared_channels))
+        unknown = [n for n in names if n not in GEOMETRIC_CHANNEL_NAMES]
+        if unknown:
+            raise ValueError(
+                f"unknown geometric channel(s) {unknown}; "
+                f"declare from {list(GEOMETRIC_CHANNEL_NAMES)}"
+            )
+        with self._lock:
+            if any(r.run_id == run_id for r in self._deliveries.values()):
+                raise ValueError(
+                    "scene context must be declared before the run's first "
+                    "delivery (declaration_required_before_run)"
+                )
+            block = {
+                "declared_channels": names,
+                "context": context,
+                "declared_at": _now(),
+            }
+            self._scene_context[run_id] = block
+            if self._db is not None:
+                self._db.execute(
+                    "INSERT OR REPLACE INTO gate_scene_context"
+                    " (run_id, declared_channels, context, declared_at)"
+                    " VALUES (?, ?, ?, ?)",
+                    (run_id, json.dumps(names), context, block["declared_at"]),
+                )
+            return dict(block)
+
+    def scene_context(self, run_id: str) -> dict[str, Any] | None:
+        """The run's declared scene context, or None when nothing was declared."""
+        with self._lock:
+            block = self._scene_context.get(run_id)
+            return dict(block) if block is not None else None
 
     def runs(self) -> list[str]:
         with self._lock:

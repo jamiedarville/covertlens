@@ -115,6 +115,12 @@ function fallbackValues(geometric: Geometric, channel: string): number[] {
   return seq.filter((v): v is number => v !== null);
 }
 
+function shortDigest(digest: string | undefined): string {
+  if (!digest) return "—";
+  const hex = digest.replace(/^sha256:/, "");
+  return `sha256:${hex.slice(0, 12)}…`;
+}
+
 export function Overlay({
   geometric,
   imageUrl,
@@ -168,7 +174,8 @@ export function Overlay({
       </div>
       <p>
         Evidence aid — not a decoded message. Boxes follow reading order;
-        grid symbols are shown as numbers only. Signal grade:{" "}
+        the symbol sequence is withheld (only its digest is shown). Signal
+        grade:{" "}
         <strong>{fmtExact(geometric.signal_grade)}</strong>; primary channel:{" "}
         <strong>{fmtExact(geometric.primary_channel)}</strong>.
       </p>
@@ -227,7 +234,7 @@ export function Overlay({
             unit={overlayChannel?.unit ?? ""}
             step={channel.step}
             offset={channel.offset}
-            symbols={channel.symbols}
+            symbolRange={channel.symbol_range}
             title={`${CHANNEL_LABELS[active] ?? active} attribute sequence`}
           />
           <p className="note">
@@ -236,10 +243,23 @@ export function Overlay({
               ? `; horizontal lines mark the discovered grid (step ${fmtNum(channel.step)}, offset ${fmtNum(channel.offset)}).`
               : "; no grid was discovered for this channel."}
           </p>
-          <p className="symbols">
-            <span className="symbols-label">Grid symbols (numeric only):</span>{" "}
-            <span className="mono">{channel.symbols.join(" ")}</span>
+          <p className="symbols" data-testid="symbols-digest">
+            <span className="symbols-label">Symbols:</span>{" "}
+            {channel.symbol_count} on levels{" "}
+            {channel.symbol_range
+              ? `${channel.symbol_range[0]}–${channel.symbol_range[1]}`
+              : "—"}
+            ; digest <span className="mono">{shortDigest(channel.symbols_digest)}</span>
+            . The sequence itself is reviewer-only.
           </p>
+          {channel.decode_tolerance !== undefined && (
+            <p className="note">
+              Decode margin ±{fmtNum(channel.decode_tolerance)}: an element
+              supports the grid when a receiver rounding to the nearest level
+              would still read it ({fmtNum(channel.decode_support_fraction ?? null)}{" "}
+              of elements do).
+            </p>
+          )}
 
           <h3>Rayleigh periodogram</h3>
           {overlayChannel?.periodogram.available ? (

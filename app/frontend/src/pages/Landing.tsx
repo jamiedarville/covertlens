@@ -62,7 +62,7 @@ function SkylineSide({
           unit="px"
           step={heightChannel.step}
           offset={heightChannel.offset}
-          symbols={heightChannel.symbols}
+          symbolRange={heightChannel.symbol_range}
           title={`Building heights, ${heading.toLowerCase()}`}
         />
       )}

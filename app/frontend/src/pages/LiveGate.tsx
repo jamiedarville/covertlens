@@ -21,6 +21,84 @@ import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
 
 const ROUTES = ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07"];
+
+// Recipient pane: an image only for a permitted delivery whose bytes the
+// recipient path served; otherwise the gate's reason and no image.
+export function RecipientPane({
+  delivery,
+  imageUrl,
+  note,
+}: {
+  delivery: GateDelivery | null;
+  imageUrl: string | null;
+  note: string;
+}) {
+  return (
+    <section className="card" aria-labelledby="recipient-heading">
+      <h2 id="recipient-heading">Recipient pane</h2>
+      {!delivery ? (
+        <p className="note">Select a delivery to see what the recipient gets.</p>
+      ) : delivery.state === "permitted" && imageUrl ? (
+        <>
+          <img className="skyline-img" src={imageUrl} alt="Image delivered to the recipient" />
+          <p>{note}</p>
+        </>
+      ) : (
+        <>
+          <p data-testid="recipient-withheld">
+            <strong>{delivery.state === "withheld" ? "withheld" : delivery.state}</strong>
+            {" — "}
+            {note || delivery.recipient_message}
+          </p>
+          <p className="note">No image is shown here for a withheld delivery.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+// Reviewer pane: closed until opened, and opened only as the chosen role.
+export function ReviewerPane({
+  delivery,
+  imageUrl,
+  note,
+  role,
+  busy,
+  onOpen,
+}: {
+  delivery: GateDelivery | null;
+  imageUrl: string | null;
+  note: string;
+  role: string;
+  busy: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <section className="card" aria-labelledby="reviewer-heading">
+      <h2 id="reviewer-heading">Reviewer pane</h2>
+      {!delivery ? (
+        <p className="note">Select a delivery to open its original (R-08, audited).</p>
+      ) : (
+        <>
+          {imageUrl ? (
+            <img className="skyline-img" src={imageUrl} alt="Original opened by the reviewer" />
+          ) : (
+            <p>
+              <button type="button" className="button" onClick={onOpen} disabled={busy}>
+                Open original as {role}
+              </button>
+            </p>
+          )}
+          {note && <p data-testid="reviewer-note">{note}</p>}
+          <p className="note">
+            Reviewer evidence view. Recipients never get bytes through
+            this path.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
 const VERDICTS = ["log", "flag", "quarantine", "fail_run"];
 
 export default function LiveGate() {
@@ -28,6 +106,7 @@ export default function LiveGate() {
   const [senderId, setSenderId] = useState("agent-a");
   const [recipientId, setRecipientId] = useState("agent-b");
   const [episodeId, setEpisodeId] = useState("");
+  const [declared, setDeclared] = useState("");
   const [routeId, setRouteId] = useState("R-01");
   const [file, setFile] = useState<File | null>(null);
   const [detail, setDetail] = useState<GateRunDetail | null>(null);
@@ -148,7 +227,11 @@ export default function LiveGate() {
     setBusy(true);
     setError(null);
     try {
-      const id = await createGateRun(runId.trim() || undefined);
+      const channels = declared
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      const id = await createGateRun(runId.trim() || undefined, channels);
       setRunId(id);
       setDetail(null);
       setSelectedId(null);
@@ -297,7 +380,23 @@ export default function LiveGate() {
               placeholder="ep_1"
             />
           </label>
+          <label>
+            Declared channels (optional)
+            <input
+              type="text"
+              value={declared}
+              onChange={(e) => setDeclared(e.target.value)}
+              placeholder="height"
+              aria-describedby="declared-help"
+            />
+          </label>
         </div>
+        <p className="note" id="declared-help">
+          Geometric channels the task legitimately uses (height, gap, lit,
+          colour, angle), declared before the first delivery. A declared
+          channel&apos;s quantization logs; its structure is still tested,
+          at a stricter level.
+        </p>
         <RoleControl
           role={role}
           onChange={setRole}
@@ -441,50 +540,20 @@ export default function LiveGate() {
       )}
 
       <div className="card-grid card-grid-2">
-        <section className="card" aria-labelledby="recipient-heading">
-          <h2 id="recipient-heading">Recipient pane</h2>
-          {!selected ? (
-            <p className="note">Select a delivery to see what the recipient gets.</p>
-          ) : selected.state === "permitted" && recipientUrl ? (
-            <>
-              <img className="skyline-img" src={recipientUrl} alt="Image delivered to the recipient" />
-              <p>{recipientNote}</p>
-            </>
-          ) : (
-            <>
-              <p data-testid="recipient-withheld">
-                <strong>{selected.state === "withheld" ? "withheld" : selected.state}</strong>
-                {" — "}
-                {recipientNote || selected.recipient_message}
-              </p>
-              <p className="note">No image is shown here for a withheld delivery.</p>
-            </>
-          )}
-        </section>
+        <RecipientPane
+          delivery={selected}
+          imageUrl={recipientUrl}
+          note={recipientNote}
+        />
 
-        <section className="card" aria-labelledby="reviewer-heading">
-          <h2 id="reviewer-heading">Reviewer pane</h2>
-          {!selected ? (
-            <p className="note">Select a delivery to open its original (R-08, audited).</p>
-          ) : (
-            <>
-              {reviewerUrl ? (
-                <img className="skyline-img" src={reviewerUrl} alt="Original opened by the reviewer" />
-              ) : (
-                <p>
-                  <button type="button" className="button" onClick={onOpenOriginal} disabled={busy}>
-                    Open original as {role}
-                  </button>
-                </p>
-              )}
-              {reviewerNote && <p data-testid="reviewer-note">{reviewerNote}</p>}
-              <p className="note">
-                Reviewer evidence view. Recipients never get bytes through
-                this path.
-              </p>
-            </>
-          )}
-        </section>
+        <ReviewerPane
+          delivery={selected}
+          imageUrl={reviewerUrl}
+          note={reviewerNote}
+          role={role}
+          busy={busy}
+          onOpen={onOpenOriginal}
+        />
       </div>
 
       {detail && (

@@ -35,8 +35,8 @@ from ._stats import roc_auc, score_summary, wilson
 from ._validation import make_need
 from .dct import detect_dct, detect_dct_calibrated
 from .fixtures import Fixture
-from .geometric import detect_geometric
 from .lsb import detect_lsb, detect_lsb_pairs
+from .manifest import manifest_scene_context
 from .metadata_fixtures import (
     ALLOWED_TASK_METADATA,
     PAYLOAD_KEYWORD,
@@ -196,14 +196,23 @@ def detect_metadata(
     )
 
 
-def analyze_all_bytes(
+def analyze_all_with_geometric(
     data: bytes,
     *,
     limits: ParserLimits | None = None,
     artifact_id: str | None = None,
     artifact_version_id: str | None = None,
-) -> AnalysisResult:
-    """One parse, all applicable family findings, individually visible."""
+    declared_context: dict[str, Any] | None = None,
+) -> tuple[AnalysisResult, dict[str, Any] | None]:
+    """`analyze_all_bytes` plus the full geometric report, in one pass.
+
+    Callers that show the geometric measurement (the web overlay)
+    reuse the report the finding came from instead of segmenting the
+    image a second time (CL-78). The report is None when the geometric
+    family does not apply.
+    """
+    from .geometric import analyze_geometric_bytes
+
     result = analyze_bytes(
         data,
         limits=limits,
@@ -211,7 +220,15 @@ def analyze_all_bytes(
         artifact_version_id=artifact_version_id,
     )
     if result.status is not AnalysisStatus.PARSED:
-        return result
+        return result, None
+    context = (
+        declared_context if declared_context is not None else manifest_scene_context()
+    )
+    geometric: dict[str, Any] | None = None
+    if result.media_kind in ("png", "jpeg"):
+        geometric = analyze_geometric_bytes(
+            data, declared_context=context, parsed=result
+        )
     findings: list[Finding] = []
     for finding in (
         detect_lsb(result),
@@ -219,11 +236,37 @@ def analyze_all_bytes(
         detect_dct(result),
         detect_dct_calibrated(result),
         detect_metadata(data, result),
-        detect_geometric(data, result),
+        geometric.get("finding") if geometric is not None else None,
     ):
         if finding is not None:
             findings.append(finding)
-    return replace(result, findings=tuple(findings))
+    return replace(result, findings=tuple(findings)), geometric
+
+
+def analyze_all_bytes(
+    data: bytes,
+    *,
+    limits: ParserLimits | None = None,
+    artifact_id: str | None = None,
+    artifact_version_id: str | None = None,
+    declared_context: dict[str, Any] | None = None,
+) -> AnalysisResult:
+    """One parse, all applicable family findings, individually visible.
+
+    `declared_context` is the run's geometric scene context (CL-45):
+    `{"declared_channels": [...], "context": ...}`, declared before the
+    run. When None, the channels the shipped manifest declares are
+    used (none by default), so production scoring and the manifest
+    agree (CL-78).
+    """
+    result, _geometric = analyze_all_with_geometric(
+        data,
+        limits=limits,
+        artifact_id=artifact_id,
+        artifact_version_id=artifact_version_id,
+        declared_context=declared_context,
+    )
+    return result
 
 
 def analyze_and_decide(
@@ -231,6 +274,7 @@ def analyze_and_decide(
     config: ThresholdConfig | None = None,
     *,
     limits: ParserLimits | None = None,
+    declared_context: dict[str, Any] | None = None,
 ) -> tuple[AnalysisResult, VerdictDecision | None]:
     """Integrated analysis plus a CL-17 decision (None when unparseable).
 
@@ -238,7 +282,7 @@ def analyze_and_decide(
     recorded on the decision and every family's findings stay visible
     in `per_family` — families are never blended into one score.
     """
-    result = analyze_all_bytes(data, limits=limits)
+    result = analyze_all_bytes(data, limits=limits, declared_context=declared_context)
     if result.status is not AnalysisStatus.PARSED:
         return result, None
     decision = decide_verdict(

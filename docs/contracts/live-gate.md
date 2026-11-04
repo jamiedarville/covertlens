@@ -86,10 +86,21 @@ records (CL-78). Applying a verdict needs the researcher role.
 Below, the SSE timeline and the access-attempt audit (including
 computed `unauthorized_served`) update from the same run detail.
 
-With unfrozen thresholds the analysed suggestion is triage-only
-(`log`); the page preselects it but lets the operator apply any
-ladder verdict, which is how quarantine and `fail_run` withholding
-are demonstrated.
+The analysed suggestion comes from the shipped freeze (CL-78; it used
+to come from the log-only library default, so every suggestion was
+`log`): a structure-claimed scene is suggested `quarantine`,
+quantization alone `flag` or `log`. The page preselects the
+suggestion but lets the operator apply any ladder verdict, which is
+how `fail_run` withholding is demonstrated.
+
+**Scene context (CL-78).** A run may declare its legitimate geometric
+channels when it is created (`POST /api/gate/runs` with
+`declared_channels`, or the *Declared channels* field on the page).
+The gate persists the declaration and refuses it once the run has a
+delivery (409). Gate analysis, review detail, candidate decodes, the
+trace view and run reports all score the run under it. Analyses are
+cached per artifact version and declaration, so the trace view and
+review detail no longer re-analyse every delivery on each call.
 
 ## Acceptance mapping
 

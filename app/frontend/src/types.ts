@@ -53,7 +53,14 @@ export interface Decision {
 export interface GeoChannel {
   step: number | null;
   offset: number | null;
-  symbols: number[];
+  // CL-78: the symbol sequence never leaves the library. A digest, the
+  // count and the range are enough to draw the grid without a decode.
+  symbols_digest: string;
+  symbol_count: number;
+  symbol_range: [number, number] | null;
+  decode_tolerance?: number;
+  decode_support_fraction?: number;
+  decodable?: boolean;
   residuals: number[];
   supporting: number;
   support_fraction: number;

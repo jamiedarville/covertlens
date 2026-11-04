@@ -248,12 +248,19 @@ class ReviewWorkspace:
 
     # -- candidate decodes (reviewer evidence path) ------------------------
 
-    def ensure_candidate_decode(self, run_id: str, record: Any) -> str | None:
+    def ensure_candidate_decode(
+        self,
+        run_id: str,
+        record: Any,
+        *,
+        declared_context: dict[str, Any] | None = None,
+    ) -> str | None:
         """Record the delivery's candidate decode once; return its ID.
 
         The geometric report is recomputed deterministically from the
-        stored bytes. Only the decode ID is returned to callers; the
-        text stays in the gateway until a reviewer reads it.
+        stored bytes, under the run's declared scene context (CL-78).
+        Only the decode ID is returned to callers; the text stays in
+        the gateway until a reviewer reads it.
         """
         with self._lock:
             if record.artifact_version_id in self._decode_versions:
@@ -268,7 +275,9 @@ class ReviewWorkspace:
             )
             from .geometric import analyze_geometric_bytes
 
-            candidate = analyze_geometric_bytes(data).get("candidate_decode")
+            candidate = analyze_geometric_bytes(
+                data, declared_context=declared_context
+            ).get("candidate_decode")
             decode_id = self._gateway.record_candidate_decode(
                 run_id, record.artifact_version_id, candidate
             )
@@ -574,7 +583,9 @@ class ReviewWorkspace:
                 )
                 results.append(
                     analyze_all_bytes(
-                        data, artifact_version_id=record.artifact_version_id
+                        data,
+                        artifact_version_id=record.artifact_version_id,
+                        declared_context=gate.scene_context(run_id),
                     )
                 )
             report = build_run_report(
