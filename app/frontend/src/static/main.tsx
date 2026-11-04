@@ -58,8 +58,8 @@ function StaticApp() {
       </main>
       <footer className="site-footer">
         <p>
-          A high score is evidence to look closer — never an accusation on
-          its own. This page never sends your picture to a server.
+          Results are warning signs, not proof, and never an accusation on
+          their own. This page never sends your image to a server.
         </p>
       </footer>
     </>

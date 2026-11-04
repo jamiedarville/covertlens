@@ -33,7 +33,7 @@ test("verdict words say what happens to the image", () => {
   assert.match(verdictLabel("log"), /Let it through/);
   assert.match(verdictLabel("flag"), /flag it for attention/);
   assert.match(verdictLabel("quarantine"), /Hold the image back for review/);
-  assert.match(verdictLabel("fail_run"), /stop the run/);
+  assert.match(verdictLabel("fail_run"), /stop the session/);
   assert.match(verdictMeaning("quarantine"), /NOT delivered/);
   assert.match(verdictMeaning("log"), /is delivered/);
 });
@@ -93,10 +93,10 @@ test("family cards explain scores and the not-checked state", () => {
 
 test("landing page explains the product and where to start", () => {
   const html = renderToStaticMarkup(<Landing navigate={() => undefined} />);
-  assert.match(html, /checks images that AI agents send each other/);
-  assert.match(html, /New here\? Start in three steps/);
-  assert.match(html, /Check your own image/);
-  assert.match(html, /never proof/);
+  assert.match(html, /AI agents sometimes send each other images/);
+  assert.match(html, /How it works/);
+  assert.match(html, /Check an image/);
+  assert.match(html, /not proof/);
   assert.doesNotMatch(html, /verdict ladder decides/i);
 });
 

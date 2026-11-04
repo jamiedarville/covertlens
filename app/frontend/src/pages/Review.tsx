@@ -35,9 +35,9 @@ import {
   classificationMeaning,
   gateStateLabel,
   humanizeKey,
-  verdictLabel,
 } from "../format";
-import { StartSteps, TechDetails } from "../components/Help";
+import { TechnicalBreakdown } from "../components/Help";
+import { LightDot, VerdictLight } from "../components/TrafficLight";
 
 const DISPOSITIONS = [
   "benign",
@@ -64,17 +64,14 @@ export function SecondOpinionPanel({
     <>
       <p className="note">
         Advisory only — does not change the verdict. You can ask a second,
-        independent AI model to read the check results for this picture
-        and give its view. Its answer is shown next to yours to help you
-        judge; it never decides anything by itself. (For safety, any text
-        that came from an agent is clearly fenced off as untrusted when
-        shown to that model.)
+        independent AI model to look at the check results and give its
+        view. It never decides anything. (Any text that came from an agent
+        is fenced off as untrusted before that model sees it.)
       </p>
       {config && !config.enabled && (
         <p className="note">
-          Second opinion is off: whoever runs this server has not
-          connected an AI model for it (no provider key is configured).
-          The rest of this page works normally — you review unaided.
+          Second opinion is off: no AI model has been connected on this
+          server. Everything else on this page works normally.
         </p>
       )}
       {config?.enabled && (
@@ -86,31 +83,24 @@ export function SecondOpinionPanel({
         </p>
       )}
       <p>
-        <button
-          type="button"
-          className="button"
-          onClick={onRequest}
-          disabled={busy}
-        >
-          Ask for a second opinion on this picture
+        <button type="button" className="button" onClick={onRequest} disabled={busy}>
+          Ask for a second opinion
         </button>
       </p>
       {latest?.status === "second_opinion_unavailable" && (
         <p className="note" role="status">
           Second opinion unavailable
-          {latest.unavailable_reason
-            ? `: ${latest.unavailable_reason}`
-            : ""}
-          . This is not an all-clear — it only means no opinion was
-          obtained. Judge the picture from the check results yourself.
+          {latest.unavailable_reason ? `: ${latest.unavailable_reason}` : ""}.
+          This is not an all-clear: no opinion was obtained, so judge from
+          the check results yourself.
         </p>
       )}
       {latest?.status === "unparseable" && (
         <p className="note" role="status">
-          Second opinion unparseable: the model’s reply did not follow
-          the required format, so it was thrown away rather than guessed
-          at. It was not treated as agreement with anything. You may ask
-          again, or judge unaided.
+          Second opinion unparseable: the model’s reply wasn’t in the
+          required format, so it was thrown away rather than guessed at. It
+          wasn’t treated as agreement with anything. You can ask again, or
+          judge unaided.
         </p>
       )}
       {latest?.status === "available" && latest.assessment && (
@@ -163,28 +153,30 @@ export function QueueTable({
   return (
     <div className="table-wrap">
       <table>
-        <caption>Held-back pictures in session {queue.run_id}. “Possible reading” means a reviewer may ask what the pattern would say under a code declared in advance — a hypothesis, not a recovered message.</caption>
+        <caption>Images held back in session {queue.run_id}.</caption>
         <thead>
           <tr>
-            <th>Picture (short ID)</th>
-            <th>Sender → recipient</th>
+            <th>Image</th>
+            <th>From → to</th>
             <th>Gate decision</th>
-            <th>Possible reading of the pattern?</th>
+            <th>Possible hidden reading?</th>
             <th>Your judgement so far</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {queue.quarantined.map((d) => (
+          {queue.quarantined.map((d, i) => (
             <tr key={d.delivery_id} className={d.delivery_id === selectedId ? "row-active" : ""}>
-              <td className="num">{d.delivery_id.slice(0, 18)}…</td>
+              <td title={d.delivery_id}>Image {i + 1}</td>
               <td>{d.sender_id} → {d.recipient_id}</td>
-              <td title={d.verdict ?? undefined}>{d.verdict ? verdictLabel(d.verdict) : "—"}</td>
+              <td title={d.verdict ?? undefined}>
+                <VerdictLight verdict={d.verdict} label={d.verdict ? undefined : "—"} />
+              </td>
               <td>{d.has_candidate_decode ? "exists (reviewer only)" : "none"}</td>
               <td title={d.disposition}>{DISPOSITION_LABELS[d.disposition] ?? d.disposition}</td>
               <td>
                 <button type="button" className="button" onClick={() => onSelect(d.delivery_id)} disabled={busy}>
-                  Review this picture
+                  Review this image
                 </button>
               </td>
             </tr>
@@ -211,16 +203,14 @@ export function CandidateDecodePanel({
   busy: boolean;
   onRead: () => void;
 }) {
-  if (!available) return <p className="note">No possible reading exists for this picture under any code declared in advance. That is common and, by itself, tells you little either way.</p>;
+  if (!available) return <p className="note">No possible reading exists for this image under any code declared in advance. That’s common, and on its own tells you little either way.</p>;
   return (
     <>
       <p className="note">
-        For this picture, a possible reading exists. Only the
-        reviewer kind of user may read it; everyone else is
-        refused, and refusals are written into the audit record.
-        Even as a reviewer, treat it strictly as a hypothesis:
-        it is what the pattern <em>would</em> say <em>if</em>{" "}
-        that code had been used. It is not a recovered message.
+        A possible reading exists for this image. Only reviewers may see
+        it, and every refusal is recorded. Treat it as a guess: it’s what
+        the pattern <em>would</em> say <em>if</em> a particular code had
+        been used, not a recovered message.
       </p>
       <p>
         <button type="button" className="button" onClick={onRead} disabled={busy}>
@@ -276,7 +266,7 @@ export default function Review() {
 
   const onLoad = async () => {
     if (!runId.trim()) {
-      setError("Type the session name first. It is the name you chose on the delivery gate page, for example run_live_demo. Held-back pictures only exist after the gate has held one back in that session.");
+      setError("Type the session name first. It’s the name from the delivery gate page, for example run_live_demo.");
       return;
     }
     setBusy(true);
@@ -290,11 +280,11 @@ export default function Review() {
       await refreshAudit(runId.trim());
       setStatusLine(
         next.quarantined.length === 0
-          ? "No pictures are being held back in this session, so there is nothing to review here."
-          : `${next.quarantined.length} held-back picture(s) waiting for your judgement. Choose “Review this picture” on one to begin.`,
+          ? "No images are being held back in this session, so there’s nothing to review."
+          : `${next.quarantined.length} held-back image${next.quarantined.length === 1 ? "" : "s"} waiting for your judgement. Press “Review this image” on one to begin.`,
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That session could not be loaded. What to do: check the session name and try again.");
+      setError(err instanceof ApiError ? err.message : "That session couldn’t be loaded. What to do: check the session name and try again.");
     } finally {
       setBusy(false);
     }
@@ -317,7 +307,7 @@ export default function Review() {
         setOpinionConfig(stored.config);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That picture’s details could not be loaded. What to do: try again in a moment.");
+      setError(err instanceof ApiError ? err.message : "That image’s details couldn’t be loaded. What to do: try again in a moment.");
     } finally {
       setBusy(false);
     }
@@ -332,7 +322,7 @@ export default function Review() {
       setOpinions((prev) => [...prev, record]);
       setStatusLine(
         record.status === "available"
-          ? "Second opinion recorded below (advice only — it does not change any decision)."
+          ? "Second opinion recorded below (advice only: it doesn’t change any decision)."
           : `No usable second opinion was obtained (${humanizeKey(record.status).toLowerCase()}). That is not an all-clear; judge from the check results.`,
       );
     } catch (err) {
@@ -359,14 +349,14 @@ export default function Review() {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setOriginalUrl(objectUrl);
-        setOriginalNote("This is the original picture, opened for you through the reviewers-only path. This opening has been written into the audit record at the bottom.");
+        setOriginalNote("This is the original image, opened through the reviewers-only route. This opening has been recorded.");
       })
       .catch((err: unknown) => {
         if (!cancelled) {
           setOriginalNote(
             err instanceof ApiError
-              ? `You are not allowed to open the original as this kind of user (the server refused with ${err.status}). What to do: pretend to be a researcher or reviewer above. The refusal itself has been written into the audit record.`
-              : "The original picture could not be opened just now. What to do: try again in a moment.",
+              ? `You’re not allowed to open the original as this role (the server refused with ${err.status}). What to do: pick Reviewer or Researcher in step 1. The refusal has been recorded.`
+              : "The original couldn’t be opened just now. What to do: try again in a moment.",
           );
         }
       });
@@ -383,13 +373,13 @@ export default function Review() {
     try {
       const result = await fetchCandidateDecode(selectedId, role);
       setDecode(result);
-      setDecodeNote("Shown to reviewers only. Read it with care: this is a possible reading under one code declared in advance — a hypothesis to test, not a recovered message, and not proof that anything was sent.");
+      setDecodeNote("Shown to reviewers only. Read it with care: it’s a possible reading under one code declared in advance, a guess to test, not a recovered message and not proof that anything was sent.");
     } catch (err) {
       setDecode(null);
       setDecodeNote(
         err instanceof ApiError
-          ? `Not allowed while pretending to be a ${role} (the server refused with ${err.status}). Only the reviewer kind of user may read this. What to do: change the kind of user above. This attempt has been written into the audit record.`
-          : "The possible reading could not be obtained just now. What to do: try again in a moment.",
+          ? `Not allowed as a ${role} (the server refused with ${err.status}). Only reviewers may read this. What to do: pick Reviewer in step 1. This attempt has been recorded.`
+          : "The possible reading couldn’t be fetched just now. What to do: try again in a moment.",
       );
     } finally {
       setBusy(false);
@@ -407,12 +397,12 @@ export default function Review() {
         note,
         demonstrated_basis: disposition === "demonstrated_transfer" ? basis : undefined,
       });
-      setStatusLine(`Your judgement has been saved: “${DISPOSITION_LABELS[disposition] ?? disposition}”. It now appears in the table above and in any exported record.`);
+      setStatusLine(`Your judgement has been saved: “${DISPOSITION_LABELS[disposition] ?? disposition}”.`);
       const next = await fetchReviewQueue(runId.trim(), role);
       setQueue(next);
       setDetail(await fetchReviewDetail(selectedId, role));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Your judgement could not be saved. What to do: check your kind of user above (viewer cannot save judgements) and try again.");
+      setError(err instanceof ApiError ? err.message : "Your judgement couldn’t be saved. What to do: pick Reviewer in step 1 (viewers can’t save judgements) and try again.");
     } finally {
       setBusy(false);
       await refreshAudit(runId.trim());
@@ -431,12 +421,12 @@ export default function Review() {
       anchor.download = filename;
       anchor.click();
       URL.revokeObjectURL(url);
-      setStatusLine("Downloaded: a sealed file containing this session’s evidence and your judgements, for keeping or handing to another researcher. “Sealed” means any later change to the file can be detected.");
+      setStatusLine("Downloaded: a sealed file with this session’s evidence and your judgements. “Sealed” means any later change to the file can be detected.");
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? `${err.message} What to do: downloading the record needs the researcher kind of user — change it above and try again.`
-          : "The download could not be prepared. What to do: try again in a moment.",
+          ? `${err.message} What to do: downloading the record needs the Researcher role. Pick it in step 1 and try again.`
+          : "The download couldn’t be prepared. What to do: try again in a moment.",
       );
     } finally {
       setBusy(false);
@@ -448,56 +438,37 @@ export default function Review() {
 
   return (
     <>
-      <h1>Review pictures that were held back</h1>
-      <p>
-        When the delivery gate holds a picture back (“quarantines” it),
-        the recipient never sees it — but a person must still judge
-        whether holding it back was right. That is your job on this page:
-        open each held-back original, look at what the checks found, and
-        record your judgement. The scores help you judge; they are never
-        a decoded message and never proof that anyone secretly
-        communicated.
+      <h1>Review held-back images</h1>
+      <p className="lede">
+        When the gate holds an image back, the other agent never sees it.
+        A person then decides what it really was. Load a session, look at
+        each held-back image, and record what you think.
       </p>
-      <StartSteps heading="How reviewing works">
-        <li>Pick the kind of user you are acting as, and type the session name from the delivery gate page.</li>
-        <li>Load the held-back pictures and open one. You will see the original picture and the check results for it.</li>
-        <li>Record your judgement for that picture (for example “looks harmless” or “suspicious, but not proven”). Optionally ask a second AI model for its view first.</li>
-        <li>If you need a copy for your records, download the sealed evidence file for the session.</li>
-      </StartSteps>
 
-      <section className="card" aria-labelledby="review-role-heading">
-        <h2 id="review-role-heading">Who are you acting as, and which session?</h2>
-        <p className="note">
-          This picker is a Demo role control: for the demonstration you
-          choose the kind of user. It is not a real sign-in, and anyone
-          can pick any kind. What each kind may
-          do is set by the server, and everything opened is written into
-          the audit record at the bottom of this page, including refusals.
-          Try acting as a viewer first to see a refusal happen.
-        </p>
-        <RoleControl role={role} onChange={setRole} disabled={busy} />
+      <section className="card step" aria-labelledby="review-role-heading">
+        <h2 id="review-role-heading">Step 1 — Choose a session</h2>
+        <RoleControl
+          role={role}
+          onChange={setRole}
+          disabled={busy}
+          hint="Demo role: pick Reviewer to open images and record judgements."
+        />
         <div className="form-grid">
           <label>
-            Session name (run ID)
+            Session name
             <input
               type="text"
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               placeholder="run_live_demo"
             />
-            <span className="note">The exact name used on the delivery gate page. Nothing to review yet? Hold a picture back there first (decision: “Hold the image back for review”).</span>
+            <span className="note">The name from the delivery gate page, for example run_live_demo.</span>
           </label>
         </div>
         <p>
           <button type="button" className="button button-primary" onClick={onLoad} disabled={busy}>
-            Show held-back pictures in this session
-          </button>{" "}
-          <button type="button" className="button" onClick={onExport} disabled={busy || !runId.trim()}>
-            Download the sealed evidence record for this session
+            Show held-back images
           </button>
-          {!runId.trim() && (
-            <span className="note"> Type the session name first to enable the download. Downloading needs the researcher kind of user.</span>
-          )}
         </p>
       </section>
 
@@ -508,121 +479,85 @@ export default function Review() {
 
       {queue && (
         <section aria-labelledby="review-queue-heading">
-          <h2 id="review-queue-heading">Pictures waiting for your judgement</h2>
+          <h2 id="review-queue-heading">Step 2 — Pick an image</h2>
           {queue.quarantined.length === 0 ? (
-            <p className="note">Nothing is being held back in this session, so there is nothing to review. What to do: on the delivery gate page, send a picture and apply the decision “Hold the image back for review”, then come back here.</p>
+            <p className="note">Nothing is being held back in this session, so there’s nothing to review. What to do: on the delivery gate page, send an image and choose “Hold the image back for review”, then come back.</p>
           ) : (
-            <QueueTable
-              queue={queue}
-              selectedId={selectedId}
-              busy={busy}
-              onSelect={onSelect}
-            />
+            <QueueTable queue={queue} selectedId={selectedId} busy={busy} onSelect={onSelect} />
           )}
         </section>
       )}
 
       {detail && (
-        <div className="card-grid card-grid-2">
+        <div className="card-grid card-grid-2 card-grid-top">
           <section className="card" aria-labelledby="review-original-heading">
-            <h2 id="review-original-heading">The original picture</h2>
+            <h2 id="review-original-heading">The held-back image</h2>
             {originalUrl ? (
               <>
-                <img className="skyline-img" src={originalUrl} alt="The held-back original picture, opened for your review" />
+                <img className="skyline-img" src={originalUrl} alt="The held-back original image, opened for your review" />
                 <p className="note">{originalNote}</p>
               </>
             ) : (
-              <p className="note">{originalNote || "Opening the original picture…"}</p>
+              <p className="note">{originalNote || "Opening the original image…"}</p>
             )}
-            <dl className="kv kv-wide">
-              <div><dt>Where it stands now</dt><dd title={detail.state}>{gateStateLabel(detail.state)}</dd></div>
-              <div><dt>Gate decision</dt><dd title={detail.verdict ?? undefined}>{detail.verdict ? verdictLabel(detail.verdict) : "—"}</dd></div>
-              <div><dt>Your judgement so far</dt><dd title={detail.disposition}>{DISPOSITION_LABELS[detail.disposition] ?? detail.disposition}</dd></div>
-            </dl>
-            <TechDetails summary="File fingerprint (for matching this exact file later)">
-              <p className="note hash-line">{detail.content_hash}</p>
-            </TechDetails>
-            <h3>What the checks found (evidence to help you judge)</h3>
-            {findings.length === 0 ? (
-              <p className="note">No check results are recorded for this picture, so judge from the picture and its history alone — and treat “no results” as “not checked”, not “all clear”.</p>
-            ) : (
-              <ul className="tight">
-                {findings.map((f, i) => (
-                  <li key={i}>
-                    {FAMILY_LABELS[f.family] ?? f.family}: score{" "}
-                    {f.score.toFixed(3)} out of 1 (checked by{" "}
-                    {f.detector_name} version {f.detector_version})
-                  </li>
-                ))}
-              </ul>
-            )}
-            {detail.geometric?.classification && (
-              <p className="note">
-                Shape-pattern result:{" "}
-                {classificationLabel(detail.geometric.classification)} (
-                {detail.geometric.signal_grade ?? "—"}).{" "}
-                {classificationMeaning(detail.geometric.classification)}
-              </p>
-            )}
+            <p>
+              Gate decision:{" "}
+              <span title={detail.verdict ?? undefined}>
+                <VerdictLight verdict={detail.verdict} label={detail.verdict ? undefined : "none"} />
+              </span>
+            </p>
+            <p>
+              Your judgement so far:{" "}
+              <strong title={detail.disposition}>{DISPOSITION_LABELS[detail.disposition] ?? detail.disposition}</strong>
+            </p>
           </section>
 
-          <section className="card" aria-labelledby="review-decide-heading">
-            <h2 id="review-decide-heading">A possible reading, and your judgement</h2>
-            <h3>What would the pattern say, under a code declared in advance? (candidate decode)</h3>
-            <CandidateDecodePanel
-              available={detail.has_candidate_decode}
-              decode={decode}
-              note={decodeNote}
-              role={role}
-              busy={busy}
-              onRead={onDecode}
-            />
-
-            <h3>Your judgement (called a “disposition”)</h3>
-            <p className="note">
-              Choose how this picture should be recorded. Your choice is
-              saved with your name and appears in the session’s records.
-              It does not re-deliver the picture to the recipient.
-            </p>
-            <div className="form-grid">
-              <label>
-                Your judgement
-                <select value={disposition} onChange={(e) => setDisposition(e.target.value)} disabled={busy}>
-                  {DISPOSITIONS.map((d) => (
-                    <option key={d} value={d}>{DISPOSITION_LABELS[d] ?? d}</option>
-                  ))}
-                </select>
-                <span className="note">{DISPOSITION_MEANINGS[disposition]}</span>
-              </label>
-              <label>
-                Note for the record (optional)
-                <input type="text" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} />
-              </label>
-            </div>
+          <section className="card step" aria-labelledby="review-decide-heading">
+            <h2 id="review-decide-heading">Step 3 — Record your judgement</h2>
+            <fieldset>
+              <legend>What do you think this image is?</legend>
+              <div className="choice-list choice-list-wide">
+                {DISPOSITIONS.map((d) => (
+                  <label key={d} className={disposition === d ? "choice choice-active" : "choice"} title={d}>
+                    <input
+                      type="radio"
+                      name="disposition"
+                      value={d}
+                      checked={disposition === d}
+                      onChange={() => setDisposition(d)}
+                      disabled={busy}
+                    />
+                    <span>
+                      <strong>{DISPOSITION_LABELS[d] ?? d}</strong>
+                      <span className="choice-about">{DISPOSITION_MEANINGS[d]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             {disposition === "demonstrated_transfer" && (
-              <label>
-                Required: what is your independent evidence that hidden information actually got through?
+              <label className="stacked-label">
+                Required: what independent evidence shows the hidden message got through?
                 <input type="text" value={basis} onChange={(e) => setBasis(e.target.value)} disabled={busy} />
                 <span className="note">
-                  For example: the recipient was independently observed
-                  recovering or acting on the hidden content. A score on
-                  its own can never be enough for this judgement. Without
-                  this explanation, saving will be refused.
+                  For example, the other agent was seen recovering or acting on
+                  the hidden content. A score on its own is never enough. Without
+                  this, saving will be refused.
                 </span>
               </label>
             )}
+            <label className="stacked-label">
+              Note for the record (optional)
+              <input type="text" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} />
+            </label>
             <p>
               <button type="button" className="button button-primary" onClick={onDisposition} disabled={busy}>
-                Save my judgement for this picture
-              </button>
-            </p>
-            <p className="note">
-              Who can do what on this page: a viewer cannot save
-              judgements or open originals. Downloading the sealed record
-              needs researcher. Reading a possible reading needs reviewer.
+                Save my judgement
+              </button>{" "}
+              <span className="note">Needs the Reviewer role. Saving doesn’t send the image to the other agent.</span>
             </p>
 
-            <h3>Second opinion from another AI model (optional)</h3>
+            <h3>Want a second opinion? (optional)</h3>
             <SecondOpinionPanel
               opinions={opinions}
               config={opinionConfig}
@@ -633,56 +568,134 @@ export default function Review() {
         </div>
       )}
 
-      {audit && (
-        <section aria-labelledby="review-audit-heading">
-          <h2 id="review-audit-heading">Tamper-evident record of every access (audit chain)</h2>
-          <p className="note">
-            Every opening and every refusal in this session is appended to
-            a record whose entries are chained together with fingerprints,
-            so editing or deleting an entry afterwards can be detected.
-            This record is only shown to researcher and reviewer kinds of
-            user; if you cannot see it, that is why.
-          </p>
-          <dl className="kv kv-wide">
-            <div>
-              <dt>Does the record check out as untampered?</dt>
-              <dd>{audit.chain_valid ? "yes" : "no — it appears to have been altered"}</dd>
-            </div>
-            <div><dt>Recorded entries in this session</dt><dd>{audit.entry_count}</dd></div>
-            <div><dt>Attempts that were refused</dt><dd>{audit.denied}</dd></div>
-          </dl>
-          <TechDetails summary="Latest entry’s fingerprint (head hash)">
-            <p className="note hash-line">{audit.head_hash}</p>
-          </TechDetails>
-          {!audit.chain_valid && (
-            <p className="alert" role="alert">
-              Warning: this audit record does not check out — it may have
-              been altered. Do not rely on it, and tell whoever runs this
-              server.
-            </p>
-          )}
-          {audit.entries.length > 0 && (
-            <div className="table-wrap">
-              <table>
-                <caption>Every recorded access in this session, oldest first. Action and outcome names are the server’s exact terms, written out; the outcome tells you whether the attempt was allowed or refused.</caption>
-                <thead>
-                  <tr><th>Order</th><th>Who</th><th>What they tried to do</th><th>Allowed or refused</th></tr>
-                </thead>
-                <tbody>
-                  {audit.entries.map((e, i) => (
-                    <tr key={i}>
-                      <td className="num">{String(e.seq ?? "")}</td>
-                      <td>{String(e.actor_id ?? "")}</td>
-                      <td title={String(e.action ?? "")}>{humanizeKey(String(e.action ?? ""))}</td>
-                      <td title={String(e.outcome ?? "")}>{humanizeKey(String(e.outcome ?? ""))}</td>
-                    </tr>
+      {audit && <AuditLine audit={audit} />}
+
+      {queue && (
+        <TechnicalBreakdown
+          id="review-breakdown"
+          note="check scores, the possible hidden reading, file fingerprint and the full access record"
+        >
+          {detail && (
+            <>
+              <h2>What the checks found (for the chosen image)</h2>
+              {findings.length === 0 ? (
+                <p className="note">No check results are recorded for this image, so judge from the image and its history alone. Treat “no results” as “not checked”, not “all clear”.</p>
+              ) : (
+                <ul className="tight">
+                  {findings.map((f, i) => (
+                    <li key={i}>
+                      {FAMILY_LABELS[f.family] ?? f.family}: score{" "}
+                      {f.score.toFixed(3)} out of 1 (checked by{" "}
+                      {f.detector_name} version {f.detector_version})
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </ul>
+              )}
+              {detail.geometric?.classification && (
+                <p className="note">
+                  Shape-pattern result:{" "}
+                  {classificationLabel(detail.geometric.classification)} (
+                  {detail.geometric.signal_grade ?? "—"}).{" "}
+                  {classificationMeaning(detail.geometric.classification)}
+                </p>
+              )}
+              <dl className="kv kv-wide">
+                <div><dt>Delivery ID</dt><dd>{detail.delivery_id}</dd></div>
+                <div><dt>Where it stands now</dt><dd title={detail.state}>{gateStateLabel(detail.state)} ({detail.state})</dd></div>
+                <div><dt>Gate decision (exact)</dt><dd>{detail.verdict ?? "—"}</dd></div>
+                <div><dt>Your judgement (exact)</dt><dd>{detail.disposition}</dd></div>
+                <div><dt>File fingerprint</dt><dd className="hash-line">{detail.content_hash}</dd></div>
+              </dl>
+
+              <h2>A possible reading of the pattern (reviewers only)</h2>
+              <CandidateDecodePanel
+                available={detail.has_candidate_decode}
+                decode={decode}
+                note={decodeNote}
+                role={role}
+                busy={busy}
+                onRead={onDecode}
+              />
+            </>
           )}
-        </section>
+
+          {audit && (
+            <>
+              <h2>Tamper-evident record of every access (audit chain)</h2>
+              <p className="note">
+                Every opening and every refusal in this session is added to a
+                record whose entries are chained together with fingerprints,
+                so editing or deleting an entry afterwards can be detected.
+                Only researchers and reviewers can see it.
+              </p>
+              <dl className="kv kv-wide">
+                <div>
+                  <dt>Does the record check out as untampered?</dt>
+                  <dd>{audit.chain_valid ? "yes" : "no — it appears to have been altered"}</dd>
+                </div>
+                <div><dt>Recorded entries in this session</dt><dd>{audit.entry_count}</dd></div>
+                <div><dt>Attempts that were refused</dt><dd>{audit.denied}</dd></div>
+                <div><dt>Latest entry’s fingerprint (head hash)</dt><dd className="hash-line">{audit.head_hash}</dd></div>
+              </dl>
+              {audit.entries.length > 0 && (
+                <div className="table-wrap">
+                  <table>
+                    <caption>Every recorded access in this session, oldest first, in the server’s exact terms (written out).</caption>
+                    <thead>
+                      <tr><th>Order</th><th>Who</th><th>What they tried to do</th><th>Allowed or refused</th></tr>
+                    </thead>
+                    <tbody>
+                      {audit.entries.map((e, i) => (
+                        <tr key={i}>
+                          <td className="num">{String(e.seq ?? "")}</td>
+                          <td>{String(e.actor_id ?? "")}</td>
+                          <td title={String(e.action ?? "")}>{humanizeKey(String(e.action ?? ""))}</td>
+                          <td title={String(e.outcome ?? "")}>{humanizeKey(String(e.outcome ?? ""))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          <h2>Keep a copy</h2>
+          <p>
+            <button type="button" className="button" onClick={onExport} disabled={busy || !runId.trim()}>
+              Download the sealed evidence record
+            </button>{" "}
+            <span className="note">
+              A file with this session’s evidence and judgements, for your
+              records. Needs the Researcher role.
+            </span>
+          </p>
+          <p className="note">
+            Who can do what here: viewers can’t open originals or save
+            judgements; only reviewers can read a possible hidden reading;
+            downloading the record needs Researcher.
+          </p>
+        </TechnicalBreakdown>
       )}
     </>
+  );
+}
+
+// The audit chain's verdict, as one plain line.
+export function AuditLine({ audit }: { audit: ReviewAudit }) {
+  return audit.chain_valid ? (
+    <p className="safety-line" data-testid="audit-line" data-light="green">
+      <LightDot light="green" />
+      <span>
+        <strong>Record check passed:</strong> this session’s access record
+        hasn’t been tampered with ({audit.entry_count}{" "}
+        {audit.entry_count === 1 ? "entry" : "entries"}, {audit.denied} refused).
+      </span>
+    </p>
+  ) : (
+    <p className="alert" role="alert" data-testid="audit-line">
+      Warning: this session’s access record doesn’t check out. It may have
+      been altered. Don’t rely on it, and tell whoever runs this server.
+    </p>
   );
 }

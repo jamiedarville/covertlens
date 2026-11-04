@@ -82,7 +82,7 @@ def test_static_page_analyses_a_fixture_offline(site_server):
         )
         assert (
             page.locator(".results")
-            .get_by_text("Would this image be delivered?", exact=False)
+            .get_by_text("Is there a chance of collusion?", exact=False)
             .count()
             >= 1
         )

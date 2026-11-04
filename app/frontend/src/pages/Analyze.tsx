@@ -11,18 +11,48 @@ import {
 import { DecisionPanel, EvidenceTables, FamilyCards } from "../components/Results";
 import { Overlay } from "../components/Overlay";
 import { TechDetails } from "../components/Help";
+import { SimpleResult, notCheckedMessage } from "../components/TrafficLight";
 
 function statusMessage(payload: AnalyzePayload): string {
-  switch (payload.status) {
-    case "parsed":
-      return "Check finished. Read the decision first, then what each check found.";
-    case "oversized":
-      return `This image was not checked: it is too large to check safely${payload.detail ? ` (${payload.detail})` : ""}. “Not checked” is not the same as “all clear”. What to do: try a smaller copy of the image.`;
-    case "timeout":
-      return "This image was not fully checked: the check took too long and was stopped. “Not checked” is not the same as “all clear”. What to do: try a smaller or simpler image.";
-    default:
-      return `This file could not be checked (the checker reported: ${payload.status}). “Not checked” is not the same as “all clear”. What to do: use an ordinary PNG or JPEG picture.`;
-  }
+  return payload.status === "parsed" && payload.decision
+    ? "Done. Your result is below."
+    : notCheckedMessage(payload);
+}
+
+// Everything behind the traffic lights, for specialists: the exact
+// decision, per-check scores, shape measurements and raw evidence.
+function TechnicalEvidence({
+  payload,
+  previewUrl,
+  label,
+}: {
+  payload: AnalyzePayload;
+  previewUrl: string | null;
+  label: string;
+}) {
+  return (
+    <section className="technical-evidence" aria-labelledby="technical-heading">
+      <h2 id="technical-heading">Technical evidence (for specialists)</h2>
+      <p className="note">
+        The exact scores and measurements behind the colours above. You
+        don’t need any of this to understand the result. No hidden message
+        is ever read out (“decoded”) on this page.
+      </p>
+      {payload.analysis?.content_hash && (
+        <TechDetails summary="File fingerprint (for matching this exact file later)">
+          <p className="note hash-line">
+            {payload.analysis.content_hash} — a fingerprint computed from the
+            file’s exact contents. Changing even one byte produces a
+            different fingerprint, so this result is tied to this exact file.
+          </p>
+        </TechDetails>
+      )}
+      {payload.decision && <DecisionPanel decision={payload.decision} />}
+      <FamilyCards payload={payload} />
+      <Overlay geometric={payload.geometric} imageUrl={previewUrl} imageLabel={label} />
+      <EvidenceTables payload={payload} />
+    </section>
+  );
 }
 
 // Where analysis runs (CL-66): the server API by default, or Pyodide in
@@ -72,6 +102,70 @@ export function exampleLabel(entry: FixtureEntry): string {
   return `${place ? `${place} — ` : ""}${kind} (example …${short.slice(0, 6)})`;
 }
 
+// The result: the plain traffic-light answer first, then a link that
+// opens the technical evidence for specialists.
+export function ResultView({
+  payload,
+  label,
+  previewUrl,
+  showTechnical,
+  onToggleTechnical,
+}: {
+  payload: AnalyzePayload;
+  label: string;
+  previewUrl: string | null;
+  showTechnical: boolean;
+  onToggleTechnical: () => void;
+}) {
+  const parsed = payload.status === "parsed" && payload.analysis;
+  return (
+    <>
+      <h2>Result for {label || "your image"}</h2>
+      {parsed && (
+        <p className="note">
+          {payload.analysis?.media_kind.toUpperCase()} image
+          {payload.analysis?.image?.width
+            ? `, ${payload.analysis.image.width} × ${payload.analysis.image.height} pixels`
+            : ""}
+          .
+        </p>
+      )}
+      <SimpleResult payload={payload} />
+      {parsed ? (
+        <>
+          <p className="technical-toggle">
+            <button
+              type="button"
+              className="link-button"
+              aria-expanded={showTechnical}
+              aria-controls="technical-evidence"
+              onClick={onToggleTechnical}
+            >
+              {showTechnical ? "Hide the technical evidence" : "See the technical evidence"}
+            </button>
+            <span className="note">
+              {" "}
+              — the scores, measurements and charts behind these colours, for specialists.
+            </span>
+          </p>
+          <div id="technical-evidence" hidden={!showTechnical}>
+            {showTechnical && (
+              <TechnicalEvidence payload={payload} previewUrl={previewUrl} label={label || "Checked image"} />
+            )}
+          </div>
+        </>
+      ) : (
+        <TechDetails summary="Technical details (for specialists)">
+          <p className="note">
+            Status reported by the checker: <span className="mono">{payload.status}</span>
+            {payload.detail ? ` (${payload.detail})` : ""}.
+          </p>
+        </TechDetails>
+      )}
+    </>
+  );
+}
+
 export const serverEngine: AnalyzeEngine = {
   analyze: (file) => analyzeFile(file),
   listExamples: listFixtures,
@@ -89,7 +183,18 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
   const [dragging, setDragging] = useState(false);
   const [fixtures, setFixtures] = useState<FixtureEntry[] | null>(null);
   const [fixtureChoice, setFixtureChoice] = useState<string>("");
+  const [showTechnical, setShowTechnical] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  const toggleTechnical = () => {
+    const opening = !showTechnical;
+    setShowTechnical(opening);
+    if (opening) {
+      requestAnimationFrame(() =>
+        document.getElementById("technical-heading")?.scrollIntoView({ block: "start" }),
+      );
+    }
+  };
 
   useEffect(() => {
     const preload = engine.serverHandoffs ? takePreload() : null;
@@ -97,7 +202,7 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
       setPayload(preload.payload);
       setPreviewUrl(preload.imageUrl);
       setResultLabel(preload.label);
-      setStatusLine(`Showing the ready-made example from the home page: ${preload.label}. Its measurements are drawn on the picture below.`);
+      setStatusLine(`Showing the example from the home page: ${preload.label}.`);
     }
     let cancelled = false;
     engine
@@ -127,7 +232,8 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
   const run = async (file: File, label: string) => {
     setBusy(true);
     setError(null);
-    setStatusLine(`Checking ${label}… all four checks are running on the file exactly as you provided it.`);
+    setShowTechnical(false);
+    setStatusLine(`Checking ${label}… this usually takes a few seconds.`);
     setPreviewUrl(await readPreview(file));
     try {
       const result = await engine.analyze(file, setStatusLine);
@@ -139,7 +245,7 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
       const message =
         err instanceof ApiError
           ? err.message
-          : "The check could not be completed. What to do: check your connection, then try the same image again.";
+          : "The check couldn’t be finished. What to do: check your internet connection, then try the same image again.";
       setError(message);
       setStatusLine(message);
     } finally {
@@ -177,13 +283,13 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
     if (!file) return;
     const okType = ["image/png", "image/jpeg"].includes(file.type) || /\.(png|jpe?g)$/i.test(file.name);
     if (!okType) {
-      setError("That file type cannot be checked here. What to do: choose a PNG or JPEG picture (file names ending in .png, .jpg or .jpeg).");
+      setError("That type of file can’t be checked. What to do: choose a PNG or JPEG image (a file name ending in .png, .jpg or .jpeg).");
       setStatusLine("Please choose a PNG or JPEG image.");
       return;
     }
     if (engine.maxBytes !== undefined && file.size > engine.maxBytes) {
       const limit = `${Math.round(engine.maxBytes / (1024 * 1024))} MiB`;
-      setError(`That file is larger than this page's ${limit} limit, so it was not checked. What to do: export a smaller copy and try again.`);
+      setError(`That file is bigger than this page’s ${limit} limit, so it wasn’t checked. What to do: save a smaller copy and try again.`);
       setStatusLine(`That file is larger than this page's ${limit} limit.`);
       return;
     }
@@ -208,21 +314,19 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
     }
   };
 
-  const parsed = payload?.status === "parsed" && payload.analysis;
-
   return (
     <>
-      <h1>Check an image for hidden information</h1>
-      <p>
-        Add a PNG or JPEG picture below. CovertLens runs its four checks on
-        the file exactly as you provide it (nothing is resized or converted
-        first), then explains — in this order — whether the image would be
-        delivered, what each check found, and the measurements behind it.
+      <h1>Check an image for hidden messages</h1>
+      <p className="lede">
+        AI agents sometimes send each other images. CovertLens checks
+        whether an image might be secretly carrying a message from one
+        agent to another, a sign the agents may be working together
+        behind the scenes. This is called <strong>collusion</strong>.
       </p>
       <p>
-        Two things to know first: a high score is evidence to look closer,
-        never proof that someone hid something; and this page never tries
-        to read out (“decode”) any hidden message.
+        Add an image below and you’ll get a simple answer:{" "}
+        <strong>green</strong>, <strong>orange</strong> or{" "}
+        <strong>red</strong>, with each colour explained.
       </p>
       {engine.notice}
 
@@ -239,15 +343,15 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
           takeFile(e.dataTransfer.files[0]);
         }}
       >
-        <p className="dropzone-title">Drag and drop a PNG or JPEG picture here</p>
+        <p className="dropzone-title">Drag and drop an image here</p>
         <p>
           <label className="button button-primary" htmlFor="file-input">
             Choose an image to check
-          </label>{" "}
-          <span className="note">
-            The check starts straight away — there is no separate “upload”
-            step. Only PNG and JPEG pictures are accepted.
-          </span>
+          </label>
+        </p>
+        <p className="note">
+          PNG or JPEG images only. The check starts as soon as you choose
+          an image.
         </p>
         <input
           id="file-input"
@@ -268,16 +372,14 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
           void runExample();
         }}
       >
-        <label htmlFor="fixture-select">
-          No image handy? Check a ready-made example instead
-        </label>
+        <label htmlFor="fixture-select">No image handy? Try one of ours:</label>
         <select
           id="fixture-select"
           value={fixtureChoice}
           onChange={(e) => setFixtureChoice(e.target.value)}
           disabled={busy}
         >
-          <option value="">{fixtures === null ? "Loading the list of examples…" : "Choose an example…"}</option>
+          <option value="">{fixtures === null ? "Loading the examples…" : "Choose an example…"}</option>
           {(fixtures ?? []).map((entry) => (
             <option key={entry.fixture_id} value={entry.fixture_id}>
               {exampleLabel(entry)}
@@ -288,22 +390,18 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
           Check this example
         </button>
         {!fixtureChoice && !busy && (
-          <span className="note">Choose an example from the list first — then this button becomes available.</span>
+          <span className="note">Pick an example from the list first, then press the button.</span>
         )}
         {fixtures !== null && fixtures.length === 0 && (
-          <span className="note">The example list could not be loaded. You can still check your own image above.</span>
+          <span className="note">The examples couldn’t be loaded. You can still check your own image above.</span>
         )}
       </form>
       {!payload && !busy && (
-        <p className="note">
-          Nothing has been checked yet. When you add an image, the result
-          will appear here, starting with whether the image would be
-          delivered.
-        </p>
+        <p className="note">Nothing has been checked yet. Your result will appear here.</p>
       )}
 
       <p role="status" aria-live="polite" className="status-line">
-        {busy ? statusLine || "Checking your image… larger pictures can take a little while." : statusLine}
+        {busy ? statusLine || "Checking your image… larger images can take a little while." : statusLine}
       </p>
       {error && (
         <p className="alert" role="alert">
@@ -313,38 +411,13 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
 
       {payload && (
         <div ref={resultsRef} tabIndex={-1} className="results">
-          <h2>Result for {resultLabel || "your image"}</h2>
-          {!parsed ? (
-            <p className="alert" role="alert">{statusMessage(payload)}</p>
-          ) : (
-            <>
-              <p className="note">
-                {payload.analysis?.media_kind.toUpperCase()} picture
-                {payload.analysis?.image?.width
-                  ? `, ${payload.analysis.image.width} pixels wide × ${payload.analysis.image.height} pixels tall`
-                  : ""}
-                .
-              </p>
-              {payload.analysis?.content_hash && (
-                <TechDetails summary="File fingerprint (for matching this exact file later)">
-                  <p className="note hash-line">
-                    {payload.analysis.content_hash} — a fingerprint computed
-                    from the file’s exact contents. Changing even one byte
-                    produces a different fingerprint, so this result is tied
-                    to this exact file.
-                  </p>
-                </TechDetails>
-              )}
-              {payload.decision && <DecisionPanel decision={payload.decision} />}
-              <FamilyCards payload={payload} />
-              <Overlay
-                geometric={payload.geometric}
-                imageUrl={previewUrl}
-                imageLabel={resultLabel || "Analyzed image"}
-              />
-              <EvidenceTables payload={payload} />
-            </>
-          )}
+          <ResultView
+            payload={payload}
+            label={resultLabel}
+            previewUrl={previewUrl}
+            showTechnical={showTechnical}
+            onToggleTechnical={toggleTechnical}
+          />
         </div>
       )}
     </>

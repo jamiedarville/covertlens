@@ -7,11 +7,77 @@
 // with trace.read (researcher or reviewer, CL-78).
 
 import { useState } from "react";
-import type { TraceView } from "../types";
+import type { TraceDelivery, TraceView } from "../types";
 import { ApiError, fetchTraceRun } from "../api";
 import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
 import { humanizeKey, verdictLabel } from "../format";
+import { TechnicalBreakdown } from "../components/Help";
+import { LightDot, VerdictLight } from "../components/TrafficLight";
+
+// One plain sentence per image. Later actions are only ever possible
+// links: the trace never claims causation.
+export function whatHappened(d: TraceDelivery): string {
+  if (!d.delivered) {
+    switch (d.verdict?.verdict) {
+      case "fail_run":
+        return "Held back, and the session was stopped. The other agent never saw it.";
+      case "quarantine":
+        return "Held back. The other agent never saw it.";
+      default:
+        return "Not delivered: no decision to let it through is on record.";
+    }
+  }
+  const opened =
+    d.parse.linkage === "linked"
+      ? "Delivered, and the other agent opened it."
+      : "Delivered. There’s no record of the other agent opening it.";
+  const n = d.next_actions.length;
+  if (n === 0) return opened;
+  return `${opened} Afterwards, the other agent took ${n} action${n === 1 ? "" : "s"} that came after this image. That’s only a possible link, not proof of a connection.`;
+}
+
+export function TimelineSummary({ view }: { view: TraceView }) {
+  const total = view.deliveries.length;
+  const delivered = view.deliveries.filter((d) => d.delivered).length;
+  const held = total - delivered;
+  const repeated = view.weak_signals.repeated_senders;
+  return (
+    <section aria-labelledby="trace-summary-heading">
+      <h2 id="trace-summary-heading">What happened</h2>
+      <p className="summary-line">
+        <strong>{total}</strong> image{total === 1 ? "" : "s"} sent ·{" "}
+        <strong>{delivered}</strong> delivered · <strong>{held}</strong> not delivered
+      </p>
+      <ol className="timeline">
+        {view.deliveries.map((d, i) => (
+          <li key={d.delivery_id} className="timeline-item">
+            <p className="item-name" title={d.delivery_id}>
+              Image {i + 1}: {d.sender_id ?? "unknown sender"} → {d.recipient_id ?? "unknown recipient"}
+            </p>
+            <p title={d.verdict?.verdict ?? undefined}>
+              <VerdictLight
+                verdict={d.verdict?.verdict}
+                label={d.verdict?.verdict ? undefined : "No decision on record"}
+              />
+            </p>
+            <p>{whatHappened(d)}</p>
+          </li>
+        ))}
+      </ol>
+      {repeated.length > 0 && (
+        <p className="result-pill result-orange" data-light="orange">
+          <LightDot light="orange" />
+          <span>
+            <strong>Worth a look:</strong> {repeated.join(", ")} kept sending
+            images with small warning signs. That’s a hint where to look first,
+            not proof of anything.
+          </span>
+        </p>
+      )}
+    </section>
+  );
+}
 
 export default function Trace() {
   const [runId, setRunId] = useState("");
@@ -23,7 +89,7 @@ export default function Trace() {
 
   const onLoad = async () => {
     if (!runId.trim()) {
-      setError("Type the session name first. It is the name you chose on the “Delivery gate (live)” page, for example run_live_demo. If you have not run the gate yet, do that first — this page only looks back at what already happened.");
+      setError("Type the session name first. It’s the name from the delivery gate page, for example run_live_demo.");
       return;
     }
     setBusy(true);
@@ -33,16 +99,16 @@ export default function Trace() {
       setView(next);
       setStatusLine(
         next.deliveries.length === 0
-          ? "No pictures have been sent in this session yet, so there is no timeline to show. Send one on the delivery gate page first."
-          : `Timeline loaded: ${next.deliveries.length} picture${next.deliveries.length === 1 ? "" : "s"} sent in session “${next.run_id}”. Read the table from left to right: what was sent, what was decided, and whether the recipient ever saw it.`,
+          ? "No images have been sent in this session yet, so there’s no timeline. Send one on the delivery gate page first."
+          : `Timeline for session “${next.run_id}” is below.`,
       );
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 403
-          ? `Not allowed while pretending to be a ${role}: reading a session’s timeline needs researcher or reviewer. What to do: change the kind of user below and try again.`
+          ? `Not allowed as a ${role}: timelines need Researcher or Reviewer. What to do: change “Who are you in this demo?” and try again.`
           : err instanceof ApiError
             ? err.message
-            : "The timeline could not be loaded. What to do: check the session name and try again.",
+            : "The timeline couldn’t be loaded. What to do: check the session name and try again.",
       );
     } finally {
       setBusy(false);
@@ -54,47 +120,35 @@ export default function Trace() {
 
   return (
     <>
-      <h1>Timeline of what happened in one session</h1>
-      <p>
-        Use this page after running the delivery gate. It puts one whole
-        session (a “run”) in order: each picture that was sent, the
-        decision taken on it, whether the recipient ever opened it, and
-        what the recipient did afterwards. It is the page to use when you
-        ask “so what actually happened, step by step?”
-      </p>
-      <p className="note">
-        When something expected is missing — for example, a held-back
-        picture was never opened by the recipient — the table says so and
-        gives the reason. Gaps are shown, never quietly hidden. One
-        caution: where this page links a recipient’s later action to a
-        picture, it only means the picture <em>could have been seen
-        before</em> that action. It never claims the picture{" "}
-        <em>caused</em> the action.
+      <h1>Timeline of a session</h1>
+      <p className="lede">
+        See what happened in one session, step by step: which images were
+        sent, what was decided, and whether the other agent saw them.
       </p>
 
-      <section className="card" aria-labelledby="trace-run-heading">
-        <h2 id="trace-run-heading">Which session do you want to look back at?</h2>
+      <section className="card step" aria-labelledby="trace-run-heading">
+        <h2 id="trace-run-heading">Choose a session</h2>
+        <RoleControl
+          role={role}
+          onChange={setRole}
+          disabled={busy}
+          hint="Pick Researcher or Reviewer: viewers can’t see timelines."
+        />
         <div className="form-grid">
           <label>
-            Session name (run ID)
+            Session name
             <input
               type="text"
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               placeholder="run_live_demo"
             />
-            <span className="note">The exact name you used on the delivery gate page, for example run_live_demo. New here? Run the gate first, then come back with that name.</span>
+            <span className="note">The name from the delivery gate page, for example run_live_demo.</span>
           </label>
         </div>
-        <RoleControl
-          role={role}
-          onChange={setRole}
-          disabled={busy}
-          hint="For this page: reading a timeline needs researcher or reviewer. As viewer you will be refused."
-        />
         <p>
           <button type="button" className="button button-primary" onClick={onLoad} disabled={busy}>
-            Show this session’s timeline
+            Show the timeline
           </button>
         </p>
       </section>
@@ -104,6 +158,13 @@ export default function Trace() {
         <p className="alert" role="alert">{error}</p>
       )}
 
+      {view && view.deliveries.length > 0 && <TimelineSummary view={view} />}
+
+      {view && (
+        <TechnicalBreakdown
+          id="trace-breakdown"
+          note="exact IDs, fingerprints, missing links, who took part and later actions"
+        >
       {view && view.deliveries.length > 0 && (
         <section aria-labelledby="trace-deliveries-heading">
           <h2 id="trace-deliveries-heading">Pictures sent, and what happened to each</h2>
@@ -320,6 +381,8 @@ export default function Trace() {
             </div>
           )}
         </section>
+      )}
+        </TechnicalBreakdown>
       )}
     </>
   );

@@ -10,12 +10,14 @@ import {
   fmtExact,
   fmtScore,
   humanizeKey,
+  lightForVerdict,
   scoreMeaning,
   verdictLabel,
   verdictMeaning,
 } from "../format";
 import { ScoreBar } from "./Charts";
 import { TechDetails } from "./Help";
+import { LightDot } from "./TrafficLight";
 
 const FAMILY_ORDER = ["spatial_lsb", "jpeg_dct", "metadata", "geometric"];
 
@@ -40,7 +42,8 @@ function FamilyCard({
       <div className="card-head">
         <h3>{label}</h3>
         {verdict && (
-          <span className="chip" title={`verdict: ${verdict}`}>
+          <span className="chip verdict-light" title={`verdict: ${verdict}`}>
+            <LightDot light={lightForVerdict(verdict)} />
             decision: {verdictLabel(verdict).toLowerCase()}
           </span>
         )}
@@ -185,9 +188,9 @@ export function DecisionPanel({ decision }: { decision: Decision }) {
         <table>
           <caption>
             Each check’s highest score, next to the cut-offs. “Flag” means
-            delivered but marked for attention; “hold back” means the
-            recipient does not get the image; “stop the run” also ends the
-            experiment session.
+            delivered but marked for attention; “hold back” means the other
+            agent doesn’t get the image; “stop the session” also ends the
+            whole session.
           </caption>
           <thead>
             <tr>
@@ -196,7 +199,7 @@ export function DecisionPanel({ decision }: { decision: Decision }) {
               <th scope="col">Are the cut-offs settled (frozen)?</th>
               <th scope="col">Flag for attention at</th>
               <th scope="col">Hold back at</th>
-              <th scope="col">Stop the run at</th>
+              <th scope="col">Stop the session at</th>
               <th scope="col">Decision for this check</th>
             </tr>
           </thead>

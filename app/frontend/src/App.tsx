@@ -25,6 +25,18 @@ function usePath(): [string, (to: string) => void] {
   return [path, navigate];
 }
 
+// Short menu names; each page's heading says the rest.
+export const NAV: { page: string; href: string; label: string; title: string }[] = [
+  { page: "analyze", href: "/analyze", label: "Check an image", title: "Check an image" },
+  { page: "generate", href: "/generate", label: "Make a test image", title: "Make a test image" },
+  { page: "gate", href: "/gate", label: "Delivery gate", title: "Delivery gate" },
+  { page: "review", href: "/review", label: "Review images", title: "Review held-back images" },
+  { page: "trace", href: "/trace", label: "Timeline", title: "Timeline of a session" },
+  { page: "benchmarks", href: "/benchmarks", label: "Accuracy", title: "How accurate is CovertLens?" },
+  { page: "leaderboard", href: "/leaderboard", label: "Leaderboard", title: "Leaderboard" },
+  { page: "scorecard", href: "/scorecard", label: "Release decision", title: "Release decision" },
+];
+
 export default function App() {
   const [path, navigate] = usePath();
   const [versionLine, setVersionLine] = useState<string | null>(null);
@@ -48,24 +60,8 @@ export default function App() {
               : "landing";
 
   useEffect(() => {
-    document.title =
-      page === "analyze"
-        ? "Check an image — CovertLens"
-        : page === "generate"
-          ? "Make a test image — CovertLens"
-          : page === "gate"
-            ? "Watch the delivery gate — CovertLens"
-            : page === "review"
-              ? "Review held-back images — CovertLens"
-              : page === "trace"
-                ? "Timeline of a run — CovertLens"
-                : page === "benchmarks"
-              ? "How accurate are the checks? — CovertLens"
-              : page === "leaderboard"
-              ? "Leaderboard — CovertLens"
-              : page === "scorecard"
-                ? "Release decision — CovertLens"
-                : "CovertLens";
+    const item = NAV.find((n) => n.page === page);
+    document.title = item ? `${item.title} — CovertLens` : "CovertLens";
   }, [page]);
 
   useEffect(() => {
@@ -92,67 +88,21 @@ export default function App() {
         <a className="wordmark" href="/" onClick={go("/")}>
           CovertLens
           <span className="wordmark-tagline">
-            Checks images AI agents send each other for hidden information
+            Checks images AI agents send each other for hidden messages
           </span>
         </a>
         <nav aria-label="Primary">
-          <a
-            href="/analyze"
-            onClick={go("/analyze")}
-            aria-current={page === "analyze" ? "page" : undefined}
-          >
-            Check an image
-          </a>
-          <a
-            href="/generate"
-            onClick={go("/generate")}
-            aria-current={page === "generate" ? "page" : undefined}
-          >
-            Make a test image
-          </a>
-          <a
-            href="/gate"
-            onClick={go("/gate")}
-            aria-current={page === "gate" ? "page" : undefined}
-          >
-            Delivery gate (live)
-          </a>
-          <a
-            href="/review"
-            onClick={go("/review")}
-            aria-current={page === "review" ? "page" : undefined}
-          >
-            Review held-back images
-          </a>
-          <a
-            href="/trace"
-            onClick={go("/trace")}
-            aria-current={page === "trace" ? "page" : undefined}
-          >
-            Timeline of a run
-          </a>
-          <a
-            href="/benchmarks"
-            onClick={go("/benchmarks")}
-            aria-current={page === "benchmarks" ? "page" : undefined}
-          >
-            How accurate is it?
-          </a>
-          <a
-            href="/leaderboard"
-            onClick={go("/leaderboard")}
-            aria-current={page === "leaderboard" ? "page" : undefined}
-          >
-            Leaderboard
-          </a>
-          <a
-            href="/scorecard"
-            onClick={go("/scorecard")}
-            aria-current={page === "scorecard" ? "page" : undefined}
-          >
-            Release decision
-          </a>
-          <a href="/docs">Developer API docs</a>
+          {NAV.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={go(item.href)}
+              aria-current={page === item.page ? "page" : undefined}
+            >
+              {item.label}
+            </a>
+          ))}
+          <a href="/docs">API docs</a>
         </nav>
       </header>
       <main id="main" className="page">
@@ -178,10 +128,10 @@ export default function App() {
       </main>
       <footer className="site-footer">
         <p>
-          A high score is evidence to look closer — it is never, on its own,
-          an accusation that a person or agent did something wrong. An image
-          that was held back is recorded as “not seen by the recipient”, never
-          as a successful hidden transfer.
+          CovertLens results are warning signs, not proof. On their own,
+          they never mean that a person or agent did something wrong. An
+          image that was held back is recorded as “not seen by the
+          recipient”, never as a hidden message that got through.
         </p>
         <p>
           {versionLine ? `${versionLine} · ` : ""}
