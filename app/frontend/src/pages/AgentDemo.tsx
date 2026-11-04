@@ -23,6 +23,8 @@ interface Demo {
     message: string | null;
     request_id: string | null;
   } | null;
+  receiver_attempt?: number;
+  receiver_error?: { code: string; message: string; http_status?: number };
   recovery: "not_observed" | "recovered" | "not_recovered" | "unknown";
 }
 interface Config {
@@ -140,16 +142,23 @@ export default function AgentDemo() {
     });
   }
 
-  async function step(action: "analyze" | "block" | "send") {
+  async function step(action: "analyze" | "block" | "send" | "retry") {
     if (!demo) return;
     const labels = {
       analyze: "Checking the picture…",
       block: "Blocking delivery…",
       send: "Sending the picture and waiting for the receiver…",
+      retry: "Asking the receiver to read the picture again…",
     };
     await perform(labels[action], async () => {
       try {
-        setDemo(await demoRequest<Demo>(`/${demo.id}/${action}`, role, {}));
+        setDemo(
+          await demoRequest<Demo>(
+            `/${demo.id}/${action}`,
+            role,
+            action === "retry" ? { attempt: demo.receiver_attempt ?? 1 } : {},
+          ),
+        );
       } catch (failure) {
         // A provider call can fail after delivery. Restore the saved outcome.
         setDemo(await demoRequest<Demo>(`/${demo.id}`, role));
@@ -387,10 +396,35 @@ export default function AgentDemo() {
               call, start another demo.
             </p>
           ) : demo.state === "receiver_failed" ? (
-            <p>
-              The picture was sent, but the receiver’s answer could not be
-              obtained. Start another demo to try again.
-            </p>
+            <>
+              <p role="alert">
+                {demo.receiver_error?.message ||
+                  "The receiver’s answer could not be obtained. Try the receiver again."}
+              </p>
+              <button
+                className="button button-primary"
+                onClick={() => step("retry")}
+                disabled={!!busy}
+              >
+                Try receiver again
+              </button>
+              <p className="note">
+                This makes another API call using the same picture.
+              </p>
+              <TechDetails summary="Receiver error details">
+                <pre className="demo-json">
+                  {JSON.stringify(
+                    {
+                      error: demo.receiver_error,
+                      receiver: demo.receiver,
+                      attempt: demo.receiver_attempt,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </TechDetails>
+            </>
           ) : (
             <>
               <p>

@@ -142,6 +142,16 @@ class ProviderResponse:
     request_id: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    finish_reason: str | None = None
+
+
+class ProviderRequestError(RuntimeError):
+    """A safe provider failure, without response bodies or credential values."""
+
+    def __init__(self, code: str, message: str, http_status: int | None = None):
+        super().__init__(message)
+        self.code = code
+        self.http_status = http_status
 
 
 class SecondOpinionProvider(Protocol):
@@ -214,8 +224,14 @@ class HttpProvider:
     request header and is never included in an exception.
     """
 
-    def __init__(self, config: SecondOpinionConfig) -> None:
+    def __init__(
+        self,
+        config: SecondOpinionConfig,
+        *,
+        response_schema: dict[str, Any] | None = None,
+    ) -> None:
         self._config = config
+        self._response_schema = response_schema
 
     def complete(
         self, prompt: str, *, images: list[bytes] | None = None
@@ -281,6 +297,15 @@ class HttpProvider:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {config.api_key}",
             }
+        if self._response_schema is not None and config.provider != "anthropic":
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "receiver_answer",
+                    "strict": True,
+                    "schema": self._response_schema,
+                },
+            }
         request = urllib.request.Request(
             url,
             data=json.dumps(payload).encode(),
@@ -290,14 +315,27 @@ class HttpProvider:
         try:
             with urllib.request.urlopen(request, timeout=config.timeout_s) as response:
                 body = json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            # Deliberately omit the error body, which may echo prompts or credentials.
+            raise ProviderRequestError(
+                "api_rejected",
+                f"The agent API rejected the request (HTTP {exc.code}).",
+                http_status=exc.code,
+            ) from None
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            # Never include headers (the key) in the failure.
-            raise RuntimeError(
-                f"second-opinion provider request failed: {exc.__class__.__name__}"
+            if isinstance(exc, TimeoutError) or (
+                isinstance(exc, urllib.error.URLError)
+                and isinstance(exc.reason, TimeoutError)
+            ):
+                raise ProviderRequestError(
+                    "api_timeout", "The agent API did not answer before the time limit."
+                ) from None
+            raise ProviderRequestError(
+                "api_connection", "The server could not connect to the agent API."
             ) from None
         except json.JSONDecodeError:
-            raise RuntimeError(
-                "second-opinion provider returned invalid JSON"
+            raise ProviderRequestError(
+                "api_invalid_response", "The agent API returned an unreadable response."
             ) from None
         if config.provider == "anthropic":
             parts = body.get("content") or []
@@ -311,6 +349,7 @@ class HttpProvider:
                 request_id=body.get("id"),
                 input_tokens=usage.get("input_tokens"),
                 output_tokens=usage.get("output_tokens"),
+                finish_reason=body.get("stop_reason"),
             )
         choices = body.get("choices") or []
         text = ""
@@ -323,6 +362,7 @@ class HttpProvider:
             request_id=body.get("id"),
             input_tokens=usage.get("prompt_tokens"),
             output_tokens=usage.get("completion_tokens"),
+            finish_reason=choices[0].get("finish_reason") if choices else None,
         )
 
 

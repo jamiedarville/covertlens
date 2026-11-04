@@ -133,8 +133,8 @@ def test_failed_receiver_is_not_replayed_on_duplicate_click(demo, monkeypatch):
         raise RuntimeError("offline")
 
     monkeypatch.setattr("app.agent_demo.HttpProvider.complete", unavailable)
-    with pytest.raises(RuntimeError, match="image was sent"):
-        service.decide(created["id"], "send")
+    failed = service.decide(created["id"], "send")
+    assert failed["receiver_error"]["code"] == "receiver_unavailable"
     result = service.decide(created["id"], "send")
     assert result["state"] == "receiver_failed"
     assert result["recovery"] == "unknown"
@@ -153,13 +153,15 @@ def test_demo_api_requires_permission_and_hides_message(demo, monkeypatch):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
+    service, calls = demo
+    monkeypatch.setenv("COVERTLENS_DATA_DIR", str(service.directory.parent))
     from app import main
 
-    service, calls = demo
     monkeypatch.setenv("COVERTLENS_PRECOMPUTE", "off")
     monkeypatch.setenv("COVERTLENS_DEMO_BUILD", "on")
     monkeypatch.setenv("COVERTLENS_DEMO_ROLES", "on")
     monkeypatch.setattr(main, "_agent_demo", lambda: service)
+    monkeypatch.setattr(main, "_rate_windows", {})
     with TestClient(main.app) as client:
         assert (
             client.post("/api/agent-demo", json={"message": "HELLO WORLD"}).status_code
@@ -223,3 +225,163 @@ def test_interrupted_block_is_reconciled_from_the_persistent_gate(demo):
     assert service.load(created["id"])["state"] == "blocked"
     assert service.decide(created["id"], "send")["state"] == "blocked"
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        '{"message":"HELLO WORLD"}',
+        '```json\n{"message":"HELLO WORLD"}\n```',
+        '```\n{"message":"HELLO WORLD"}\n```',
+    ],
+)
+def test_receiver_accepts_plain_and_fenced_json(demo, monkeypatch, reply):
+    service, _ = demo
+    allow_analysis(monkeypatch)
+    created = service.create("house", "HELLO WORLD")
+    service.analyze(created["id"])
+    monkeypatch.setattr(
+        "app.agent_demo.HttpProvider.complete",
+        lambda *args, **kwargs: ProviderResponse(text=reply, model="stub"),
+    )
+    assert service.decide(created["id"], "send")["recovery"] == "recovered"
+
+
+@pytest.mark.parametrize(
+    "reply,finish,code",
+    [
+        ("", "length", "reply_limit"),
+        ('{"message":"HELLO WORLD"}', "length", "reply_limit"),
+        ("not JSON", "stop", "reply_format"),
+        ("{}", "stop", "reply_format"),
+        ("", "content_filter", "reply_declined"),
+    ],
+)
+def test_receiver_failure_is_a_saved_result_instead_of_reload_error(
+    demo, monkeypatch, reply, finish, code
+):
+    service, _ = demo
+    allow_analysis(monkeypatch)
+    created = service.create("house", "HELLO WORLD")
+    service.analyze(created["id"])
+    monkeypatch.setattr(
+        "app.agent_demo.HttpProvider.complete",
+        lambda *args, **kwargs: ProviderResponse(
+            text=reply,
+            model="stub",
+            finish_reason=finish,
+            request_id="req-diagnostic",
+        ),
+    )
+    result = service.decide(created["id"], "send")
+    assert result["state"] == "receiver_failed"
+    assert result["receiver_error"]["code"] == code
+    assert result["receiver"]["request_id"] == "req-diagnostic"
+    assert result["recovery"] == "unknown"
+    assert service.load(created["id"])["receiver_error"] == result["receiver_error"]
+
+
+def test_retry_preserves_delivery_and_deduplicates_failed_attempt(demo, monkeypatch):
+    service, calls = demo
+    allow_analysis(monkeypatch)
+    created = service.create("house", "HELLO WORLD")
+    service.analyze(created["id"])
+    attempts = []
+
+    def unavailable(*args, **kwargs):
+        attempts.append(1)
+        raise TimeoutError("private-data-that-must-not-leak")
+
+    monkeypatch.setattr("app.agent_demo.HttpProvider.complete", unavailable)
+    failed = service.decide(created["id"], "send")
+    assert failed["receiver_attempt"] == 1
+    assert "private-data" not in json.dumps(failed)
+    retried = service.retry_receiver(created["id"], 1)
+    assert retried["receiver_attempt"] == 2
+    service.retry_receiver(created["id"], 1)
+    assert len(attempts) == 2
+    monkeypatch.setattr(
+        "app.agent_demo.HttpProvider.complete",
+        lambda *args, **kwargs: ProviderResponse(
+            text='{"message":"HELLO WORLD"}', model="stub"
+        ),
+    )
+    recovered = service.retry_receiver(created["id"], 2)
+    assert recovered["recovery"] == "recovered"
+    assert recovered["delivery_id"] == created["delivery_id"]
+    assert len(calls) == 1
+    assert service.gate.get_delivery(created["delivery_id"]).state == "permitted"
+
+
+def test_older_failed_demo_without_attempt_count_can_retry_once(demo, monkeypatch):
+    service, _ = demo
+    allow_analysis(monkeypatch)
+    created = service.create("house", "HELLO WORLD")
+    service.analyze(created["id"])
+    record = service.load(created["id"])
+    from covertlens.events import Verdict
+
+    service.gate.record_verdict(created["delivery_id"], Verdict.LOG)
+    record["state"] = "receiver_failed"
+    service.save(record)
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr("app.agent_demo.HttpProvider.complete", unavailable)
+    retried = service.retry_receiver(created["id"], 1)
+    assert retried["receiver_attempt"] == 2
+    assert service.retry_receiver(created["id"], 1)["receiver_attempt"] == 2
+
+
+def test_retry_does_not_release_a_blocked_image(demo):
+    service, calls = demo
+    created = service.create("house", "HELLO WORLD")
+    service.decide(created["id"], "block")
+    assert service.retry_receiver(created["id"], 1)["state"] == "blocked"
+    assert len(calls) == 1
+
+
+def test_api_returns_receiver_failure_and_allows_explicit_retry(demo, monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app import main
+    from covertlens.second_opinion import ProviderRequestError
+
+    service, _ = demo
+    allow_analysis(monkeypatch)
+    monkeypatch.setenv("COVERTLENS_PRECOMPUTE", "off")
+    monkeypatch.setenv("COVERTLENS_DEMO_BUILD", "on")
+    monkeypatch.setenv("COVERTLENS_DEMO_ROLES", "on")
+    monkeypatch.setattr(main, "_agent_demo", lambda: service)
+    monkeypatch.setattr(main, "_rate_windows", {})
+    with TestClient(main.app) as client:
+        headers = {"X-Demo-Role": "researcher"}
+        created = client.post(
+            "/api/agent-demo",
+            json={"scene": "house", "message": "HELLO WORLD"},
+            headers=headers,
+        ).json()
+        path = "/api/agent-demo/" + created["id"]
+        assert (
+            client.post(path + "/analyze", json={}, headers=headers).status_code == 200
+        )
+
+        def rejected(*args, **kwargs):
+            raise ProviderRequestError(
+                "api_rejected", "The agent API rejected the request (HTTP 400).", 400
+            )
+
+        monkeypatch.setattr("app.agent_demo.HttpProvider.complete", rejected)
+        sent = client.post(path + "/send", json={}, headers=headers)
+        assert sent.status_code == 200
+        assert sent.json()["state"] == "receiver_failed"
+        assert sent.json()["receiver_error"]["http_status"] == 400
+        assert "Reload the demo" not in sent.text
+        assert client.post(path + "/retry", json={}, headers=headers).status_code == 400
+        retry = client.post(path + "/retry", json={"attempt": 1}, headers=headers)
+        assert retry.status_code == 200
+        assert retry.json()["receiver_attempt"] == 2
+        duplicate = client.post(path + "/retry", json={"attempt": 1}, headers=headers)
+        assert duplicate.json()["receiver_attempt"] == 2

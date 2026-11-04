@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import threading
 import uuid
@@ -13,7 +14,11 @@ from typing import Any
 from covertlens import ids
 from covertlens.events import ParseStatus, Verdict
 from covertlens.gate import InterceptionContext, InterceptionGate
-from covertlens.second_opinion import HttpProvider, SecondOpinionConfig
+from covertlens.second_opinion import (
+    HttpProvider,
+    ProviderRequestError,
+    SecondOpinionConfig,
+)
 
 from .analysis_worker import analyze_bytes
 from .demo_scene import (
@@ -23,6 +28,8 @@ from .demo_scene import (
     render_scene,
     validate_message,
 )
+
+_log = logging.getLogger(__name__)
 
 
 def agent_config(role: str) -> SecondOpinionConfig:
@@ -41,7 +48,7 @@ def agent_config(role: str) -> SecondOpinionConfig:
             or ""
         ),
         timeout_s=120,
-        max_tokens=2048,
+        max_tokens=8192 if role == "receiver" else 2048,
     )
 
 
@@ -59,8 +66,10 @@ def demo_config() -> dict[str, Any]:
 def completion_json(text: str) -> dict[str, Any]:
     # Some compatible models wrap JSON in a Markdown code block.
     text = text.strip()
-    if text.startswith("```json") and text.endswith("```"):
-        text = text[7:-3].strip()
+    if text.startswith("```") and text.endswith("```"):
+        lines = text.splitlines()
+        if lines[0].strip().lower() in ("```", "```json"):
+            text = "\n".join(lines[1:-1]).strip()
     try:
         value = json.loads(text)
     except json.JSONDecodeError:
@@ -211,40 +220,110 @@ class AgentDemo:
             self.save(record)
             return self._receive(record)
 
+    def retry_receiver(self, demo_id: str, expected_attempt: int) -> dict[str, Any]:
+        with self.lock:
+            record = self.load(demo_id)
+            if record["state"] != "receiver_failed" or expected_attempt != record.get(
+                "receiver_attempt", 1
+            ):
+                return self.public(record)
+            if self.gate.get_delivery(record["delivery_id"]).state != "permitted":
+                raise ValueError("This picture has not been released to the receiver.")
+            record.setdefault("receiver_attempt", 1)
+            record["state"] = "sending"
+            record.pop("receiver_error", None)
+            self.save(record)
+            return self._receive(record)
+
     def _receive(self, record: dict[str, Any]) -> dict[str, Any]:
+        record["receiver_attempt"] = record.get("receiver_attempt", 0) + 1
+        record["receiver"] = None
+        self.save(record)
+        stage = "delivery"
         try:
             data = self.gate.recipient_access(record["delivery_id"])
             self.gate.record_parse(record["delivery_id"], ParseStatus.PARSED)
+            stage = "receiver"
             config = agent_config("receiver")
-            # Fresh model call. The expected message and sender transcript never enter it.
-            response = HttpProvider(config).complete(
+            schema = (
+                {
+                    "type": "object",
+                    "properties": {"message": {"type": ["string", "null"]}},
+                    "required": ["message"],
+                    "additionalProperties": False,
+                }
+                if config.provider == "meta"
+                else None
+            )
+            # The fresh request contains only reading instructions and gate-served bytes.
+            response = HttpProvider(config, response_schema=schema).complete(
                 READING_INSTRUCTIONS, images=[data]
             )
-            answer = completion_json(response.text).get("message")
+            record["receiver"] = {
+                "message": None,
+                "model": response.model,
+                "request_id": response.request_id,
+                "finish_reason": response.finish_reason,
+                "output_tokens": response.output_tokens,
+            }
+            if response.finish_reason in ("length", "max_tokens"):
+                raise ProviderRequestError(
+                    "reply_limit",
+                    "The receiver ran out of reply space before finishing its answer.",
+                )
+            if response.finish_reason == "content_filter":
+                raise ProviderRequestError(
+                    "reply_declined", "The receiver declined to answer this request."
+                )
+            stage = "reply"
+            parsed = completion_json(response.text)
+            if "message" not in parsed:
+                raise ValueError("Missing message field")
+            answer = parsed["message"]
             if answer is not None and (
                 not isinstance(answer, str) or len(answer) > 100
             ):
-                raise ValueError(
-                    "The receiver's answer could not be read. Start another demo."
-                )
-            record["receiver"] = {
-                "message": answer,
-                "model": response.model,
-                "request_id": response.request_id,
-            }
+                raise ValueError("Invalid message field")
+            record["receiver"]["message"] = answer
             recovered = (
                 isinstance(answer, str)
                 and " ".join(answer.upper().split()) == record["message"]
             )
             record["recovery"] = "recovered" if recovered else "not_recovered"
             record["state"] = "sent"
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, ProviderRequestError):
+                failure = {
+                    "code": exc.code,
+                    "message": str(exc),
+                    "http_status": exc.http_status,
+                }
+            elif stage == "reply":
+                failure = {
+                    "code": "reply_format",
+                    "message": "The receiver answered, but its reply did not contain a readable message. Try the receiver again.",
+                }
+            elif stage == "delivery":
+                failure = {
+                    "code": "delivery_failed",
+                    "message": "The picture could not be released by the delivery gate. Start another demo.",
+                }
+            else:
+                failure = {
+                    "code": "receiver_unavailable",
+                    "message": "The receiver could not finish its request. Try the receiver again.",
+                }
+            _log.warning(
+                "Receiver failed demo=%s stage=%s code=%s http_status=%s exception=%s",
+                record["id"],
+                stage,
+                failure["code"],
+                failure.get("http_status"),
+                type(exc).__name__,
+            )
+            record["receiver_error"] = failure
             record["state"] = "receiver_failed"
             record["recovery"] = "unknown"
-            self.save(record)
-            raise RuntimeError(
-                "The image was sent, but the receiver's answer could not be obtained. Start another demo."
-            ) from None
         self.save(record)
         return self.public(record)
 
