@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { TEST_NAMES, humanizeKey, outOf100 } from "../format";
+import { TechnicalBreakdown } from "../components/Help";
 
 type Interval = {
   estimate: number | null;
@@ -376,19 +378,142 @@ export default function Benchmarks() {
       clearTimeout(timer);
     };
   }, []);
+  const intro = (
+    <>
+      <h1>How accurate is CovertLens?</h1>
+      <p className="lede">
+        We tested CovertLens on images where we already knew the answer:
+        some had hidden messages, some were ordinary. Here’s how it did.
+      </p>
+    </>
+  );
   if (!reports)
     return (
       <>
-        <h1>How accurate are the checks?</h1>
-        <p>
-          This page will show measured test results: of pictures known to
-          hide something, how many were caught — and of innocent
-          pictures, how many were wrongly flagged.
-        </p>
+        {intro}
         <p role="status">{message}</p>
       </>
     );
-  return <BenchmarkResults reports={reports} provenance={provenance} />;
+  return (
+    <>
+      {intro}
+      <AccuracySummary reports={reports} />
+      <TechnicalBreakdown
+        id="benchmarks-breakdown"
+        note="every test, chart and exact number, with how each was measured"
+      >
+        <BenchmarkResults reports={reports} provenance={provenance} />
+      </TechnicalBreakdown>
+    </>
+  );
+}
+
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const SIZE_PLAIN: Record<string, string> = {
+  small: "small",
+  medium: "medium",
+  large: "large",
+  envelope: "very large",
+};
+
+function outOf100Text(value: number | null | undefined): string {
+  const n = outOf100(value);
+  return n === null ? "not measured" : `${n} out of 100`;
+}
+
+function Meter({ value, label }: { value: number | null | undefined; label: string }) {
+  const n = outOf100(value);
+  if (n === null) return null;
+  return (
+    <div className="meter" role="img" aria-label={`${label}: ${n} out of 100`}>
+      <div className="meter-fill" style={{ width: `${Math.min(100, Math.max(0, n))}%` }} />
+    </div>
+  );
+}
+
+// The plain answer: per test, how many hidden messages were spotted
+// and how often a held-back image really had one, then speed. Every
+// figure is read straight from the saved reports.
+export function AccuracySummary({ reports }: { reports: Reports }) {
+  const families = Object.entries(reports.frozen?.held_out?.families ?? {});
+  const geo = Object.values(reports.geometric?.subfamilies ?? {});
+  const structured = geo
+    .map((block) => block.rows.quantized_structured?.structure_recall?.rate)
+    .filter((v): v is number => typeof v === "number");
+  const chartLike = geo
+    .map((block) => block.rows.quantized_unstructured?.false_structure_claims?.rate)
+    .filter((v): v is number => typeof v === "number");
+  const classes = reports.latency?.classes ?? [];
+  const fast = classes.filter((c) => c.meets_proposal);
+  const slow = classes.filter((c) => !c.meets_proposal);
+  const slowest = slow.reduce((max, c) => Math.max(max, c.p95_s), 0);
+  const size = (c: { class: string; media: string }) =>
+    `${SIZE_PLAIN[c.class] ?? c.class} ${c.media.toUpperCase()}`;
+  const low = structured.length ? outOf100(Math.min(...structured)) : null;
+  const high = structured.length ? outOf100(Math.max(...structured)) : null;
+  return (
+    <section aria-labelledby="accuracy-heading">
+      <h2 id="accuracy-heading">The short answer</h2>
+      <ul className="accuracy-list">
+        {families.map(([family, row]) => (
+          <li key={family} className="accuracy-item">
+            <p className="test-name">{TEST_NAMES[family] ?? humanizeKey(family)}</p>
+            <Meter value={row.recall_at_triage?.value} label="Hidden messages spotted" />
+            <p>
+              Spotted <strong>{outOf100Text(row.recall_at_triage?.value)}</strong>{" "}
+              hidden messages (marked orange or red).
+            </p>
+            <p>
+              When it held an image back, it was right{" "}
+              <strong>{outOf100Text(row.enforcement_precision?.value)}</strong> times.
+            </p>
+          </li>
+        ))}
+        {low !== null && high !== null && (
+          <li className="accuracy-item">
+            <p className="test-name">{TEST_NAMES.geometric}</p>
+            <Meter value={Math.max(...structured)} label="Best case, hidden patterns recognised" />
+            <p>
+              Recognised <strong>{low === high ? low : `${low} to ${high}`} out of 100</strong>{" "}
+              deliberately hidden patterns as a likely hidden message (red),
+              depending on where they were hidden.
+            </p>
+            {chartLike.length > 0 && (
+              <p>
+                {Math.max(...chartLike) === 0
+                  ? "Ordinary charts were never mistaken for a hidden message, though they can still be marked orange for a person to check."
+                  : `Ordinary charts were mistaken for a hidden message up to ${outOf100(Math.max(...chartLike))} out of 100 times.`}
+              </p>
+            )}
+          </li>
+        )}
+      </ul>
+      {classes.length > 0 && (
+        <p>
+          <strong>Speed:</strong>{" "}
+          {fast.length > 0
+            ? `${capitalise(joinList(fast.map(size)))} images are checked within 2 seconds. `
+            : "No image size met the 2-second target. "}
+          {slow.length > 0
+            ? `${capitalise(joinList(slow.map(size)))} images take longer, up to ${Math.round(slowest * 10) / 10} seconds.`
+            : ""}
+        </p>
+      )}
+      <p className="note">
+        These results come from test images made for this project, where
+        the right answer was known in advance. Real-world images may do
+        better or worse.
+      </p>
+    </section>
+  );
 }
 
 export function BenchmarkResults({
@@ -411,7 +536,7 @@ export function BenchmarkResults({
   };
   return (
     <>
-      <h1>How accurate are the checks? (benchmarks)</h1>
+      <h2>Detailed test results</h2>
       <p>
         CovertLens was tested on pictures where the truth is known: some
         really do hide information, others are innocent. This page shows,

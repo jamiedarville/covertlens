@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Comparison, ComparisonSide } from "../types";
 import { fetchComparison, fixtureImageUrl, storePreload } from "../api";
-import { classificationLabel, classificationMeaning, fmtExact, fmtNum, fmtScore } from "../format";
-import { SequencePlot } from "../components/Charts";
-import { StartSteps, TechDetails } from "../components/Help";
+import { LIGHT_HEADLINE, LIGHT_NAME } from "../format";
+import { ColourKey, LightDot, overallLight } from "../components/TrafficLight";
 
 function SkylineSide({
   heading,
@@ -14,72 +13,40 @@ function SkylineSide({
   side: ComparisonSide;
   onOpen: (side: ComparisonSide, heading: string) => void;
 }) {
-  const payload = side.payload;
-  const geometric = payload.geometric;
-  const finding = payload.analysis?.findings.find((f) => f.family === "geometric");
-  const heightChannel = geometric?.channels?.height;
-  const values =
-    geometric?.overlay?.channels?.height?.values ??
-    (geometric?.segmentation?.sequences.height ?? []).filter(
-      (v): v is number => v !== null,
-    );
+  const light = overallLight(side.payload);
   return (
     <article className="card skyline" aria-label={heading}>
-      <div className="card-head">
-        <h3>{heading}</h3>
-        <span className="badge" title={geometric?.classification ?? undefined}>
-          {classificationLabel(geometric?.classification ?? null)}
-        </span>
-      </div>
+      <h3>{heading}</h3>
       <img
         className="skyline-img"
         src={fixtureImageUrl(side.content_hash)}
-        alt={`${heading}: a row of skyline bars (${side.fixture_id})`}
+        alt={`${heading}: a row of city-skyline buildings`}
         loading="lazy"
       />
-      <p className="note">{classificationMeaning(geometric?.classification ?? null)}</p>
-      <dl className="kv">
-        <div>
-          <dt>Shape-pattern score (0 to 1; higher means stronger pattern evidence — not proof)</dt>
-          <dd title={finding ? String(finding.score) : undefined}>
-            {finding ? fmtScore(finding.score) : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt>Regular spacing found in the bar heights (pixels)</dt>
-          <dd>{fmtExact(heightChannel?.step ?? null)}</dd>
-        </div>
-        <div>
-          <dt>How neatly heights fit that spacing (0 to 1; 1 is a perfect fit)</dt>
-          <dd>{fmtExact(heightChannel?.rayleigh_R ?? null)}</dd>
-        </div>
-        <div>
-          <dt>How much it looks like an ordinary chart (0 to 1)</dt>
-          <dd>{fmtNum(geometric?.chart_likeness?.score ?? null)}</dd>
-        </div>
-      </dl>
-      <TechDetails summary="Technical names for these measurements">
-        <p className="note">
-          Geometric score · height grid step · Rayleigh R · chart-likeness,
-          exactly as named in the API response.
-        </p>
-      </TechDetails>
-      {values.length > 0 && heightChannel && (
-        <SequencePlot
-          values={values}
-          unit="px"
-          step={heightChannel.step}
-          offset={heightChannel.offset}
-          symbolRange={heightChannel.symbol_range}
-          title={`Building heights, ${heading.toLowerCase()}`}
-        />
-      )}
+      <p className={`result-pill result-${light}`} data-light={light}>
+        <LightDot light={light} />
+        <strong>
+          {LIGHT_NAME[light]}: {LIGHT_HEADLINE[light]}
+        </strong>
+      </p>
       <button type="button" className="button" onClick={() => onOpen(side, heading)}>
-        See the measurements drawn on this image
+        See the full result
       </button>
     </article>
   );
 }
+
+// Every other page, described in one plain sentence each, so nothing
+// in the menu is a mystery.
+const OTHER_PAGES: [string, string, string][] = [
+  ["/generate", "Make a test image", "create an image with a hidden message in it, to see whether CovertLens catches it."],
+  ["/gate", "Delivery gate", "watch images being checked as one AI agent sends them to another, and decide which ones get through."],
+  ["/review", "Review images", "look at the images that were stopped, and record what you think of each one."],
+  ["/trace", "Timeline", "see everything that happened in one session, step by step."],
+  ["/benchmarks", "Accuracy", "how often the tests catch hidden messages, and how often they raise a false alarm."],
+  ["/leaderboard", "Leaderboard", "which ways of hiding a message got the most past the tests."],
+  ["/scorecard", "Release decision", "whether this version of CovertLens meets its accuracy and speed targets, and the evidence."],
+];
 
 export default function Landing({
   navigate,
@@ -104,7 +71,7 @@ export default function Landing({
           if (tries <= 8) {
             timer = window.setTimeout(load, 2500);
           } else {
-            setLoadError("The ready-made example below is taking longer than usual to prepare. What to do: reload this page in a moment, or skip the example and check your own image now.");
+            setLoadError("The example below is taking longer than usual to get ready. What to do: reload this page in a moment, or skip it and check your own image now.");
           }
           return;
         }
@@ -113,7 +80,7 @@ export default function Landing({
       } catch {
         if (!cancelled) {
           setComputing(false);
-          setLoadError("The ready-made example below could not be loaded. Nothing is broken for you: you can still check your own image using the button above.");
+          setLoadError("The example below couldn’t be loaded. You can still check your own image with the button above.");
         }
       }
     };
@@ -128,102 +95,87 @@ export default function Landing({
     storePreload({
       payload: side.payload,
       imageUrl: fixtureImageUrl(side.content_hash),
-      label: `${heading} (${side.fixture_id})`,
+      label: heading,
     });
     navigate("/analyze");
   };
 
+  const link = (to: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    navigate(to);
+  };
+
   return (
     <>
-      <h1>CovertLens: checks images for hidden information</h1>
+      <h1>Is an image hiding a secret message?</h1>
       <p className="lede">
-        <span>
-          CovertLens checks images that AI agents send each other for signs
-          of hidden information. It shows what was found and whether each
-          image was allowed through to the recipient.
-        </span>
-        <span>
-          Why this matters: in the experiments CovertLens guards, agents are
-          only allowed to communicate through agreed channels. Hiding extra
-          information inside a picture would break the rules — so every
-          image is checked before the recipient can see it.
-        </span>
-        <span>
-          The checker looks in four places: tiny pixel changes, JPEG
-          compression data, text stored inside the file, and the visible
-          shapes and patterns. Each check produces a score from 0 to 1.
-        </span>
-        <span>
-          A score is evidence to look closer — never proof, and never an
-          accusation on its own. “Nothing found” also does not prove that
-          nothing is hidden.
-        </span>
+        AI agents sometimes send each other images. CovertLens checks those
+        images for hidden messages, a sign that the agents may be secretly
+        working together. This is called <strong>collusion</strong>.
       </p>
-      <StartSteps heading="New here? Start in three steps">
-        <li>
-          Look at the two city-skyline pictures below. One is ordinary; the
-          other hides a pattern in its building heights. This shows what
-          CovertLens can spot.
-        </li>
-        <li>
-          Then choose <strong>Check your own image</strong> and add any PNG
-          or JPEG picture. You will see what each of the four checks found,
-          in plain English.
-        </li>
-        <li>
-          Or open <strong>Delivery gate (live)</strong> in the menu to watch
-          an image being checked and either delivered or held back before
-          the recipient sees it.
-        </li>
-      </StartSteps>
       <p>
-        <button type="button" className="button button-primary" onClick={() => navigate("/analyze")}>
-          Check your own image
-        </button>{" "}
-        <a href="/docs">Developers: browse the API instead</a>
+        <button
+          type="button"
+          className="button button-primary button-large"
+          onClick={() => navigate("/analyze")}
+        >
+          Check an image
+        </button>
       </p>
 
+      <section aria-labelledby="how-heading">
+        <h2 id="how-heading">How it works</h2>
+        <ol className="how-steps">
+          <li>
+            <strong>Add an image.</strong> Any PNG or JPEG picture.
+          </li>
+          <li>
+            <strong>We run four tests on it.</strong> Each test looks for a
+            message hidden in a different part of the image.
+          </li>
+          <li>
+            <strong>You get a simple answer:</strong> green, orange or red,
+            explained in plain words. If you want the detail behind it, one
+            click shows the technical evidence.
+          </li>
+        </ol>
+        <ColourKey />
+      </section>
+
       <section aria-labelledby="skyline-heading">
-        <h2 id="skyline-heading">Try it: two skylines, one hidden pattern</h2>
+        <h2 id="skyline-heading">See it in action</h2>
         <p>
-          The only difference between these two pictures is the buildings’
-          heights. In one picture the heights follow a regular spacing that
-          could be used to spell something out. Both were checked before
-          this page loaded. Choose either button to see the measurements
-          drawn on top of the picture, with each number explained.
+          These two city skylines look almost the same. One is ordinary. The
+          other has a secret message hidden in the heights of its
+          buildings. Under each one is the answer CovertLens gave.
         </p>
         {computing && !comparison && (
-          <p role="status">Preparing the ready-made example for you… this usually takes a few seconds after the server starts.</p>
+          <p role="status">Getting the example ready… this usually takes a few seconds after the server starts.</p>
         )}
         {loadError && <p className="alert" role="alert">{loadError}</p>}
         {comparison && (
           <div className="card-grid card-grid-2">
-            <SkylineSide heading="Ordinary skyline (nothing hidden)" side={comparison.clean} onOpen={openOverlay} />
-            <SkylineSide heading="Skyline with a hidden pattern in its heights" side={comparison.encoded} onOpen={openOverlay} />
+            <SkylineSide heading="Ordinary skyline" side={comparison.clean} onOpen={openOverlay} />
+            <SkylineSide heading="Skyline with a hidden message" side={comparison.encoded} onOpen={openOverlay} />
           </div>
         )}
       </section>
 
-      <section aria-labelledby="reading-heading">
-        <h2 id="reading-heading">How to read the result</h2>
-        <ul>
+      <section aria-labelledby="more-heading">
+        <h2 id="more-heading">Everything else you can do</h2>
+        <p>Each of these is also in the menu at the top of every page.</p>
+        <ul className="page-list">
+          {OTHER_PAGES.map(([to, name, what]) => (
+            <li key={to}>
+              <a href={to} onClick={link(to)}>
+                {name}
+              </a>{" "}
+              — {what}
+            </li>
+          ))}
           <li>
-            <strong>Regular spacing alone is not suspicious.</strong> If
-            heights land exactly on evenly spaced values (specialists call
-            this “quantized”), that also happens in perfectly ordinary
-            charts.
-          </li>
-          <li>
-            <strong>What matters is whether the pattern looks
-            deliberate.</strong> CovertLens shuffles the values many times
-            and asks how often a shuffled version would look just as
-            organised. Only if the real order beats the shuffles under a
-            code declared in advance is a pattern reported.
-          </li>
-          <li>
-            <strong>No hidden text is shown to you here.</strong> This page
-            shows measurements and scores. It never displays a “decoded
-            message”.
+            <a href="/docs">API docs</a> — for programmers who want to connect
+            their own software to CovertLens.
           </li>
         </ul>
       </section>

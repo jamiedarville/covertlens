@@ -43,15 +43,27 @@ Cross-cutting constraints annotated on the stages they bind
 
 ## Quick start
 
+Build the image from your checkout, then run it, so the app you see
+is the code you have:
+
 ```bash
-docker run -p 8000:8000 -v covertlens-data:/data ghcr.io/jamiedarville/covertlens:v0.1.0
+docker build -t covertlens .
+docker run -p 8000:8000 -v covertlens-data:/data covertlens
 # then open http://127.0.0.1:8000/ in a browser (API docs at /docs)
 ```
 
-Or build the image locally: `docker build -t covertlens .`, then
-run it with the same ports and volume. The landing page shows a
-precomputed clean-vs-encoded skyline comparison; **Try your own**
-opens the Analyze page with the geometric overlay.
+`docker compose up --build` does the same in one command.
+
+**The published image is older than `main`.**
+`ghcr.io/jamiedarville/covertlens:v0.1.0` is the first release
+(1 November 2026, CL-49). It never runs your checkout, and it only
+has the Analyze page with the original wording: the delivery gate,
+review, timeline, accuracy, leaderboard and release-decision pages
+and the traffic-light results all came later. Images are published
+only for version tags (`.github/workflows/image.yml`).
+
+The home page shows two example skylines with their traffic-light
+results; **Check an image** opens the Analyze page.
 
 **Demo roles are not authentication.** The Live Gate, Trace and
 Reviewer pages act as a demo role (`viewer`, `researcher`,
@@ -476,7 +488,7 @@ criterion to code, contract doc, schema, and tests. History in
 | README opens with a five-line description, one architecture diagram and a `docker run` quick-start; no stale foundation-only framing | This file: five-line opening ("designed for multi-agent evaluation harnesses"), Mermaid pipeline annotated with C-02/C-03/C-04/C-09/C-10, GHCR quick-start, and this ledger under its own heading |
 | Internal-harness framing reworded everywhere; tracker-tracing prose moved out of product docs | README, [REQUIREMENTS.md](REQUIREMENTS.md) §1, manifest scope/source and the harness-events contract reworded; planning history in [docs/planning/requirements-traceability.md](docs/planning/requirements-traceability.md) |
 | No review documents at the repository root; limitations linked from the README | Review moved to [docs/reviews/2026-10-31-review.md](docs/reviews/2026-10-31-review.md); Known limitations section above links the review and the release scorecard |
-| Real licence, citation metadata, changelog, release tag | MIT [LICENSE](LICENSE), [CITATION.cff](CITATION.cff), [CHANGELOG.md](CHANGELOG.md) keyed by CL number, tag `v0.1.0` (publishes the GHCR image the quick-start uses) |
+| Real licence, citation metadata, changelog, release tag | MIT [LICENSE](LICENSE), [CITATION.cff](CITATION.cff), [CHANGELOG.md](CHANGELOG.md) keyed by CL number, tag `v0.1.0` (publishes the GHCR release image; the quick start now builds from the checkout) |
 | No stale `planned:` detector strings; packaging metadata current | Manifest `implementation` fields name the shipped detectors (`covertlens.lsb/dct/metadata`); `pyproject.toml` description and MIT licence updated |
 
 ### CL-50 deliverables
