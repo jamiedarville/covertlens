@@ -30,7 +30,7 @@ export function SequencePlot({
   symbols: number[];
   title: string;
 }) {
-  if (values.length === 0) return <p className="note">No values in this channel.</p>;
+  if (values.length === 0) return <p className="note">No values were measured for this item.</p>;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
@@ -62,9 +62,9 @@ export function SequencePlot({
       ))}
       <text x={4} y={y(max) + 4} className="chart-text">{fmtNum(max)}</text>
       <text x={4} y={y(min) + 4} className="chart-text">{fmtNum(min)}</text>
-      <text x={PAD.left} y={H - 8} className="chart-text">element 0</text>
+      <text x={PAD.left} y={H - 8} className="chart-text">first shape</text>
       <text x={W - PAD.right} y={H - 8} textAnchor="end" className="chart-text">
-        element {values.length - 1} · {unit}
+        shape {values.length - 1} · measured in {unit}
       </text>
     </svg>
   );
@@ -81,7 +81,7 @@ export function PeriodogramPlot({
   discoveredR: number | null;
   title: string;
 }) {
-  if (points.length === 0) return <p className="note">No periodogram points in the response.</p>;
+  if (points.length === 0) return <p className="note">No data for this chart was returned.</p>;
   const minStep = Math.min(...points.map((p) => p.step));
   const maxStep = Math.max(...points.map((p) => p.step));
   const x = (s: number) =>
@@ -90,7 +90,7 @@ export function PeriodogramPlot({
   const line = points.map((p) => `${x(p.step)},${y(p.rayleigh_R)}`).join(" ");
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label={`${title}. Rayleigh R against candidate step.${discoveredStep !== null ? ` Discovered step ${fmtNum(discoveredStep)} with R ${fmtNum(discoveredR)}.` : ""}`}>
+      aria-label={`${title}. Quality of fit (R, from 0 to 1) for each possible step size.${discoveredStep !== null ? ` Best-fitting step ${fmtNum(discoveredStep)} with R ${fmtNum(discoveredR)}.` : ""}`}>
       <title>{title}</title>
       <line x1={PAD.left} x2={PAD.left} y1={PAD.top} y2={H - PAD.bottom} className="chart-axis" />
       <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} className="chart-axis" />
@@ -103,7 +103,7 @@ export function PeriodogramPlot({
             <circle cx={x(discoveredStep)} cy={y(discoveredR)} r="4.5" className="chart-dot-marker" />
           )}
           <text x={Math.min(x(discoveredStep) + 6, W - 150)} y={PAD.top + 12} className="chart-text-strong">
-            discovered step {fmtNum(discoveredStep)}
+            best-fitting step {fmtNum(discoveredStep)}
           </text>
         </>
       )}
@@ -127,7 +127,7 @@ export function HistogramPlot({
   title: string;
 }) {
   if (edges.length < 2 || counts.length === 0) {
-    return <p className="note">No residuals in the response for this channel.</p>;
+    return <p className="note">No distances were returned for this chart.</p>;
   }
   const lo = edges[0] as number;
   const hi = edges[edges.length - 1] as number;
@@ -138,7 +138,7 @@ export function HistogramPlot({
   const total = counts.reduce((a, b) => a + b, 0);
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label={`${title}. ${total} residuals in ${counts.length} bins from ${fmtNum(lo)} to ${fmtNum(hi)}; tallest bin holds ${maxCount}.`}>
+      aria-label={`${title}. ${total} distances from the nearest step, grouped into ${counts.length} ranges from ${fmtNum(lo)} to ${fmtNum(hi)}; the tallest bar holds ${maxCount}.`}>
       <title>{title}</title>
       <line x1={PAD.left} x2={PAD.left} y1={PAD.top} y2={H - PAD.bottom} className="chart-axis" />
       <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} className="chart-axis" />
@@ -165,7 +165,7 @@ export function HistogramPlot({
       <text x={4} y={PAD.top + 4} className="chart-text">count</text>
       <text x={PAD.left} y={H - 8} className="chart-text">{fmtNum(lo)}</text>
       <text x={W - PAD.right} y={H - 8} textAnchor="end" className="chart-text">
-        residual {fmtNum(hi)} · dashed lines at ±{fmtNum(tolerance)} tolerance
+        distance {fmtNum(hi)} · dashed lines at ±{fmtNum(tolerance)} (“close enough”)
       </text>
     </svg>
   );
@@ -180,8 +180,8 @@ export function Gauge({ score, label }: { score: number; label: string }) {
         <div className="gauge-fill" style={{ width: `${clamped * 100}%` }} />
       </div>
       <div className="gauge-scale" aria-hidden="true">
-        <span>0 — scene-like</span>
-        <span>1 — chart-like</span>
+        <span>0 — looks like a scene or photo</span>
+        <span>1 — looks like a chart</span>
       </div>
     </div>
   );

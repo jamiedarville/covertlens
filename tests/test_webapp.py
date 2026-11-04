@@ -249,14 +249,29 @@ def test_comparison_endpoint(client):
 
 
 def test_spa_routes_and_assets(client, tmp_path, monkeypatch):
-    """CL-48: / and /analyze serve the shell; /api stays unshadowed."""
+    """CL-48: / and /analyze serve the shell; /api stays unshadowed.
+
+    CL-79: every page the SPA links to must also load directly
+    (bookmark / new tab) — /benchmarks and /scorecard used to 404
+    with a bare JSON error.
+    """
     import app.main as main_module
 
     (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<!doctype html><title>spa</title>")
     (tmp_path / "assets" / "app.js").write_text("console.log('ok')")
     monkeypatch.setattr(main_module, "STATIC_CANDIDATES", [tmp_path])
-    for path in ("/", "/analyze"):
+    for path in (
+        "/",
+        "/analyze",
+        "/generate",
+        "/gate",
+        "/review",
+        "/trace",
+        "/benchmarks",
+        "/leaderboard",
+        "/scorecard",
+    ):
         page = client.get(path)
         assert page.status_code == 200
         assert "<title>spa</title>" in page.text

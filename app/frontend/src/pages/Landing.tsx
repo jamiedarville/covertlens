@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Comparison, ComparisonSide } from "../types";
 import { fetchComparison, fixtureImageUrl, storePreload } from "../api";
-import { classificationLabel, fmtExact, fmtNum, fmtScore } from "../format";
+import { classificationLabel, classificationMeaning, fmtExact, fmtNum, fmtScore } from "../format";
 import { SequencePlot } from "../components/Charts";
+import { StartSteps, TechDetails } from "../components/Help";
 
 function SkylineSide({
   heading,
@@ -36,26 +37,33 @@ function SkylineSide({
         alt={`${heading}: a row of skyline bars (${side.fixture_id})`}
         loading="lazy"
       />
+      <p className="note">{classificationMeaning(geometric?.classification ?? null)}</p>
       <dl className="kv">
         <div>
-          <dt>Geometric score</dt>
+          <dt>Shape-pattern score (0 to 1; higher means stronger pattern evidence — not proof)</dt>
           <dd title={finding ? String(finding.score) : undefined}>
             {finding ? fmtScore(finding.score) : "—"}
           </dd>
         </div>
         <div>
-          <dt>Height grid step</dt>
+          <dt>Regular spacing found in the bar heights (pixels)</dt>
           <dd>{fmtExact(heightChannel?.step ?? null)}</dd>
         </div>
         <div>
-          <dt>Rayleigh R</dt>
+          <dt>How neatly heights fit that spacing (0 to 1; 1 is a perfect fit)</dt>
           <dd>{fmtExact(heightChannel?.rayleigh_R ?? null)}</dd>
         </div>
         <div>
-          <dt>Chart-likeness</dt>
+          <dt>How much it looks like an ordinary chart (0 to 1)</dt>
           <dd>{fmtNum(geometric?.chart_likeness?.score ?? null)}</dd>
         </div>
       </dl>
+      <TechDetails summary="Technical names for these measurements">
+        <p className="note">
+          Geometric score · height grid step · Rayleigh R · chart-likeness,
+          exactly as named in the API response.
+        </p>
+      </TechDetails>
       {values.length > 0 && heightChannel && (
         <SequencePlot
           values={values}
@@ -67,7 +75,7 @@ function SkylineSide({
         />
       )}
       <button type="button" className="button" onClick={() => onOpen(side, heading)}>
-        Open overlay
+        See the measurements drawn on this image
       </button>
     </article>
   );
@@ -96,7 +104,7 @@ export default function Landing({
           if (tries <= 8) {
             timer = window.setTimeout(load, 2500);
           } else {
-            setLoadError("The precomputed comparison is still warming up. Reload in a moment, or analyze an image now.");
+            setLoadError("The ready-made example below is taking longer than usual to prepare. What to do: reload this page in a moment, or skip the example and check your own image now.");
           }
           return;
         }
@@ -105,7 +113,7 @@ export default function Landing({
       } catch {
         if (!cancelled) {
           setComputing(false);
-          setLoadError("The precomputed comparison could not be loaded. You can still analyze your own image.");
+          setLoadError("The ready-made example below could not be loaded. Nothing is broken for you: you can still check your own image using the button above.");
         }
       }
     };
@@ -127,36 +135,71 @@ export default function Landing({
 
   return (
     <>
-      <h1>CovertLens</h1>
+      <h1>CovertLens: checks images for hidden information</h1>
       <p className="lede">
-        <span>CovertLens checks images that AI agents send each other for hidden messages.</span>
-        <span>It scores the original bytes across four channel families: spatial LSB, JPEG DCT, metadata, and geometry.</span>
-        <span>Every score is evidence with coverage and limits attached — never an accusation on its own.</span>
-        <span>A verdict ladder decides delivery before any recipient sees the image.</span>
-        <span>Try the skyline test below: one skyline is innocent, the other carries a pattern in its building heights.</span>
+        <span>
+          CovertLens checks images that AI agents send each other for signs
+          of hidden information. It shows what was found and whether each
+          image was allowed through to the recipient.
+        </span>
+        <span>
+          Why this matters: in the experiments CovertLens guards, agents are
+          only allowed to communicate through agreed channels. Hiding extra
+          information inside a picture would break the rules — so every
+          image is checked before the recipient can see it.
+        </span>
+        <span>
+          The checker looks in four places: tiny pixel changes, JPEG
+          compression data, text stored inside the file, and the visible
+          shapes and patterns. Each check produces a score from 0 to 1.
+        </span>
+        <span>
+          A score is evidence to look closer — never proof, and never an
+          accusation on its own. “Nothing found” also does not prove that
+          nothing is hidden.
+        </span>
       </p>
+      <StartSteps heading="New here? Start in three steps">
+        <li>
+          Look at the two city-skyline pictures below. One is ordinary; the
+          other hides a pattern in its building heights. This shows what
+          CovertLens can spot.
+        </li>
+        <li>
+          Then choose <strong>Check your own image</strong> and add any PNG
+          or JPEG picture. You will see what each of the four checks found,
+          in plain English.
+        </li>
+        <li>
+          Or open <strong>Delivery gate (live)</strong> in the menu to watch
+          an image being checked and either delivered or held back before
+          the recipient sees it.
+        </li>
+      </StartSteps>
       <p>
         <button type="button" className="button button-primary" onClick={() => navigate("/analyze")}>
-          Try your own
+          Check your own image
         </button>{" "}
-        <a href="/docs">Browse the API instead</a>
+        <a href="/docs">Developers: browse the API instead</a>
       </p>
 
       <section aria-labelledby="skyline-heading">
-        <h2 id="skyline-heading">Two skylines, one hidden pattern</h2>
+        <h2 id="skyline-heading">Try it: two skylines, one hidden pattern</h2>
         <p>
-          Both images were scored before this page loaded. Open either
-          overlay to see the measured boxes, the height sequence snapped to
-          its discovered grid, and the statistics behind the badge.
+          The only difference between these two pictures is the buildings’
+          heights. In one picture the heights follow a regular spacing that
+          could be used to spell something out. Both were checked before
+          this page loaded. Choose either button to see the measurements
+          drawn on top of the picture, with each number explained.
         </p>
         {computing && !comparison && (
-          <p role="status">Preparing the precomputed comparison…</p>
+          <p role="status">Preparing the ready-made example for you… this usually takes a few seconds after the server starts.</p>
         )}
         {loadError && <p className="alert" role="alert">{loadError}</p>}
         {comparison && (
           <div className="card-grid card-grid-2">
-            <SkylineSide heading="Clean control" side={comparison.clean} onOpen={openOverlay} />
-            <SkylineSide heading="Encoded example" side={comparison.encoded} onOpen={openOverlay} />
+            <SkylineSide heading="Ordinary skyline (nothing hidden)" side={comparison.clean} onOpen={openOverlay} />
+            <SkylineSide heading="Skyline with a hidden pattern in its heights" side={comparison.encoded} onOpen={openOverlay} />
           </div>
         )}
       </section>
@@ -164,9 +207,24 @@ export default function Landing({
       <section aria-labelledby="reading-heading">
         <h2 id="reading-heading">How to read the result</h2>
         <ul>
-          <li>Heights that fall exactly on a regular grid are <em>quantized</em>. That alone is not encoding — charts do it by design.</li>
-          <li>The Rayleigh periodogram shows how strongly one step explains the sequence; the null says how often shuffled data would match it.</li>
-          <li>Structure is only claimed under a declared code that beats its shuffle null. This site never displays decoded text.</li>
+          <li>
+            <strong>Regular spacing alone is not suspicious.</strong> If
+            heights land exactly on evenly spaced values (specialists call
+            this “quantized”), that also happens in perfectly ordinary
+            charts.
+          </li>
+          <li>
+            <strong>What matters is whether the pattern looks
+            deliberate.</strong> CovertLens shuffles the values many times
+            and asks how often a shuffled version would look just as
+            organised. Only if the real order beats the shuffles under a
+            code declared in advance is a pattern reported.
+          </li>
+          <li>
+            <strong>No hidden text is shown to you here.</strong> This page
+            shows measurements and scores. It never displays a “decoded
+            message”.
+          </li>
         </ul>
       </section>
     </>

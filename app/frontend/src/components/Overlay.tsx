@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoElement, Geometric } from "../types";
-import { CHANNEL_LABELS, classificationLabel, fmtExact, fmtNum } from "../format";
+import { CHANNEL_LABELS, classificationLabel, classificationMeaning, fmtExact, fmtNum, humanizeKey } from "../format";
 import { Gauge, HistogramPlot, PeriodogramPlot, ScoreBar, SequencePlot } from "./Charts";
 
 const CHANNEL_ORDER = ["height", "gap", "lit", "angle", "colour"];
@@ -86,17 +86,17 @@ function CanvasOverlay({
   }, [imageUrl, elements, segWidth, segHeight, showBoxes, highlighted]);
 
   if (!imageUrl) {
-    return <p className="note">No preview image available; the tables below carry the same measurements.</p>;
+    return <p className="note">No preview of the picture is available here. You lose nothing: the tables below contain exactly the same measurements in words and numbers.</p>;
   }
   if (failed) {
-    return <p className="note">The preview image could not be drawn here; the tables below carry the same measurements.</p>;
+    return <p className="note">The preview picture could not be drawn in your browser. You lose nothing: the tables below contain exactly the same measurements in words and numbers.</p>;
   }
   return (
     <canvas
       ref={canvasRef}
       className="overlay-canvas"
       role="img"
-      aria-label={`${imageLabel} with ${elements.length} segmented elements outlined and numbered in reading order.`}
+      aria-label={`${imageLabel} with ${elements.length} measured shapes outlined and numbered in reading order (left to right, top to bottom).`}
     />
   );
 }
@@ -131,11 +131,11 @@ export function Overlay({
   if (!geometric) {
     return (
       <section aria-labelledby="overlay-heading">
-        <h2 id="overlay-heading">Geometric overlay</h2>
+        <h2 id="overlay-heading">Measurements drawn on the picture (shape patterns)</h2>
         <p>
-          No geometric report was returned for this input. The geometric
-          family measures PNG rasters; other inputs are covered by the
-          families above.
+          This check was not run on this file: it only measures PNG
+          pictures. “Not run” is not the same as “all clear” — the other
+          checks above still apply.
         </p>
       </section>
     );
@@ -161,16 +161,24 @@ export function Overlay({
   return (
     <section aria-labelledby="overlay-heading">
       <div className="card-head">
-        <h2 id="overlay-heading">Geometric overlay</h2>
+        <h2 id="overlay-heading">Measurements drawn on the picture (shape patterns)</h2>
         <span className="badge" title={geometric.classification ?? undefined}>
           {classificationLabel(geometric.classification)}
         </span>
       </div>
+      <p>{classificationMeaning(geometric.classification)}</p>
       <p>
-        Evidence aid — not a decoded message. Boxes follow reading order;
-        grid symbols are shown as numbers only. Signal grade:{" "}
-        <strong>{fmtExact(geometric.signal_grade)}</strong>; primary channel:{" "}
-        <strong>{fmtExact(geometric.primary_channel)}</strong>.
+        This section shows <em>where</em> the shape-pattern check looked
+        and <em>what it measured</em>. It is evidence to help a person
+        judge — it is not a decoded hidden message, and no hidden text is
+        shown. Each shape found in the picture is outlined and numbered in
+        reading order (left to right, top to bottom). The check then asks:
+        do the shapes’ heights, gaps, brightness, angles or colours fall
+        on a regular spacing (like steps of exactly 10 pixels), the way a
+        code could use them to spell something out? Our measurements of
+        pattern strength: <strong>{fmtExact(geometric.signal_grade)}</strong>;
+        most informative measurement:{" "}
+        <strong>{CHANNEL_LABELS[geometric.primary_channel ?? ""] ?? fmtExact(geometric.primary_channel)}</strong>.
       </p>
 
       {seg && elements.length > 0 ? (
@@ -182,7 +190,7 @@ export function Overlay({
                 checked={showBoxes}
                 onChange={(e) => setShowBoxes(e.target.checked)}
               />
-              Show element boxes ({elements.length} elements)
+              Show outlines around the {elements.length} measured shapes
             </label>
           </div>
           <CanvasOverlay
@@ -197,15 +205,23 @@ export function Overlay({
         </>
       ) : (
         <p className="note">
-          Segmentation status: {fmtExact(seg?.status ?? geometric.status)}
-          {seg?.detail ? ` — ${seg.detail}` : ""}. No element overlay is
-          available for this image.
+          No separate shapes could be picked out in this picture, so there
+          is nothing to outline (the checker reported:{" "}
+          {fmtExact(seg?.status ?? geometric.status)}
+          {seg?.detail ? ` — ${seg.detail}` : ""}). This can happen with
+          photographs and other pictures without clear repeated shapes.
         </p>
       )}
 
       {channel && (
         <div className="channel-block">
-          <div className="tabs" role="tablist" aria-label="Geometric channels">
+          <p className="note">
+            Choose which measurement of the shapes to look at. “Fits a
+            regular spacing” means the values land on evenly spaced steps —
+            ordinary charts do this too, so read the explanation under each
+            chart.
+          </p>
+          <div className="tabs" role="tablist" aria-label="Which measurement of the shapes to view">
             {channelNames.map((name) => (
               <button
                 key={name}
@@ -216,12 +232,12 @@ export function Overlay({
                 onClick={() => setSelected(name)}
               >
                 {CHANNEL_LABELS[name] ?? name}
-                {channels[name]?.quantized ? " · quantized" : ""}
+                {channels[name]?.quantized ? " · fits a regular spacing" : ""}
               </button>
             ))}
           </div>
 
-          <h3>{CHANNEL_LABELS[active] ?? active} sequence</h3>
+          <h3>{CHANNEL_LABELS[active] ?? active} of each shape, in reading order</h3>
           <SequencePlot
             values={values}
             unit={overlayChannel?.unit ?? ""}
@@ -231,17 +247,24 @@ export function Overlay({
             title={`${CHANNEL_LABELS[active] ?? active} attribute sequence`}
           />
           <p className="note">
-            Values in reading order
+            Each dot is one shape, in reading order.
             {channel.step !== null
-              ? `; horizontal lines mark the discovered grid (step ${fmtNum(channel.step)}, offset ${fmtNum(channel.offset)}).`
-              : "; no grid was discovered for this channel."}
+              ? ` The horizontal lines are the regular spacing that was found: steps of ${fmtNum(channel.step)} starting from ${fmtNum(channel.offset)}. Dots sitting on the lines fit that spacing.`
+              : " No regular spacing was found for this measurement."}
           </p>
           <p className="symbols">
-            <span className="symbols-label">Grid symbols (numeric only):</span>{" "}
+            <span className="symbols-label">
+              Which step of the spacing each shape falls on (numbers only — never shown as letters or decoded text):
+            </span>{" "}
             <span className="mono">{channel.symbols.join(" ")}</span>
           </p>
 
-          <h3>Rayleigh periodogram</h3>
+          <h3>How well does one regular spacing explain these values?</h3>
+          <p className="note">
+            This chart (specialists call it a Rayleigh periodogram) tries
+            many possible step sizes. A tall peak means that step size fits
+            the values well.
+          </p>
           {overlayChannel?.periodogram.available ? (
             <>
               <PeriodogramPlot
@@ -251,20 +274,22 @@ export function Overlay({
                 title={`Rayleigh periodogram for ${CHANNEL_LABELS[active] ?? active}`}
               />
               <p className="note">
-                R is 1 when every value locks onto one step. The marker is
-                the discovered step {fmtNum(channel.step)} with R{" "}
-                {fmtNum(channel.rayleigh_R)}; null exceedance{" "}
-                {fmtExact(channel.null_exceedance)}.
+                The quality-of-fit score “R” reaches 1 when every value
+                falls exactly on one spacing. Here the best step is{" "}
+                {fmtNum(channel.step)} with R = {fmtNum(channel.rayleigh_R)}.
+                For comparison, shuffled copies of these values scored this
+                well {fmtExact(channel.null_exceedance)} of the time — the
+                smaller that share, the less likely the fit is a coincidence.
               </p>
             </>
           ) : (
             <p className="note">
               {overlayChannel?.periodogram.reason ??
-                "No periodogram was included for this channel in the response."}
+                "This chart was not produced for this measurement."}
             </p>
           )}
 
-          <h3>Residual histogram</h3>
+          <h3>How far is each value from its nearest step?</h3>
           {overlayChannel ? (
             <HistogramPlot
               edges={overlayChannel.residual_histogram.bin_edges}
@@ -273,29 +298,33 @@ export function Overlay({
               title={`Residual histogram for ${CHANNEL_LABELS[active] ?? active}`}
             />
           ) : (
-            <p className="note">No histogram bins were included for this channel.</p>
+            <p className="note">This chart was not produced for this measurement.</p>
           )}
           <p className="note">
-            Distance of each value from its grid point. Residuals inside the
-            dashed tolerance support the grid; RMS residual{" "}
-            {fmtNum(channel.rms_residual)}.
+            Bars near 0 mean values sit almost exactly on the spacing;
+            bars far from 0 argue against it. The dashed lines mark the
+            small “close enough” range. The typical distance from the
+            spacing is {fmtNum(channel.rms_residual)}.
           </p>
         </div>
       )}
 
       {chart && (
         <div className="panel">
-          <h3>Chart-likeness: {fmtNum(chart.score)}</h3>
-          <Gauge score={chart.score} label={`Chart-likeness ${fmtNum(chart.score)} of 1`} />
+          <h3>Could this just be an ordinary chart? Score: {fmtNum(chart.score)} out of 1</h3>
+          <Gauge score={chart.score} label={`How chart-like this picture looks: ${fmtNum(chart.score)} out of 1`} />
           <p className="note">
-            Legitimate charts are grid-snapped by design, so this context
-            travels with any quantization finding. Baseline present:{" "}
-            {chart.baseline_present ? "yes" : "no"}.
+            Ordinary charts place their bars on regular spacings on
+            purpose, so a regular spacing means much less when the picture
+            looks like a chart. This score (0 = looks like a scene,
+            1 = looks like a chart) is shown alongside the pattern result
+            for that reason. A baseline (the line bars stand on) was{" "}
+            {chart.baseline_present ? "found" : "not found"}.
           </p>
           <dl className="kv">
             {Object.entries(chart.features).map(([k, v]) => (
               <div key={k}>
-                <dt>{k}</dt>
+                <dt title={k}>{humanizeKey(k)}</dt>
                 <dd>{fmtExact(v)}</dd>
               </div>
             ))}
@@ -306,25 +335,33 @@ export function Overlay({
       {structure && (
         <div className="panel">
           <div className="card-head">
-            <h3>Structure against the null</h3>
+            <h3>Could this pattern be a coincidence?</h3>
             <span className={structure.claimed ? "badge badge-claimed" : "badge"}>
-              {structure.claimed ? "Structure claimed" : "No structure claimed"}
+              {structure.claimed ? "Looks deliberately arranged" : "No deliberate pattern claimed"}
             </span>
           </div>
+          <p className="note">
+            The step numbers are read using a code that was declared in
+            advance, then compared with many shuffled copies of the same
+            numbers. If the real order looks far more organised than the
+            shuffles, a deliberate pattern is reported — as evidence, never
+            as decoded text.
+          </p>
           <dl className="kv kv-wide">
-            <div><dt>Declared code</dt><dd>{fmtExact(structure.code)}</dd></div>
-            <div><dt>Trigram score</dt><dd>{fmtExact(structure.trigram_score)}</dd></div>
-            <div><dt>Null exceedance</dt><dd>{fmtExact(structure.null_exceedance)}</dd></div>
-            <div><dt>Log-likelihood ratio</dt><dd>{fmtExact(structure.log_likelihood_ratio)}</dd></div>
-            <div><dt>Printable fraction</dt><dd>{fmtExact(structure.printable_fraction)}</dd></div>
+            <div><dt>Code declared in advance</dt><dd>{fmtExact(structure.code)}</dd></div>
+            <div><dt>How language-like the step numbers look (trigram score)</dt><dd>{fmtExact(structure.trigram_score)}</dd></div>
+            <div><dt>Share of shuffles scoring this well (lower is stronger evidence)</dt><dd>{fmtExact(structure.null_exceedance)}</dd></div>
+            <div><dt>Evidence balance for vs against a pattern (log-likelihood ratio)</dt><dd>{fmtExact(structure.log_likelihood_ratio)}</dd></div>
+            <div><dt>Share of symbols that are printable characters</dt><dd>{fmtExact(structure.printable_fraction)}</dd></div>
           </dl>
           {structure.null_exceedance !== null && (
             <>
               <ScoreBar score={structure.null_exceedance} />
               <p className="note">
-                Null exceedance on a 0–1 scale: lower means shuffled symbols
-                rarely score this well, which is stronger evidence of
-                structure. {structure.reason ?? ""}
+                The bar shows that “share of shuffles” on a 0-to-1 scale:
+                shorter (lower) means shuffles rarely match the real
+                order, which is stronger evidence of a deliberate pattern.{" "}
+                {structure.reason ?? ""}
               </p>
             </>
           )}
@@ -336,18 +373,21 @@ export function Overlay({
 
       <div className="table-wrap">
         <table>
-          <caption>All geometric channels, exactly as returned</caption>
+          <caption>
+            Every measurement of the shapes, side by side, exactly as
+            returned. “Fits spacing” = values fall on evenly spaced steps.
+          </caption>
           <thead>
             <tr>
-              <th scope="col">Channel</th>
-              <th scope="col">Step</th>
-              <th scope="col">Rayleigh R</th>
-              <th scope="col">Null exceedance</th>
-              <th scope="col">Support</th>
-              <th scope="col">RMS residual</th>
-              <th scope="col">Levels</th>
-              <th scope="col">Score</th>
-              <th scope="col">Quantized</th>
+              <th scope="col">Measurement</th>
+              <th scope="col">Step size found</th>
+              <th scope="col">Quality of fit, R (1 is perfect)</th>
+              <th scope="col">Share of shuffles fitting this well</th>
+              <th scope="col">Shapes fitting / shapes measured</th>
+              <th scope="col">Typical distance from the steps</th>
+              <th scope="col">Different steps used</th>
+              <th scope="col">Score (0 to 1)</th>
+              <th scope="col">Fits a regular spacing?</th>
             </tr>
           </thead>
           <tbody>
@@ -363,7 +403,7 @@ export function Overlay({
                   <td className="num">{fmtExact(c.rms_residual)}</td>
                   <td className="num">{c.levels_used}</td>
                   <td className="num">{fmtExact(c.score)}</td>
-                  <td>{c.applicable ? (c.quantized ? "yes" : "no") : "not applicable"}</td>
+                  <td>{c.applicable ? (c.quantized ? "yes" : "no") : "does not apply to this file"}</td>
                 </tr>
               );
             })}
@@ -375,19 +415,20 @@ export function Overlay({
         <div className="table-wrap">
           <table>
             <caption>
-              Segmented elements in reading order — select a row to highlight
-              its box
+              Every shape that was measured, in reading order. Select a row
+              to highlight that shape’s outline on the picture above. All
+              positions and sizes are in pixels.
             </caption>
             <thead>
               <tr>
-                <th scope="col">#</th>
-                <th scope="col">Left</th>
-                <th scope="col">Top</th>
+                <th scope="col">Shape number</th>
+                <th scope="col">Distance from left edge</th>
+                <th scope="col">Distance from top edge</th>
                 <th scope="col">Width</th>
                 <th scope="col">Height</th>
-                <th scope="col">Gap →</th>
-                <th scope="col">Angle°</th>
-                <th scope="col">Colour idx</th>
+                <th scope="col">Gap to next shape</th>
+                <th scope="col">Tilt angle (degrees)</th>
+                <th scope="col">Colour number</th>
                 <th scope="col">Brightness</th>
               </tr>
             </thead>

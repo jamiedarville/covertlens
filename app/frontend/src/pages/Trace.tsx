@@ -11,6 +11,7 @@ import type { TraceView } from "../types";
 import { ApiError, fetchTraceRun } from "../api";
 import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
+import { humanizeKey, verdictLabel } from "../format";
 
 export default function Trace() {
   const [runId, setRunId] = useState("");
@@ -22,7 +23,7 @@ export default function Trace() {
 
   const onLoad = async () => {
     if (!runId.trim()) {
-      setError("Enter a run ID from the Live Gate.");
+      setError("Type the session name first. It is the name you chose on the “Delivery gate (live)” page, for example run_live_demo. If you have not run the gate yet, do that first — this page only looks back at what already happened.");
       return;
     }
     setBusy(true);
@@ -32,16 +33,16 @@ export default function Trace() {
       setView(next);
       setStatusLine(
         next.deliveries.length === 0
-          ? "No deliveries recorded for this run yet."
-          : `${next.deliveries.length} deliver${next.deliveries.length === 1 ? "y" : "ies"} joined for run ${next.run_id}.`,
+          ? "No pictures have been sent in this session yet, so there is no timeline to show. Send one on the delivery gate page first."
+          : `Timeline loaded: ${next.deliveries.length} picture${next.deliveries.length === 1 ? "" : "s"} sent in session “${next.run_id}”. Read the table from left to right: what was sent, what was decided, and whether the recipient ever saw it.`,
       );
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 403
-          ? `Reading a trace needs the researcher or reviewer demo role (acting as ${role}).`
+          ? `Not allowed while pretending to be a ${role}: reading a session’s timeline needs researcher or reviewer. What to do: change the kind of user below and try again.`
           : err instanceof ApiError
             ? err.message
-            : "Could not load the trace.",
+            : "The timeline could not be loaded. What to do: check the session name and try again.",
       );
     } finally {
       setBusy(false);
@@ -53,40 +54,47 @@ export default function Trace() {
 
   return (
     <>
-      <h1>Trace explorer</h1>
+      <h1>Timeline of what happened in one session</h1>
       <p>
-        Follow one run from artifact creation through delivery,
-        verdict, parse and later actions. Missing links stay visible
-        with their reason; nothing is dropped silently.
+        Use this page after running the delivery gate. It puts one whole
+        session (a “run”) in order: each picture that was sent, the
+        decision taken on it, whether the recipient ever opened it, and
+        what the recipient did afterwards. It is the page to use when you
+        ask “so what actually happened, step by step?”
       </p>
       <p className="note">
-        Action links list candidate inputs only. This page states
-        causation_claimed: false — a candidate is an input visible
-        to the recipient before an action, not a cause of it.
+        When something expected is missing — for example, a held-back
+        picture was never opened by the recipient — the table says so and
+        gives the reason. Gaps are shown, never quietly hidden. One
+        caution: where this page links a recipient’s later action to a
+        picture, it only means the picture <em>could have been seen
+        before</em> that action. It never claims the picture{" "}
+        <em>caused</em> the action.
       </p>
 
       <section className="card" aria-labelledby="trace-run-heading">
-        <h2 id="trace-run-heading">Run</h2>
+        <h2 id="trace-run-heading">Which session do you want to look back at?</h2>
         <div className="form-grid">
           <label>
-            Run ID
+            Session name (run ID)
             <input
               type="text"
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               placeholder="run_live_demo"
             />
+            <span className="note">The exact name you used on the delivery gate page, for example run_live_demo. New here? Run the gate first, then come back with that name.</span>
           </label>
         </div>
         <RoleControl
           role={role}
           onChange={setRole}
           disabled={busy}
-          hint="Reading a trace needs researcher or reviewer."
+          hint="For this page: reading a timeline needs researcher or reviewer. As viewer you will be refused."
         />
         <p>
           <button type="button" className="button button-primary" onClick={onLoad} disabled={busy}>
-            Load trace
+            Show this session’s timeline
           </button>
         </p>
       </section>
@@ -98,21 +106,24 @@ export default function Trace() {
 
       {view && view.deliveries.length > 0 && (
         <section aria-labelledby="trace-deliveries-heading">
-          <h2 id="trace-deliveries-heading">Deliveries</h2>
+          <h2 id="trace-deliveries-heading">Pictures sent, and what happened to each</h2>
           <div className="table-wrap">
             <table>
               <caption>
-                Every attempted delivery in run {view.run_id}, with its
-                hash, verdict reference and parse/next-action linkage.
+                Every picture sent in session {view.run_id}. Read across:
+                who sent it to whom, its file fingerprint, the decision
+                taken, whether the recipient opened it, and what happened
+                next. Anything missing is listed with its reason in the
+                last column.
               </caption>
               <thead>
                 <tr>
-                  <th>Delivery</th>
-                  <th>Content hash</th>
-                  <th>Verdict reference</th>
-                  <th>Parse</th>
-                  <th>Next action</th>
-                  <th>Missing links</th>
+                  <th>Picture (short ID, sender → recipient)</th>
+                  <th>File fingerprint</th>
+                  <th>Decision on record?</th>
+                  <th>Did the recipient open it?</th>
+                  <th>Recipient actions afterwards</th>
+                  <th>What is missing, and why</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,29 +141,29 @@ export default function Trace() {
                     <td>
                       {d.verdict_reference_status === "linked" ? (
                         <>
-                          linked
+                          yes — {d.verdict?.verdict ? verdictLabel(d.verdict.verdict).toLowerCase() : "recorded"}
                           <br />
                           <span className="mono-small">
                             {d.verdict?.verdict ?? "—"} · {(d.verdict?.verdict_id ?? "").slice(0, 18)}…
                           </span>
                         </>
                       ) : (
-                        "missing"
+                        "no decision on record"
                       )}
                     </td>
                     <td>
                       {d.parse.linkage === "linked"
-                        ? `linked (${d.parse.parse_status})`
-                        : `missing (${d.parse.parse_status})`}
+                        ? `recorded (${humanizeKey(String(d.parse.parse_status)).toLowerCase()})`
+                        : `not recorded (${humanizeKey(String(d.parse.parse_status)).toLowerCase()}) — for held-back pictures this is expected: they were never seen`}
                     </td>
                     <td>
                       {d.next_actions.length > 0
-                        ? `${d.next_actions.length} candidate action link(s)`
-                        : "missing"}
+                        ? `${d.next_actions.length} later action(s) could have seen this picture`
+                        : "none recorded"}
                     </td>
                     <td>
                       {d.missing_reasons.length === 0 ? (
-                        "none"
+                        "nothing missing"
                       ) : (
                         <ul className="tight">
                           {d.missing_reasons.map((r) => (
@@ -170,7 +181,8 @@ export default function Trace() {
           </div>
           {view.linkage_errors.length > 0 && (
             <p className="note">
-              Linkage notes: {view.linkage_errors.join("; ")}
+              Notes about records that could not be joined together:{" "}
+              {view.linkage_errors.join("; ")}
             </p>
           )}
         </section>
@@ -179,23 +191,24 @@ export default function Trace() {
       {view && (
         <div className="card-grid card-grid-2">
           <section className="card" aria-labelledby="trace-context-heading">
-            <h2 id="trace-context-heading">Episode context</h2>
-            <h3>Participants</h3>
+            <h2 id="trace-context-heading">Who took part, grouped by episode</h2>
+            <p className="note">An “episode” is an optional label used to group a few deliveries inside the session.</p>
+            <h3>Agents in this session</h3>
             {participants.length === 0 ? (
-              <p className="note">No participants recorded yet.</p>
+              <p className="note">No agents have been recorded in this session yet.</p>
             ) : (
               <ul className="tight">
                 {participants.map((p) => (
                   <li key={p.agent_id}>
-                    <strong>{p.agent_id}</strong> — sent {p.sent.length},
-                    received {p.received.length}, actions {p.actions.length}
+                    <strong>{p.agent_id}</strong> — sent {p.sent.length} picture(s),
+                    received {p.received.length}, and took {p.actions.length} later action(s)
                   </li>
                 ))}
               </ul>
             )}
             <h3>Episodes</h3>
             {episodes.length === 0 ? (
-              <p className="note">No episodes recorded yet.</p>
+              <p className="note">No episode labels were used in this session. That is normal if the sender left the episode box empty.</p>
             ) : (
               <ul className="tight">
                 {episodes.map((e) => (
@@ -211,27 +224,29 @@ export default function Trace() {
           </section>
 
           <section className="card" aria-labelledby="trace-weak-heading">
-            <h2 id="trace-weak-heading">Repeated weak signals</h2>
+            <h2 id="trace-weak-heading">Small signals that keep repeating</h2>
             <p className="note">
-              Per sender, deliveries with a strongest family score in
-              the weak band (above 0, below{" "}
-              {view.weak_signals.band.max_exclusive}). Two or more mark
-              a repeated pattern. Triage aid only — not a verdict and
-              not proof of signalling.
+              One small score means little on its own. But if the same
+              sender keeps producing small-but-not-zero scores, that is
+              worth a person’s attention. This table counts, per sender,
+              pictures whose strongest check score was small (above 0 but
+              below {view.weak_signals.band.max_exclusive}). Two or more is
+              marked “repeated”. This is only a hint where to look first —
+              it is not a decision and not proof of anything.
             </p>
             {view.weak_signals.per_sender.length === 0 ? (
-              <p className="note">No sender activity recorded yet.</p>
+              <p className="note">No sender activity has been recorded in this session yet.</p>
             ) : (
               <div className="table-wrap">
                 <table>
-                  <caption>Weak-signal counts per sender for this run.</caption>
+                  <caption>Small-signal counts per sender in this session. Scores run from 0 to 1.</caption>
                   <thead>
                     <tr>
                       <th>Sender</th>
-                      <th>Deliveries</th>
-                      <th>Weak signals</th>
-                      <th>Repeated</th>
-                      <th>Strongest score</th>
+                      <th>Pictures sent</th>
+                      <th>With a small signal</th>
+                      <th>Repeated?</th>
+                      <th>Strongest score seen</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -240,7 +255,7 @@ export default function Trace() {
                         <td>{r.sender_id}</td>
                         <td>{r.deliveries}</td>
                         <td>{r.weak_signals}</td>
-                        <td>{r.repeated_weak ? "yes — repeated" : "no"}</td>
+                        <td>{r.repeated_weak ? "yes — worth a closer look" : "no"}</td>
                         <td>{r.max_score.toFixed(3)}</td>
                       </tr>
                     ))}
@@ -254,29 +269,33 @@ export default function Trace() {
 
       {view && (
         <section aria-labelledby="trace-actions-heading">
-          <h2 id="trace-actions-heading">Actions and candidate inputs</h2>
+          <h2 id="trace-actions-heading">What recipients did afterwards</h2>
           <p className="note">
-            {view.causation_note}. causation_claimed: false for every
-            action listed here.
+            {view.causation_note}. In plain English: for every action
+            below, the listed pictures are only ones the recipient{" "}
+            <em>could have seen beforehand</em>. This page never claims a
+            picture caused an action.
           </p>
           {view.actions.length === 0 ? (
             <p className="note">
-              No recipient actions recorded in this run. Delivered
-              artifacts list this link as missing with its reason.
+              No recipient actions have been recorded in this session, so
+              there is nothing to link pictures to. In the table above,
+              delivered pictures list this as missing, with the reason.
             </p>
           ) : (
             <div className="table-wrap">
               <table>
                 <caption>
-                  Recipient actions with candidate input artifacts.
-                  Candidates are visible inputs, not a cause.
+                  Each action a recipient took, with the pictures they could
+                  have seen before it. “Could have seen” is not the same as
+                  “acted on it”.
                 </caption>
                 <thead>
                   <tr>
-                    <th>Action</th>
-                    <th>Recipient</th>
-                    <th>Candidate inputs</th>
-                    <th>Causation claimed</th>
+                    <th>Action (in order)</th>
+                    <th>Who acted</th>
+                    <th>Pictures they could have seen before it</th>
+                    <th>Do we claim the picture caused it?</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,12 +307,12 @@ export default function Trace() {
                       <td>{a.recipient_id ?? "—"}</td>
                       <td>
                         {a.candidate_count === 0
-                          ? "none visible before this action"
+                          ? "none — no picture had been delivered to them before this"
                           : a.candidate_delivery_ids
                               .map((id) => `${id.slice(0, 18)}…`)
                               .join(", ")}
                       </td>
-                      <td>{a.causation_claimed ? "yes" : "false"}</td>
+                      <td>{a.causation_claimed ? "yes" : "No — at most a possible link"}</td>
                     </tr>
                   ))}
                 </tbody>

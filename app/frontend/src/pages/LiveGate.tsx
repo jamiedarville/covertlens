@@ -19,8 +19,20 @@ import {
 } from "../api";
 import { RoleControl } from "../components/RoleControl";
 import { useDemoRole } from "../demoRole";
+import { gateStateLabel, humanizeKey, verdictLabel, verdictMeaning } from "../format";
+import { StartSteps, TechDetails } from "../components/Help";
 
-const ROUTES = ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07"];
+// How the image travels from sender to recipient (covertlens/routes.py).
+// The gate checks the image on every one of these paths.
+const ROUTES: { value: string; label: string }[] = [
+  { value: "R-01", label: "A tool returns the picture itself in its output (R-01)" },
+  { value: "R-02", label: "A tool returns a link to a picture file (R-02)" },
+  { value: "R-03", label: "An agent message points to a picture (R-03)" },
+  { value: "R-04", label: "The recipient downloads it from storage (R-04)" },
+  { value: "R-05", label: "The recipient opens a saved link to it (R-05)" },
+  { value: "R-06", label: "The recipient asks for a preview or thumbnail (R-06)" },
+  { value: "R-07", label: "The picture is handed to the recipient’s image reader (R-07)" },
+];
 const VERDICTS = ["log", "flag", "quarantine", "fail_run"];
 
 export default function LiveGate() {
@@ -96,7 +108,7 @@ export default function LiveGate() {
           if (cancelled) return;
           objectUrl = URL.createObjectURL(blob);
           setRecipientUrl(objectUrl);
-          setRecipientNote("delivered — the recipient received these bytes.");
+          setRecipientNote("Delivered — this is exactly the picture the recipient received.");
         })
         .catch(() => {
           if (!cancelled) setRecipientNote(selected.recipient_message);
@@ -131,13 +143,13 @@ export default function LiveGate() {
     try {
       const blob = await fetchReviewerImage(selected.delivery_id, role);
       setReviewerUrl(URL.createObjectURL(blob));
-      setReviewerNote(`Opened as demo-${role} through R-08. The read is audited.`);
+      setReviewerNote(`You opened the original picture while pretending to be a ${role}, through the reviewers-only path (route R-08). This opening has been written into the audit record below.`);
     } catch (err) {
       setReviewerUrl(null);
       setReviewerNote(
         err instanceof ApiError && err.status === 403
-          ? `Denied for the ${role} demo role: opening the original needs researcher or reviewer. The attempt is recorded as reviewer_denied.`
-          : "Original unavailable.",
+          ? `Not allowed while pretending to be a ${role}: opening the original needs researcher or reviewer. What to do: change the kind of user above and try again. This refused attempt has also been written into the audit record.`
+          : "The original picture could not be opened just now. What to do: try again in a moment.",
       );
     } finally {
       await refresh(runId.trim()).catch(() => undefined);
@@ -152,9 +164,9 @@ export default function LiveGate() {
       setRunId(id);
       setDetail(null);
       setSelectedId(null);
-      setStatusLine(`Run ${id} ready. Post an image as the sender.`);
+      setStatusLine(`Your session “${id}” is ready. Next step: send a picture through the gate using the form below. Remember this name — the timeline and review pages will ask for it.`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the run.");
+      setError(err instanceof ApiError ? err.message : "The session could not be started. What to do: try again, or type a different session name.");
     } finally {
       setBusy(false);
     }
@@ -163,11 +175,11 @@ export default function LiveGate() {
   const onPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!runId.trim()) {
-      setError("Create a run first.");
+      setError("Start a session first: use “Start a new session” above. Every picture belongs to a named session so you can find it again later.");
       return;
     }
     if (!file) {
-      setError("Choose a PNG or JPEG to send.");
+      setError("Choose a picture to send first (PNG or JPEG).");
       return;
     }
     setBusy(true);
@@ -184,9 +196,9 @@ export default function LiveGate() {
       setSelectedId(delivery.delivery_id);
       setSuggested(null);
       await refresh(runId.trim());
-      setStatusLine("Delivery pending — analyse it, then apply a verdict.");
+      setStatusLine("The picture is now waiting at the gate — the recipient cannot see it yet. Next step: choose “Check this picture”, then decide whether it may go through.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delivery failed.");
+      setError(err instanceof ApiError ? err.message : "The picture could not be sent. What to do: check it is a PNG or JPEG and try again.");
     } finally {
       setBusy(false);
     }
@@ -201,10 +213,10 @@ export default function LiveGate() {
       setSuggested(result.suggested_verdict);
       setVerdictChoice(result.suggested_verdict);
       setStatusLine(
-        `Analysis complete. Suggested verdict: ${result.suggested_verdict}. Apply a verdict to decide delivery.`,
+        `Check finished. Based on the scores, we suggest: “${verdictLabel(result.suggested_verdict)}”. Nothing has been decided yet — choose a decision below and apply it.`,
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Analysis failed.");
+      setError(err instanceof ApiError ? err.message : "The check could not be completed. What to do: try again in a moment.");
     } finally {
       setBusy(false);
     }
@@ -219,16 +231,16 @@ export default function LiveGate() {
       await refresh(runId.trim());
       setStatusLine(
         updated.state === "permitted"
-          ? "Verdict permits delivery. The recipient pane now shows the image."
-          : updated.recipient_message,
+          ? "Decision applied: the picture was let through. You can see exactly what the recipient received in the “What the recipient sees” box below."
+          : `Decision applied: the picture was held back. ${updated.recipient_message}`,
       );
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 403
-          ? `Applying a verdict needs the researcher demo role (acting as ${role}).`
+          ? `Not allowed while pretending to be a ${role}: deciding deliveries needs the researcher kind of user. What to do: change the kind of user above to researcher, then apply the decision again.`
           : err instanceof ApiError
             ? err.message
-            : "Verdict failed.",
+            : "The decision could not be applied. What to do: try again in a moment.",
       );
     } finally {
       setBusy(false);
@@ -241,9 +253,9 @@ export default function LiveGate() {
     setError(null);
     try {
       await refresh(runId.trim());
-      setStatusLine(`Loaded run ${runId.trim()}.`);
+      setStatusLine(`Session “${runId.trim()}” loaded. Its pictures and history are shown below.`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the run.");
+      setError(err instanceof ApiError ? err.message : "That session could not be loaded. What to do: check you typed its name exactly as when you created it.");
     } finally {
       setBusy(false);
     }
@@ -254,91 +266,112 @@ export default function LiveGate() {
 
   return (
     <>
-      <h1>Live Gate</h1>
+      <h1>Watch an image go through the delivery gate</h1>
       <p>
-        Send an image through the gate and watch it move: pending, then
-        analysed, then a verdict, then delivered or withheld. The
-        recipient only ever sees bytes after a permitting verdict. The
-        reviewer can still open quarantined originals, with the read
-        audited. Gate state is stored on the server, so refreshing or
-        restarting keeps the run.
+        This page demonstrates the checkpoint every image passes before a
+        recipient can see it. You play all the parts: you send a picture,
+        run the checks on it, decide whether it may go through, and then
+        see exactly what the recipient gets. The most important thing to
+        notice: <strong>the recipient can never open a picture that was
+        held back</strong> — but an authorised reviewer still can, and
+        every opening (and every refused attempt) is written into an
+        audit record.
+      </p>
+      <StartSteps heading="Do it in four steps">
+        <li><strong>Start a session</strong> (called a “run”): a named experiment session that groups related pictures so you can find them again later.</li>
+        <li><strong>Send a picture</strong> from the sender to the recipient. It waits at the gate — the recipient cannot see it yet.</li>
+        <li><strong>Check it, then decide</strong>: let it through, let it through but flag it, hold it back for review, or hold it back and stop the session.</li>
+        <li><strong>Compare the two boxes</strong> at the bottom: what the recipient sees, and what a reviewer may open.</li>
+      </StartSteps>
+      <p className="note">
+        Everything is saved on the server, so you can reload this page and
+        carry on where you left off using the same session name.
       </p>
 
       <section className="card" aria-labelledby="gate-run-heading">
-        <h2 id="gate-run-heading">Run</h2>
+        <h2 id="gate-run-heading">Step 1 — Your session (“run”)</h2>
         <div className="form-grid">
           <label>
-            Run ID
+            Session name (run ID)
             <input
               type="text"
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               placeholder="run_live_demo"
             />
+            <span className="note">Any name you will remember, for example run_live_demo. Leave empty and one is made for you. The timeline and review pages will ask for this exact name.</span>
           </label>
           <label>
-            Sender
+            Sender (who sends the picture)
             <input type="text" value={senderId} onChange={(e) => setSenderId(e.target.value)} />
+            <span className="note">A name for the sending agent, for example agent-a.</span>
           </label>
           <label>
-            Recipient
+            Recipient (who the picture is for)
             <input
               type="text"
               value={recipientId}
               onChange={(e) => setRecipientId(e.target.value)}
             />
+            <span className="note">A name for the receiving agent, for example agent-b.</span>
           </label>
           <label>
-            Episode (optional)
+            Episode label (optional)
             <input
               type="text"
               value={episodeId}
               onChange={(e) => setEpisodeId(e.target.value)}
               placeholder="ep_1"
             />
+            <span className="note">An optional extra label to group a few deliveries inside the session, for example ep_1. You can leave this empty.</span>
           </label>
         </div>
         <RoleControl
           role={role}
           onChange={setRole}
           disabled={busy}
-          hint="Applying a verdict needs researcher. Opening a withheld original needs researcher or reviewer."
+          hint="For this page: deciding a delivery needs researcher. Opening a held-back original needs researcher or reviewer."
         />
         <p>
           <button type="button" className="button button-primary" onClick={onCreateRun} disabled={busy}>
-            Create run
+            Start a new session
           </button>{" "}
           <button type="button" className="button" onClick={onLoadRun} disabled={busy || !runId.trim()}>
-            Load run
+            Re-open an existing session
           </button>
+          {!runId.trim() && (
+            <span className="note"> To re-open an old session, type its name above first.</span>
+          )}
         </p>
       </section>
 
       <form onSubmit={onPost} className="generate-form">
         <fieldset>
-          <legend>Sender: post an image</legend>
+          <legend>Step 2 — The sender sends a picture</legend>
           <div className="form-grid">
             <label>
-              Route
+              How does the picture travel to the recipient?
               <select value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={busy}>
                 {ROUTES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
+              <span className="note">CovertLens checks the picture on every one of these paths, so there is no unchecked way around the gate. Leave the first choice if you are unsure.</span>
             </label>
             <label>
-              Image (PNG or JPEG)
+              Picture to send (PNG or JPEG)
               <input
                 type="file"
                 accept="image/png,image/jpeg,.png,.jpg,.jpeg"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 disabled={busy}
               />
+              <span className="note">Tip: use “Make a test image” in the menu to create a picture with a pattern hidden in it.</span>
             </label>
           </div>
           <p>
             <button type="submit" className="button button-primary" disabled={busy}>
-              Post through the gate
+              Send the picture to the gate (recipient cannot see it yet)
             </button>
           </p>
         </fieldset>
@@ -351,16 +384,16 @@ export default function LiveGate() {
 
       {detail && detail.deliveries.length > 0 && (
         <section aria-labelledby="gate-deliveries-heading">
-          <h2 id="gate-deliveries-heading">Deliveries in this run</h2>
+          <h2 id="gate-deliveries-heading">Pictures sent in this session</h2>
           <div className="table-wrap">
             <table>
-              <caption>Choose a delivery to analyse and decide.</caption>
+              <caption>Every picture sent so far. Choose one to check it and decide whether the recipient may see it.</caption>
               <thead>
                 <tr>
-                  <th>Delivery</th>
-                  <th>Route identities</th>
-                  <th>State</th>
-                  <th>Verdict</th>
+                  <th>Picture (short ID)</th>
+                  <th>From → to, and file fingerprint</th>
+                  <th>Where it stands now</th>
+                  <th>Decision taken</th>
                   <th></th>
                 </tr>
               </thead>
@@ -373,8 +406,8 @@ export default function LiveGate() {
                       <br />
                       <span className="mono-small">{d.content_hash.slice(0, 24)}…</span>
                     </td>
-                    <td>{d.state}</td>
-                    <td>{d.verdict ?? "—"}</td>
+                    <td title={d.state}>{gateStateLabel(d.state)}</td>
+                    <td title={d.verdict ?? undefined}>{d.verdict ? verdictLabel(d.verdict) : "none yet"}</td>
                     <td>
                       <button
                         type="button"
@@ -384,7 +417,7 @@ export default function LiveGate() {
                           setSuggested(null);
                         }}
                       >
-                        Select
+                        Choose this picture
                       </button>
                     </td>
                   </tr>
@@ -397,91 +430,109 @@ export default function LiveGate() {
 
       {selected && (
         <section className="card" aria-labelledby="gate-decide-heading">
-          <h2 id="gate-decide-heading">Analyse and decide</h2>
+          <h2 id="gate-decide-heading">Step 3 — Check this picture and decide</h2>
           <dl className="kv kv-wide">
-            <div><dt>State</dt><dd>{selected.state}</dd></div>
-            <div><dt>Recipient view</dt><dd>{selected.recipient_message}</dd></div>
-            <div><dt>Content hash</dt><dd>{selected.content_hash}</dd></div>
+            <div><dt>Where it stands now</dt><dd title={selected.state}>{gateStateLabel(selected.state)}</dd></div>
+            <div><dt>What the recipient is told right now</dt><dd>{selected.recipient_message}</dd></div>
           </dl>
+          <TechDetails summary="File fingerprint (for matching this exact file later)">
+            <p className="note hash-line">{selected.content_hash}</p>
+          </TechDetails>
           {selected.state === "pending" && (
             <>
               <p>
                 <button type="button" className="button" onClick={onAnalyze} disabled={busy}>
-                  Analyse
-                </button>
+                  Check this picture (runs all four checks)
+                </button>{" "}
+                <span className="note">Checking does not decide anything — it only suggests a decision for you below.</span>
               </p>
               {suggested && (
                 <p className="note">
-                  Suggested verdict from analysis: <strong>{suggested}</strong>.
-                  With unfrozen thresholds this is triage only; choose the
-                  gate verdict to apply.
+                  Suggested from the scores: <strong>{verdictLabel(suggested)}</strong>{" "}
+                  (exact value: {suggested}). Treat this as a prompt to look
+                  closer, not a final judgement — you choose the decision.
                 </p>
               )}
               <div className="form-grid">
                 <label>
-                  Verdict
+                  Your decision (called a “verdict”)
                   <select value={verdictChoice} onChange={(e) => setVerdictChoice(e.target.value)} disabled={busy}>
                     {VERDICTS.map((v) => (
-                      <option key={v} value={v}>{v}</option>
+                      <option key={v} value={v}>{verdictLabel(v)} ({v})</option>
                     ))}
                   </select>
+                  <span className="note">{verdictMeaning(verdictChoice)}</span>
                 </label>
               </div>
               <p>
                 <button type="button" className="button button-primary" onClick={onVerdict} disabled={busy}>
-                  Apply verdict
-                </button>
+                  Apply this decision now
+                </button>{" "}
+                <span className="note">Needs the researcher kind of user (see step 1). The recipient’s view below updates immediately.</span>
               </p>
             </>
           )}
           {selected.state !== "pending" && (
-            <p className="note">This delivery is decided. Post another image to run the gate again.</p>
+            <p className="note">This picture has already been decided, and decisions here cannot be changed. What to do next: send another picture in step 2 to run the gate again, or open the review page to judge a held-back picture.</p>
           )}
         </section>
       )}
 
       <div className="card-grid card-grid-2">
         <section className="card" aria-labelledby="recipient-heading">
-          <h2 id="recipient-heading">Recipient pane</h2>
+          <h2 id="recipient-heading">Step 4a — What the recipient sees</h2>
+          <p className="note">
+            This box fetches the picture exactly the way the recipient
+            would. If the gate has not let it through, there is nothing to
+            fetch — only an explanation.
+          </p>
           {!selected ? (
-            <p className="note">Select a delivery to see what the recipient gets.</p>
+            <p className="note">Nothing to show yet: send a picture in step 2 and choose it from the table above.</p>
           ) : selected.state === "permitted" && recipientUrl ? (
             <>
-              <img className="skyline-img" src={recipientUrl} alt="Image delivered to the recipient" />
+              <img className="skyline-img" src={recipientUrl} alt="The picture exactly as delivered to the recipient" />
               <p>{recipientNote}</p>
             </>
           ) : (
             <>
               <p data-testid="recipient-withheld">
-                <strong>{selected.state === "withheld" ? "withheld" : selected.state}</strong>
+                <strong>{gateStateLabel(selected.state)}</strong>
                 {" — "}
                 {recipientNote || selected.recipient_message}
               </p>
-              <p className="note">No image is shown here for a withheld delivery.</p>
+              <p className="note">
+                No picture is shown here, and none is hidden in this page
+                waiting to be uncovered: the recipient’s request is refused
+                by the server. That refusal is written into the audit
+                record below.
+              </p>
             </>
           )}
         </section>
 
         <section className="card" aria-labelledby="reviewer-heading">
-          <h2 id="reviewer-heading">Reviewer pane</h2>
+          <h2 id="reviewer-heading">Step 4b — What a reviewer may open</h2>
+          <p className="note">
+            Held-back pictures are not deleted. An authorised person can
+            still open the original through a separate, reviewers-only
+            path (route R-08) to judge it. Recipients can never use this
+            path, and every use is recorded.
+          </p>
           {!selected ? (
-            <p className="note">Select a delivery to open its original (R-08, audited).</p>
+            <p className="note">Nothing to open yet: choose a picture from the table above first.</p>
           ) : (
             <>
               {reviewerUrl ? (
-                <img className="skyline-img" src={reviewerUrl} alt="Original opened by the reviewer" />
+                <img className="skyline-img" src={reviewerUrl} alt="The original picture, opened by the reviewer" />
               ) : (
                 <p>
                   <button type="button" className="button" onClick={onOpenOriginal} disabled={busy}>
-                    Open original as {role}
-                  </button>
+                    Open the original picture (you are pretending to be a {role})
+                  </button>{" "}
+                  <span className="note">Works only as researcher or reviewer; as viewer you will be refused — try it and watch the audit record below.</span>
                 </p>
               )}
               {reviewerNote && <p data-testid="reviewer-note">{reviewerNote}</p>}
-              <p className="note">
-                Reviewer evidence view. Recipients never get bytes through
-                this path.
-              </p>
             </>
           )}
         </section>
@@ -490,17 +541,18 @@ export default function LiveGate() {
       {detail && (
         <>
           <section aria-labelledby="gate-timeline-heading">
-            <h2 id="gate-timeline-heading">Timeline</h2>
+            <h2 id="gate-timeline-heading">What has happened so far, in order</h2>
+            <p className="note">Every step in this session, oldest first. New steps appear here automatically.</p>
             {detail.events.length === 0 ? (
-              <p className="note">No events yet. Post an image to start the timeline.</p>
+              <p className="note">Nothing has happened in this session yet. Send a picture in step 2 to start this list.</p>
             ) : (
               <ol className="tight">
                 {detail.events.map((event) => (
                   <li key={event.event_id}>
-                    <span className="mono-small">#{event.seq} {event.event_type}</span>
-                    {event.verdict ? ` · verdict ${event.verdict}` : ""}
+                    <span title={event.event_type}>{humanizeKey(event.event_type)}</span>
+                    {event.verdict ? ` — decision: ${verdictLabel(event.verdict).toLowerCase()}` : ""}
                     {" · "}
-                    {event.occurred_at}
+                    <span className="mono-small">#{event.seq} · {event.occurred_at}</span>
                   </li>
                 ))}
               </ol>
@@ -508,24 +560,35 @@ export default function LiveGate() {
           </section>
 
           <section aria-labelledby="gate-audit-heading">
-            <h2 id="gate-audit-heading">Access-attempt audit</h2>
+            <h2 id="gate-audit-heading">Record of who tried to open what (audit)</h2>
+            <p className="note">
+              Every attempt to open a picture in this session is counted
+              here — including refused attempts, such as the recipient
+              asking for a held-back picture (this page makes that request
+              for you so you can see it recorded). The number that must
+              always be zero is “opened without permission”.
+            </p>
             <dl className="kv kv-wide">
-              <div><dt>Attempts</dt><dd>{String(report.attempts ?? 0)}</dd></div>
-              <div><dt>Served to recipient</dt><dd>{String(report.served ?? 0)}</dd></div>
-              <div><dt>Unauthorized served</dt><dd>{String(unauthorized)}</dd></div>
-              <div><dt>Withheld denied</dt><dd>{String(report.withheld_denied ?? 0)}</dd></div>
-              <div><dt>Reviewer served (R-08)</dt><dd>{String(report.reviewer_served ?? 0)}</dd></div>
-              <div><dt>Reviewer denied (R-08)</dt><dd>{String(report.reviewer_denied ?? 0)}</dd></div>
+              <div><dt>Total attempts to open a picture</dt><dd>{String(report.attempts ?? 0)}</dd></div>
+              <div><dt>Given to the recipient (allowed)</dt><dd>{String(report.served ?? 0)}</dd></div>
+              <div><dt>Given out without permission (must be 0)</dt><dd>{String(unauthorized)}</dd></div>
+              <div><dt>Recipient refused because the picture is held back</dt><dd>{String(report.withheld_denied ?? 0)}</dd></div>
+              <div><dt>Opened by a reviewer, allowed (route R-08)</dt><dd>{String(report.reviewer_served ?? 0)}</dd></div>
+              <div><dt>Reviewer opening refused (route R-08)</dt><dd>{String(report.reviewer_denied ?? 0)}</dd></div>
             </dl>
             {unauthorized !== 0 && (
-              <p className="alert" role="alert">Unauthorized bytes were served.</p>
+              <p className="alert" role="alert">
+                Warning: a picture was given out without permission. This
+                should never happen — treat this session’s results as
+                untrustworthy and tell whoever runs this server.
+              </p>
             )}
             {detail.access_attempts.length > 0 && (
               <div className="table-wrap">
                 <table>
-                  <caption>Every recorded attempt, newest last.</caption>
+                  <caption>Every recorded attempt to open a picture, oldest first. “Route” is the path the request took (see step 2); R-08 is the reviewers-only path.</caption>
                   <thead>
-                    <tr><th>Delivery</th><th>Route</th><th>Outcome</th><th>State then</th><th>Actor</th></tr>
+                    <tr><th>Picture (short ID)</th><th>Path used</th><th>Allowed or refused</th><th>Picture’s status at the time</th><th>Who asked</th></tr>
                   </thead>
                   <tbody>
                     {detail.access_attempts.map((a, i) => (

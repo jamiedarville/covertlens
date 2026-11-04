@@ -4,11 +4,13 @@
 import { useEffect, useState } from "react";
 import type { LeaderboardBoard, LeaderboardView, OperatingPoint } from "../api";
 import { ApiError, fetchLeaderboard, fetchLeaderboardBoard } from "../api";
+import { verdictLabel } from "../format";
+import { TechDetails } from "../components/Help";
 
 const POINT_LABEL: Record<OperatingPoint, string> = {
-  triage: "Below triage (never flagged)",
-  quarantine: "Below quarantine (delivered)",
-  fail_run: "Below fail-run (run kept going)",
+  triage: "Slipped past without even being flagged for attention",
+  quarantine: "Not held back (delivered, even if flagged)",
+  fail_run: "Did not stop the session (delivered or merely held back)",
 };
 
 export function short(hash: string): string {
@@ -19,19 +21,31 @@ export function short(hash: string): string {
 export function StandingsTable({ board, point }: { board: LeaderboardBoard; point: OperatingPoint }) {
   const rows = board.standings[point] ?? [];
   if (rows.length === 0) {
-    return <p className="note">No visible submissions stayed below this point yet.</p>;
+    return (
+      <p className="note">
+        No visible submissions got this far past the checker yet. That
+        can mean nobody has entered, entries are waiting for approval,
+        or the checker caught everything at this strictness. To enter,
+        make a picture on “Make a test image” and choose its leaderboard
+        button.
+      </p>
+    );
   }
   return (
     <table className="data-table">
-      <caption>{POINT_LABEL[point]}: ranked by payload carried</caption>
+      <caption>
+        {POINT_LABEL[point]} — ranked by how much hidden information each
+        picture carried (more is a “better” smuggle). “Bits per pixel”
+        says how densely it was packed.
+      </caption>
       <thead>
         <tr>
           <th scope="col">Rank</th>
           <th scope="col">Name</th>
-          <th scope="col">Encoder</th>
-          <th scope="col">Payload bits</th>
-          <th scope="col">Bits per pixel</th>
-          <th scope="col">Verdict</th>
+          <th scope="col">Hiding method used</th>
+          <th scope="col">Hidden information carried (bits)</th>
+          <th scope="col">Bits per pixel (how densely packed)</th>
+          <th scope="col">What the gate decided</th>
         </tr>
       </thead>
       <tbody>
@@ -42,7 +56,7 @@ export function StandingsTable({ board, point }: { board: LeaderboardBoard; poin
             <td>{row.subfamily ? `${row.kind} / ${row.subfamily}` : row.kind}</td>
             <td>{row.payload_bits}</td>
             <td>{row.bits_per_pixel ?? "—"}</td>
-            <td>{row.verdict}</td>
+            <td title={row.verdict}>{verdictLabel(row.verdict)}</td>
           </tr>
         ))}
       </tbody>
@@ -65,7 +79,7 @@ export default function Leaderboard() {
         setSelected(next.current.pin_hash);
       })
       .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Could not load the leaderboard."),
+        setError(err instanceof ApiError ? err.message : "The leaderboard could not be loaded. What to do: reload this page to try again."),
       );
   }, []);
 
@@ -78,43 +92,60 @@ export default function Leaderboard() {
     fetchLeaderboardBoard(pinHash)
       .then(setBoard)
       .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "That board could not be loaded."),
+        setError(err instanceof ApiError ? err.message : "That older leaderboard could not be loaded. What to do: choose the current board, or reload the page."),
       );
   };
 
   return (
     <>
-      <h1>Leaderboard</h1>
+      <h1>Leaderboard: who smuggled the most past the checker?</h1>
       <p>
-        Encoders made on the Generate page, scored by this server under one
-        pinned detector configuration. Each board is keyed by the release pin
-        hash, so results are only compared against the same detectors and
-        thresholds. A new detector version starts a new board; older boards
-        stay here under their own hash.
+        People use “Make a test image” to hide information in a picture,
+        then enter it here. The server re-checks the exact saved picture
+        (so nobody can swap in a different one) and ranks entries by how
+        much hidden information got past each decision cut-off. Doing
+        well here is useful, not naughty: every successful smuggle shows
+        the project a blind spot to fix.
+      </p>
+      <p className="note">
+        Fair-play rule: entries are only compared against the{" "}
+        <em>same version</em> of the checker. When the checker or its
+        cut-offs change, a fresh board starts; older boards stay readable
+        below, each labelled with that version’s fingerprint (its “pin
+        hash”).
       </p>
       {error && <p className="alert" role="alert">{error}</p>}
+      {!view && !error && (
+        <p role="status">Loading the leaderboard…</p>
+      )}
       {view && (
         <section className="card" aria-labelledby="pin-heading">
-          <h2 id="pin-heading">Current configuration</h2>
-          <dl className="kv kv-wide">
-            <div><dt>Pin hash</dt><dd>{view.current.pin_hash}</dd></div>
-            <div><dt>Thresholds</dt><dd>{view.current.threshold_config_version}</dd></div>
-            <div><dt>Detectors</dt><dd>{view.current.detectors.join(", ")}</dd></div>
-          </dl>
+          <h2 id="pin-heading">Which version of the checker?</h2>
+          <p className="note">
+            Rankings below were all produced by the checker version named
+            here. Use the list to look at boards from older versions.
+          </p>
+          <TechDetails summary="Exact version fingerprints">
+            <dl className="kv kv-wide">
+              <div><dt>Version fingerprint (pin hash)</dt><dd>{view.current.pin_hash}</dd></div>
+              <div><dt>Cut-off settings version</dt><dd>{view.current.threshold_config_version}</dd></div>
+              <div><dt>Checks included (detectors)</dt><dd>{view.current.detectors.join(", ")}</dd></div>
+            </dl>
+          </TechDetails>
           {view.moderation && (
-            <p className="note">New submissions appear after an operator approves them.</p>
+            <p className="note">New entries appear on the public board only after an operator approves them, so yours may not show immediately.</p>
           )}
           <label>
-            Board{" "}
+            Board to view{" "}
             <select value={selected} onChange={(e) => choose(e.target.value)}>
               <option value={view.current.pin_hash}>
-                current ({short(view.current.pin_hash)})
+                current checker ({short(view.current.pin_hash)})
               </option>
               {view.boards
                 .filter((b) => !b.current)
                 .map((b) => (
                   <option key={b.pin_hash} value={b.pin_hash}>
-                    {short(b.pin_hash)} · {b.threshold_config_version} · {b.visible_entries} entries
+                    older checker {short(b.pin_hash)} · settings {b.threshold_config_version} · {b.visible_entries} entries
                   </option>
                 ))}
             </select>
@@ -124,8 +155,13 @@ export default function Leaderboard() {
       {board && (
         <section aria-labelledby="standings-heading">
           <h2 id="standings-heading">Standings</h2>
+          <p className="note">
+            First choose how strict the gate must be for an entry to
+            count as “got past”. The first choice is the hardest to
+            achieve.
+          </p>
           <fieldset className="point-choice">
-            <legend>Operating point</legend>
+            <legend>How strict must the gate be?</legend>
             {(view?.operating_points ?? ["triage", "quarantine", "fail_run"]).map((p) => (
               <label key={p}>
                 <input

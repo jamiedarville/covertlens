@@ -11,12 +11,16 @@ export function StaticNotice({ runtime, offline }: { runtime: string; offline: s
   return (
     <div className="card" data-testid="static-notice">
       <p>
-        <strong>Runs entirely in your browser.</strong> The CovertLens library
-        executes in Pyodide (CPython compiled to WebAssembly); your image is
-        never uploaded. Pyodide is several times slower than the server, so
-        this page accepts images up to {STATIC_MAX_BYTES / (1024 * 1024)} MiB
-        and {(STATIC_MAX_PIXELS / 1_000_000).toFixed(0)} MP; use the server or
-        the CLI for larger ones.
+        <strong>This version runs entirely in your web browser.</strong>{" "}
+        Your picture is never uploaded anywhere — the same CovertLens
+        checker runs on your own device (using a technology called
+        Pyodide). The trade-off is speed: checking in a browser is
+        several times slower, so this page only accepts pictures up to{" "}
+        {STATIC_MAX_BYTES / (1024 * 1024)} MiB and{" "}
+        {(STATIC_MAX_PIXELS / 1_000_000).toFixed(0)} megapixels. For
+        larger pictures, use the normal server version or the
+        command-line tool. After your first visit, this page also works
+        offline.
       </p>
       <p className="note" data-testid="runtime-status">
         {runtime} · {offline}
@@ -26,19 +30,19 @@ export function StaticNotice({ runtime, offline }: { runtime: string; offline: s
 }
 
 function StaticApp() {
-  const [runtime, setRuntime] = useState("Python runtime loading…");
-  const [offline, setOffline] = useState("offline cache: preparing");
+  const [runtime, setRuntime] = useState("checker software: still loading — wait for “ready” before adding a large picture");
+  const [offline, setOffline] = useState("offline use: being prepared");
   useEffect(() => {
     startWorker();
-    onRuntimeReady(() => setRuntime("Python runtime ready"));
+    onRuntimeReady(() => setRuntime("checker software: ready"));
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("./sw.js")
         .then(() => navigator.serviceWorker.ready)
-        .then(() => setOffline("offline cache: ready"))
-        .catch(() => setOffline("offline cache: unavailable"));
+        .then(() => setOffline("offline use: ready — this page will keep working without a connection"))
+        .catch(() => setOffline("offline use: unavailable in this browser session — the page still works while you are online"));
     } else {
-      setOffline("offline cache: unsupported browser");
+      setOffline("offline use: your browser does not support it — the page still works while you are online");
     }
   }, []);
   return (
@@ -46,7 +50,7 @@ function StaticApp() {
       <header className="site-header">
         <span className="wordmark">CovertLens</span>
         <nav aria-label="Primary">
-          <span>Analyze (in your browser)</span>
+          <span>Check an image (runs in your browser — nothing is uploaded)</span>
         </nav>
       </header>
       <main id="main" className="page">
@@ -54,8 +58,8 @@ function StaticApp() {
       </main>
       <footer className="site-footer">
         <p>
-          Scores are evidence, never accusations. This static page makes no
-          request to an analysis server.
+          A high score is evidence to look closer — never an accusation on
+          its own. This page never sends your picture to a server.
         </p>
       </footer>
     </>
