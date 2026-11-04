@@ -60,8 +60,11 @@ def test_benchmark_separates_recall_from_false_claims(report):
 
 def test_height_or_size_alone_never_enforces(report):
     assert report["enforcement"]["height_or_size_alone_triggers_enforcement"] is False
-    assert report["enforcement"]["mode"] == "log_only_triage"
-    assert report["detector"]["enforceable"] is False
+    # Under the CL-54 freeze structure is withheld; quantization never is.
+    assert report["enforcement"]["mode"] == "frozen_ladder"
+    assert report["enforcement"]["structure_claims_withheld"] is True
+    assert report["detector"]["enforceable"] is True
+    assert report["coverage_checks"]["height_or_size_alone_never_enforces"] is True
     assert report["equated_with_collusion"] is False
 
 
@@ -75,3 +78,26 @@ def test_controls_are_deterministic_and_benign_labelled():
         "abstract",
         "benign_scene",
     }
+
+
+def test_cl78_rows_jitter_stride_and_random_payloads(report):
+    jitter = report["jittered_attacker"]
+    assert set(jitter) == {"height_position", "gap_timing"}
+    for row in jitter.values():
+        assert set(row["amplitudes"]) == {"+/-1px", "+/-2px", "+/-3px"}
+        one = row["amplitudes"]["+/-1px"]["structured"]["structure_recall"]
+        base = row["baseline_unjittered"]["structured"]["structure_recall"]
+        assert one["successes"] >= base["successes"] - 1
+    assert set(report["every_other_level_attacker"]) == {
+        "height_position",
+        "gap_timing",
+        "angle_tilt",
+    }
+    random_rows = report["random_payload_structure"]
+    assert random_rows["binomial_tail_at_stated_level"] >= 0.01
+    # The positive control is a fixed structured word, not a seed scan.
+    scene = report["scene_context"]
+    assert scene["encoded_structured_no_declaration"]["classification"] == (
+        "structure_claimed"
+    )
+    assert scene["encoded_structured_declared_height"]["verdict"] != "log"

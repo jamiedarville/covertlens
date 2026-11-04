@@ -114,13 +114,28 @@ export async function generateImage(
 
 // -- Live Gate (CL-53) ------------------------------------------------
 
-export async function createGateRun(runId?: string): Promise<string> {
+// CL-78: `declaredChannels` declares the run's legitimate geometric
+// channels; it must come before the first delivery (409 afterwards).
+export async function createGateRun(
+  runId?: string,
+  declaredChannels: string[] = [],
+): Promise<string> {
+  const request: Record<string, unknown> = runId ? { run_id: runId } : {};
+  if (declaredChannels.length > 0) request.declared_channels = declaredChannels;
   const response = await fetch("/api/gate/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(runId ? { run_id: runId } : {}),
+    body: JSON.stringify(request),
   });
-  if (!response.ok) throw new ApiError(response.status, "The session could not be started. What to do: try a different session name.");
+  if (!response.ok) {
+    const detail = ((await readJson(response)) as Record<string, unknown> | null)?.detail;
+    throw new ApiError(
+      response.status,
+      typeof detail === "string"
+        ? `The session could not be started: ${detail}`
+        : "The session could not be started. What to do: try a different session name.",
+    );
+  }
   const body = (await readJson(response)) as Record<string, unknown>;
   return String(body.run_id);
 }

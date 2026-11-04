@@ -23,8 +23,13 @@
           "patternProperties": {
             "^(height|gap|lit|colour|angle)$": {
               "type": "object",
-              "required": ["grid", "symbols", "residuals", "supporting",
-                           "support_fraction", "score", "applicable"]
+              "required": ["grid", "symbols_digest", "residuals", "supporting",
+                           "support_fraction", "score", "applicable",
+                           "decodable", "quantized"],
+              "not": {"required": ["symbols"]},
+              "properties": {
+                "symbols_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+              }
             }
           }
         }

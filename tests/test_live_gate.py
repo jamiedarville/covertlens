@@ -292,3 +292,22 @@ def test_gate_spa_route_served(gate_client, tmp_path, monkeypatch):
     # The reviewer pane fetches as the demo role, never by actor_id (CL-78).
     assert "fetchReviewerImage" in source
     assert "actor_id=" not in source
+
+
+def test_gate_reload_reports_versions_it_cannot_restore(tmp_path, caplog):
+    root = tmp_path / "evidence"
+    gate = InterceptionGate(ArtifactStore(root))
+    handle = gate.intercept_reference("R-03", "ref://img-1", lambda _r: PNG, CTX)
+    gate.attempt_delivery(handle, recipient_id="agent-b")
+    assert gate.reload_report()["skipped_versions"] == 0
+    # Damage the store: the gate knows a version the store no longer has.
+    index_path = root / "index.json"
+    index = json.loads(index_path.read_text())
+    index["versions"] = []
+    index_path.write_text(json.dumps(index))
+    with caplog.at_level("WARNING", logger="covertlens.gate"):
+        reopened = InterceptionGate(ArtifactStore(root))
+    report = reopened.reload_report()
+    assert report["skipped_versions"] == 1
+    assert report["versions"][0]["artifact_version_id"] == handle.artifact_version_id
+    assert "gate reload skipped version" in caplog.text

@@ -31,7 +31,6 @@ Binding rules (the point of this module):
 from __future__ import annotations
 
 import json
-import math
 from typing import Any
 
 from . import ids
@@ -40,7 +39,12 @@ from ._validation import make_need
 from .calibration import load_frozen_thresholds
 from .geometric import analyze_geometric, analyze_geometric_bytes
 from .geometric_fixtures import BASE_Y, GeoFixture, scene_plan
-from .segmentation import SegmentationResult, SegmenterConfig, reading_order
+from .segmentation import (
+    SegmentationResult,
+    SegmenterConfig,
+    assign_colour_indices,
+    reading_order,
+)
 from .store import ArtifactStore
 from .verdicts import DecisionContext, ThresholdConfig, decide_verdict
 
@@ -133,7 +137,6 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
         return SegmentationResult(
             "corrupt_source", detail="objects list missing/empty", config=config
         )
-    palette = config.colour_palette
     raw = []
     for obj in objects:
         try:
@@ -149,12 +152,6 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
                     "bottom": top + int(round(height)),
                     "area": int(obj["width"]) * int(round(height)),
                     "colour": list(colour),
-                    "colour_index": min(
-                        range(len(palette)), key=lambda i: math.dist(colour, palette[i])
-                    ),
-                    "colour_distance": round(
-                        min(math.dist(colour, p) for p in palette), 3
-                    ),
                     "brightness": float(obj["brightness"]),
                     "angle_deg": float(obj["angle_deg"]),
                     "_gap_after": float(obj["gap_after"]),
@@ -164,6 +161,8 @@ def parse_vector_source(doc: Any) -> SegmentationResult:
             return SegmentationResult(
                 "corrupt_source", detail=f"bad object: {exc}", config=config
             )
+    # Same discovered palette as the raster path (CL-78).
+    assign_colour_indices(raw, config)
     ordered = reading_order(raw, config.row_overlap_fraction)
     elements = []
     for i, comp in enumerate(ordered):

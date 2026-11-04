@@ -251,3 +251,13 @@ def test_duplicate_event_id_is_rejected_as_retry():
     log.append(first)
     with pytest.raises(ValueError, match="seq must be 1"):
         log.append(first)
+
+
+def test_events_are_frozen_so_their_id_cannot_drift():
+    import dataclasses
+
+    event = ev(EventType.ARTIFACT_CREATED, 0, content_hash=HASH)
+    before = event.event_id
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        event.seq = 9  # type: ignore[misc]
+    assert event.event_id == before

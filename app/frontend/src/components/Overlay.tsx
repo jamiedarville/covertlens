@@ -3,7 +3,7 @@
 // discovered step marked, residual histogram, chart-likeness
 // gauge, structure score against the null, classification badge.
 // Everything renders from the /api/analyze JSON alone. Symbols
-// stay numeric indices; this page never shows decoded text.
+// are withheld; this page shows only their count, range and digest.
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoElement, Geometric } from "../types";
@@ -113,6 +113,12 @@ function fallbackValues(geometric: Geometric, channel: string): number[] {
   };
   const seq = geometric.segmentation?.sequences[attr[channel] ?? ""] ?? [];
   return seq.filter((v): v is number => v !== null);
+}
+
+function shortDigest(digest: string | undefined): string {
+  if (!digest) return "—";
+  const hex = digest.replace(/^sha256:/, "");
+  return `sha256:${hex.slice(0, 12)}…`;
 }
 
 export function Overlay({
@@ -243,7 +249,7 @@ export function Overlay({
             unit={overlayChannel?.unit ?? ""}
             step={channel.step}
             offset={channel.offset}
-            symbols={channel.symbols}
+            symbolRange={channel.symbol_range}
             title={`${CHANNEL_LABELS[active] ?? active} attribute sequence`}
           />
           <p className="note">
@@ -252,12 +258,23 @@ export function Overlay({
               ? ` The horizontal lines are the regular spacing that was found: steps of ${fmtNum(channel.step)} starting from ${fmtNum(channel.offset)}. Dots sitting on the lines fit that spacing.`
               : " No regular spacing was found for this measurement."}
           </p>
-          <p className="symbols">
-            <span className="symbols-label">
-              Which step of the spacing each shape falls on (numbers only — never shown as letters or decoded text):
-            </span>{" "}
-            <span className="mono">{channel.symbols.join(" ")}</span>
+          <p className="symbols" data-testid="symbols-digest">
+            <span className="symbols-label">Measured spacing levels:</span>{" "}
+            {channel.symbol_count} on levels{" "}
+            {channel.symbol_range
+              ? `${channel.symbol_range[0]}–${channel.symbol_range[1]}`
+              : "—"}
+            ; file-style fingerprint <span className="mono">{shortDigest(channel.symbols_digest)}</span>
+            . The sequence itself is reviewer-only: only an authorised reviewer can request it.
           </p>
+          {channel.decode_tolerance !== undefined && (
+            <p className="note">
+              Rounding margin ±{fmtNum(channel.decode_tolerance)}: a shape
+              fits the spacing when rounding to the nearest level
+              still gives the same value ({fmtNum(channel.decode_support_fraction ?? null)}{" "}
+              of elements do).
+            </p>
+          )}
 
           <h3>How well does one regular spacing explain these values?</h3>
           <p className="note">

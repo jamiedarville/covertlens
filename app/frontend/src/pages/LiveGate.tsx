@@ -33,6 +33,97 @@ const ROUTES: { value: string; label: string }[] = [
   { value: "R-06", label: "The recipient asks for a preview or thumbnail (R-06)" },
   { value: "R-07", label: "The picture is handed to the recipient’s image reader (R-07)" },
 ];
+
+// Recipient pane: an image only for a permitted delivery whose bytes the
+// recipient path served; otherwise the gate's reason and no image.
+export function RecipientPane({
+  delivery,
+  imageUrl,
+  note,
+}: {
+  delivery: GateDelivery | null;
+  imageUrl: string | null;
+  note: string;
+}) {
+  return (
+    <section className="card" aria-labelledby="recipient-heading">
+      <h2 id="recipient-heading">Step 4a — What the recipient sees</h2>
+      <p className="note">
+        This box fetches the picture exactly the way the recipient
+        would. If the gate has not let it through, there is nothing to
+        fetch — only an explanation.
+      </p>
+      {!delivery ? (
+        <p className="note">Nothing to show yet: send a picture in step 2 and choose it from the table above.</p>
+      ) : delivery.state === "permitted" && imageUrl ? (
+        <>
+          <img className="skyline-img" src={imageUrl} alt="The picture exactly as delivered to the recipient" />
+          <p>{note}</p>
+        </>
+      ) : (
+        <>
+          <p data-testid="recipient-withheld">
+            <strong>{gateStateLabel(delivery.state)}</strong>
+            {" — "}
+            {note || delivery.recipient_message}
+          </p>
+          <p className="note">
+            No picture is shown here, and none is hidden in this page
+            waiting to be uncovered: the recipient’s request is refused
+            by the server. That refusal is written into the audit
+            record below.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+// Reviewer pane: closed until opened, and opened only as the chosen role.
+export function ReviewerPane({
+  delivery,
+  imageUrl,
+  note,
+  role,
+  busy,
+  onOpen,
+}: {
+  delivery: GateDelivery | null;
+  imageUrl: string | null;
+  note: string;
+  role: string;
+  busy: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <section className="card" aria-labelledby="reviewer-heading">
+      <h2 id="reviewer-heading">Step 4b — What a reviewer may open</h2>
+      <p className="note">
+        Held-back pictures are not deleted. An authorised person can
+        still open the original through a separate, reviewers-only
+        path (route R-08) to judge it. Recipients can never use this
+        path, and every use is recorded.
+      </p>
+      {!delivery ? (
+        <p className="note">Nothing to open yet: choose a picture from the table above first.</p>
+      ) : (
+        <>
+          {imageUrl ? (
+            <img className="skyline-img" src={imageUrl} alt="The original picture, opened by the reviewer" />
+          ) : (
+            <p>
+              <button type="button" className="button" onClick={onOpen} disabled={busy}>
+                Open the original picture (you are pretending to be a {role})
+              </button>{" "}
+              <span className="note">Works only as researcher or reviewer; as viewer you will be refused — try it and watch the audit record below.</span>
+            </p>
+          )}
+          {note && <p data-testid="reviewer-note">{note}</p>}
+        </>
+      )}
+    </section>
+  );
+}
 const VERDICTS = ["log", "flag", "quarantine", "fail_run"];
 
 export default function LiveGate() {
@@ -40,6 +131,7 @@ export default function LiveGate() {
   const [senderId, setSenderId] = useState("agent-a");
   const [recipientId, setRecipientId] = useState("agent-b");
   const [episodeId, setEpisodeId] = useState("");
+  const [declared, setDeclared] = useState("");
   const [routeId, setRouteId] = useState("R-01");
   const [file, setFile] = useState<File | null>(null);
   const [detail, setDetail] = useState<GateRunDetail | null>(null);
@@ -160,7 +252,11 @@ export default function LiveGate() {
     setBusy(true);
     setError(null);
     try {
-      const id = await createGateRun(runId.trim() || undefined);
+      const channels = declared
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      const id = await createGateRun(runId.trim() || undefined, channels);
       setRunId(id);
       setDetail(null);
       setSelectedId(null);
@@ -325,7 +421,25 @@ export default function LiveGate() {
             />
             <span className="note">An optional extra label to group a few deliveries inside the session, for example ep_1. You can leave this empty.</span>
           </label>
+          <label>
+            Shape measurements openly used by the task (optional)
+            <input
+              type="text"
+              value={declared}
+              onChange={(e) => setDeclared(e.target.value)}
+              placeholder="height"
+              aria-describedby="declared-help"
+            />
+          </label>
         </div>
+        <p className="note" id="declared-help">
+          If the task openly uses shape measurements, list them here before
+          sending the first picture: height, gap (spacing), lit (brightness),
+          colour, or angle. Separate names with commas. Leave empty if none
+          apply. Regular spacing in a listed measurement is recorded without
+          blocking delivery on its own. Patterns within it are still checked,
+          using a stricter threshold.
+        </p>
         <RoleControl
           role={role}
           onChange={setRole}
@@ -479,63 +593,20 @@ export default function LiveGate() {
       )}
 
       <div className="card-grid card-grid-2">
-        <section className="card" aria-labelledby="recipient-heading">
-          <h2 id="recipient-heading">Step 4a — What the recipient sees</h2>
-          <p className="note">
-            This box fetches the picture exactly the way the recipient
-            would. If the gate has not let it through, there is nothing to
-            fetch — only an explanation.
-          </p>
-          {!selected ? (
-            <p className="note">Nothing to show yet: send a picture in step 2 and choose it from the table above.</p>
-          ) : selected.state === "permitted" && recipientUrl ? (
-            <>
-              <img className="skyline-img" src={recipientUrl} alt="The picture exactly as delivered to the recipient" />
-              <p>{recipientNote}</p>
-            </>
-          ) : (
-            <>
-              <p data-testid="recipient-withheld">
-                <strong>{gateStateLabel(selected.state)}</strong>
-                {" — "}
-                {recipientNote || selected.recipient_message}
-              </p>
-              <p className="note">
-                No picture is shown here, and none is hidden in this page
-                waiting to be uncovered: the recipient’s request is refused
-                by the server. That refusal is written into the audit
-                record below.
-              </p>
-            </>
-          )}
-        </section>
+        <RecipientPane
+          delivery={selected}
+          imageUrl={recipientUrl}
+          note={recipientNote}
+        />
 
-        <section className="card" aria-labelledby="reviewer-heading">
-          <h2 id="reviewer-heading">Step 4b — What a reviewer may open</h2>
-          <p className="note">
-            Held-back pictures are not deleted. An authorised person can
-            still open the original through a separate, reviewers-only
-            path (route R-08) to judge it. Recipients can never use this
-            path, and every use is recorded.
-          </p>
-          {!selected ? (
-            <p className="note">Nothing to open yet: choose a picture from the table above first.</p>
-          ) : (
-            <>
-              {reviewerUrl ? (
-                <img className="skyline-img" src={reviewerUrl} alt="The original picture, opened by the reviewer" />
-              ) : (
-                <p>
-                  <button type="button" className="button" onClick={onOpenOriginal} disabled={busy}>
-                    Open the original picture (you are pretending to be a {role})
-                  </button>{" "}
-                  <span className="note">Works only as researcher or reviewer; as viewer you will be refused — try it and watch the audit record below.</span>
-                </p>
-              )}
-              {reviewerNote && <p data-testid="reviewer-note">{reviewerNote}</p>}
-            </>
-          )}
-        </section>
+        <ReviewerPane
+          delivery={selected}
+          imageUrl={reviewerUrl}
+          note={reviewerNote}
+          role={role}
+          busy={busy}
+          onOpen={onOpenOriginal}
+        />
       </div>
 
       {detail && (

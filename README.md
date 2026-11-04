@@ -92,8 +92,12 @@ Independent review:
   and blocks JPEG covers (false-fail 0.025); the other four
   (texture, medium) cells hold at 1/640. Claiming the low band puts
   the clean triage flag rate at 0.50 (owners' decision, CL-68).
-- JPEG latency misses the 2 s proposal at >=~1 MP and at
-  concurrency 4; the 20 MP JPEG envelope is unmeasured.
+- Latency on the default pure-Python path misses the 2 s proposal for
+  large PNG and JPEG, medium JPEG and the 20 MP PNG envelope, and at
+  concurrency 4; the 20 MP JPEG envelope is unmeasured. Geometric
+  segmentation (CL-44) and the sample-pair LSB detector (CL-61) carry
+  most of it; `COVERTLENS_FAST_PATH=numpy` (exact) brings large PNG
+  and the envelope under 2 s (CL-78).
 - Adaptive reduced-rate, larger-image, blocks-cover and
   allowed-keyword-metadata attempts evade enforcement (CL-34);
   allowed-keyword evasion needs a policy change.
@@ -103,10 +107,14 @@ Independent review:
   derivative enforcement is procedural (CL-32).
 - Context/sequence evidence is a triage aid only: combined
   scoring dilutes image evidence (CL-31).
-- The geometric family has frozen synthetic-scene thresholds (CL-54);
-  quantization alone permits delivery, structure claims rest on declared
-  codes only, and no general geometric coverage is claimed from
-  any single subfamily.
+- The geometric family has frozen synthetic-scene thresholds
+  (`frozen-1.4.0`, CL-78); quantization alone permits delivery,
+  structure claims rest on declared codes only, and no general
+  geometric coverage is claimed from any single subfamily. The A–H
+  letter-position height code is weak (about half of varied A–H words
+  are claimed); ±3 px jitter on a 10 px grid mostly evades it;
+  near-background elements (235-on-238 lit windows) are lost under
+  ±2 noise or more.
 
 ## Deliverables ledger
 
@@ -379,7 +387,7 @@ criterion to code, contract doc, schema, and tests. History in
 |---|---|
 | Quantization test reports grid step, residual and supporting element count vs continuous variation | `covertlens.geometric.analyze_geometric_bytes`: per-channel grid fits with symbols, residuals, support fractions; constant channels marked inapplicable · [docs/contracts/geometric-detector.md](docs/contracts/geometric-detector.md) · [schemas/geometric-finding.schema.json](schemas/geometric-finding.schema.json) |
 | Structure claimed only under a simple declared code mapped to words/codes/grammar | Registered codes (alphabet position + declared lexicon, timing-ratio motifs, bit packing) with validators; unregistered mappings never inferred |
-| Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); frozen-1.1.0 flags quantization; only supported undeclared structure can withhold |
+| Quantization without structure = weak triage signal only | `quantized_without_structure` classification (the legitimate-chart case); the freeze (now frozen-1.4.0) flags quantization; only structure can withhold (CL-78: on any channel, a declared one at a stricter level) |
 
 ### CL-41 deliverables
 
@@ -396,7 +404,7 @@ criterion to code, contract doc, schema, and tests. History in
 
 | Acceptance criterion | Deliverable |
 |---|---|
-| Benign controls and legitimate data visualizations are distinguished by scene context plus the quantization/structure tests; height or size alone never triggers enforcement | `covertlens.geo_benchmark`: skyline / chart (`data_visualization` context) / abstract-art / benign-scene controls; charts quantize to triage only, zero benign `structure_claimed` false claims; detector log-only, `enforceable: false` · [docs/contracts/geo-benchmark.md](docs/contracts/geo-benchmark.md) · [schemas/geo-benchmark.schema.json](schemas/geo-benchmark.schema.json) |
+| Benign controls and legitimate data visualizations are distinguished by scene context plus the quantization/structure tests; height or size alone never triggers enforcement | `covertlens.geo_benchmark`: skyline / chart (`data_visualization` context) / abstract-art / benign-scene controls; charts quantize to triage only, zero benign `structure_claimed` false claims; detector log-only, `enforceable: false` (superseded: under the CL-54/CL-78 freeze structure is quarantined, quantization never) · [docs/contracts/geo-benchmark.md](docs/contracts/geo-benchmark.md) · [schemas/geo-benchmark.schema.json](schemas/geo-benchmark.schema.json) |
 | Coverage includes at minimum height/position, gap/timing, lit/dark, colour-code and angle/tilt, reported separately per subfamily | Per-subfamily encoded recall (any-signal + structure) and benign false-claim rates, each with Wilson 95% intervals and full classification tallies |
 | Benchmark reports encoded recall and benign-control false-claim rates separately, with prevalence/intervals; no general geometric coverage claimed from a single subfamily | Prevalence block + intervals throughout; pooled row labelled context-only; `general_geometric_coverage_claimed: false` |
 
@@ -426,7 +434,7 @@ criterion to code, contract doc, schema, and tests. History in
 | Acceptance criterion | Deliverable |
 |---|---|
 | Scene context is a detector input: task-declared geometric channels are legitimate carriers | Manifest `declared_geometric_channels` on the geometric channel (mirrors `allowed_metadata_exceptions`; declaration required before the run; validated channel names); `analyze_geometric(..., declared_context=...)` |
-| Classification rule distinguishes declared charts from encoded scenes | Declared + quantized → `quantized_declared_channel` (log); structured + undeclared → `structure_claimed` (`enforceable_grade`, family still log-only while unfrozen); quantized + undeclared + unstructured → `quantized_without_structure` (triage) |
+| Classification rule distinguishes declared charts from encoded scenes | Declared + quantized → `quantized_declared_channel` (log); structured + undeclared → `structure_claimed` (`enforceable_grade`, family still log-only while unfrozen); quantized + undeclared + unstructured → `quantized_without_structure` (triage). Superseded in CL-78: a declared channel is still structure-tested, at a stricter level |
 | Chart-likeness is inferred from segmentation and used as a height-only prior, never the sole discriminator | `chart_likeness` (baseline/axis, equal widths/gaps, axis text marks) in every finding's evidence; ≥ 0.7 on chart controls, ≤ 0.3 on skyline/abstract/benign-scene controls; `height_prior` annotation only |
 | Benchmark rows prove the three cases | `scene_context` section in `run_geo_benchmark`: chart with declared height, chart undeclared, encoded structured scene without declaration |
 
@@ -438,7 +446,7 @@ criterion to code, contract doc, schema, and tests. History in
 | Structured geometric fixtures exist for every subfamily | `payload_mode` `random \| word \| morse \| ascii` in `build_geo_pair` (word/morse/ASCII encodings per subfamily; mode recorded in the encoder config) |
 | Benchmark: three rows per subfamily with recall / false-claim rates and intervals | `rows.continuous / quantized_unstructured / quantized_structured` in `run_geo_benchmark`; false-structure rates on random-payload and chart rows reported with Wilson intervals (no invented target) |
 | No mapped text in findings; candidate decodes only on the reviewer evidence path | `Finding.to_dict()` contains no mapped text (validator rejects it); `EvidenceGateway.record_candidate_decode` / `read_candidate_decode` with the new `candidate.decode.read` permission (reviewer role) — researcher reads denied and audited |
-| Structure recall ≥ 0.8 on structured payloads, n ≥ 20 per subfamily, end-to-end from pixels | `tests/test_structure_v2.py`: per-subfamily pixel-level detection and `run_structured_recall(20)` |
+| Structure recall ≥ 0.8 on structured payloads, n ≥ 20 per subfamily, end-to-end from pixels | `tests/test_structure_v2.py`: per-subfamily pixel-level detection and `run_structured_recall(20)`. The 2026-11-03 review found the 20 pairs were one image; CL-78 varies payloads and grids and reports the measured recall instead |
 
 ### CL-47 deliverables
 
@@ -510,17 +518,18 @@ criterion to code, contract doc, schema, and tests. History in
 
 ### CL-54 deliverables
 
-`frozen-1.1.0` carries four families. Reproduce development-only calibration
-with `python -m covertlens calibrate-demo`. The geometric score reserves its
+`frozen-1.1.0` carried four families (now `frozen-1.4.0`, CL-78). Reproduce
+development-only calibration with `python -m covertlens calibrate-demo`, or
+rewrite the shipped freeze with `make refreeze`. The geometric score reserves its
 upper band for supported structure on an undeclared channel; quantization
-alone flags at most, and a declared height chart logs. Geometric `fail_run`
+alone flags at most, and a declared channel's structure flags. Geometric `fail_run`
 is reserved (unreachable score 1) pending severity calibration; this freeze
-supports quarantine. Other families retain their CL-27 operating points.
+supports quarantine. Other families keep their CL-68 operating points.
 
 The scorecard includes `held_out_evaluation` per geometric subfamily and chart
 false-structure / false-enforcement rates with Wilson intervals. These are
-small procedural PNG scene samples, with repeated structured words; they do
-not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
+small procedural PNG scene samples (payloads from disjoint development and
+held-out pools since CL-78); they do not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 `universal_claim` remains false. See [the freeze contract](docs/contracts/calibration-freeze.md).
 
 ### CL-55–CL-57 deliverables
@@ -661,6 +670,19 @@ not establish held-out vocabulary, codebook, natural-image, or JPEG coverage.
 | Acceptance criterion | Deliverable |
 |---|---|
 | Someone who did not write the code can roll back, re-freeze, and regenerate the scorecard by following the runbook alone, with all tests passing | `COVERTLENS_FROZEN_CONFIG` honoured by `load_frozen_thresholds`; `make refreeze` (`scripts/refreeze.py`); `pin_hash` in the scorecard; [docs/campaign-log.md](docs/campaign-log.md); runbook sections 7-11 in [docs/operations-runbook.md](docs/operations-runbook.md) |
+### CL-78 deliverables (2026-11-03 review, sections 2–6)
+
+| Finding | Deliverable |
+|---|---|
+| ±1 px jitter defeats quantization | Decode-margin support (a quarter of the discovered step); decodable channels get the structure test. ±1 px DECAF: 20/20 claimed (was 1/20); jittered-attacker rows (±1/±2/±3 px) in the benchmark · [geometric contract](docs/contracts/geometric-detector.md) |
+| Structure tested on the top channel only; declared channel is a bypass | Every decodable channel is tested, family-wise level split over tests; a declared channel is tested at 0.1× the level and flags at the normal level (`triage_declared_structure`) |
+| False structure on random payloads; `?` counted as printable | Invalid symbols are non-printable; max-statistic shuffle test with 1,999 replicates; 1.15% of 2,000 random payloads claimed at the stated 1%; benchmark positive is a fixed word, not a seed scan |
+| One image per structured subfamily; held-out reused training payloads | Disjoint development / held-out payload pools (no word from the trigram list), varied grids and palettes; re-frozen as `frozen-1.4.0` |
+| Declared context unused in production | `analyze_all_bytes(declared_context=…)` (manifest default), `InterceptionGate.declare_scene_context`, `declared_channels` on `POST /api/gate/runs` and `/api/analyze` |
+| Decode in the finding; fixture colour palette | Channels carry a symbol digest, count and range; colour levels are discovered, well-separated clusters |
+| Segmentation collapses at ±3 noise | Border noise estimate; median background and noise-scaled tolerances (exact path unchanged at noise 0); counts hold to ±6 |
+| Web robustness | Body limit before parsing; killed timed-out workers, pool rebuild and SIGTERM; evicting, proxy-aware rate limiter on every upload path; `/data` writability in health; cached per-version analysis; `mypy app` in CI; Overlay / Live Gate / Review tests · `tests/test_web_robustness.py` |
+| Cleanup (on top of CL-63, CL-65) | Private-import guard in `tests/test_shared_helpers.py` widened to `app/`, `scripts/` and absolute imports; `now_iso` and `need` defined once; guarded retirement; logged gate reload skips; the geometric quarantine floor in `make refreeze` |
 
 ## Development quickstart
 
@@ -731,5 +753,7 @@ pytest
 - LSB/DCT/metadata thresholds froze in CL-27; CL-54 adds the
   geometric development-only freeze in `frozen-1.1.0`; CL-68
   recalibrates LSB/DCT/metadata on the banded suite in
-  `frozen-1.3.0` (geometric points unchanged). The manifest
-  configuration remains available as an explicit log-only rollback.
+  `frozen-1.3.0`; CL-78 re-freezes the geometric family for detector
+  3.0.0 in `frozen-1.4.0`. `COVERTLENS_FROZEN_CONFIG` points at an
+  earlier freeze for a rollback; the manifest configuration remains
+  available as an explicit log-only rollback.

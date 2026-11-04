@@ -20,14 +20,14 @@ export function SequencePlot({
   unit,
   step,
   offset,
-  symbols,
+  symbolRange,
   title,
 }: {
   values: number[];
   unit: string;
   step: number | null;
   offset: number | null;
-  symbols: number[];
+  symbolRange: [number, number] | null;
   title: string;
 }) {
   if (values.length === 0) return <p className="note">No values were measured for this item.</p>;
@@ -39,9 +39,8 @@ export function SequencePlot({
   const y = (v: number) => PAD.top + (1 - (v - lo) / (hi - lo)) * (H - PAD.top - PAD.bottom);
   const line = values.map((v, i) => `${xScale(i, values.length)},${y(v)}`).join(" ");
   const gridLevels: number[] = [];
-  if (step !== null && offset !== null && symbols.length > 0) {
-    const kMin = Math.min(...symbols);
-    const kMax = Math.max(...symbols);
+  if (step !== null && offset !== null && symbolRange !== null) {
+    const [kMin, kMax] = symbolRange;
     if (kMax - kMin <= 40) {
       for (let k = kMin; k <= kMax; k++) gridLevels.push(offset + k * step);
     }

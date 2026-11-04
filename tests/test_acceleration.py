@@ -169,3 +169,29 @@ def test_component_traversal_order_matches_reference():
                             stack.append(nidx)
                 expected.append(points)
             assert _components(mask, width, height, 1) == expected
+
+
+def test_numpy_sample_pair_counts_match_the_reference(monkeypatch):
+    pytest.importorskip("numpy")
+    from covertlens.fixtures import build_pair
+    from covertlens.lsb import SPA_DEFAULT_CONFIG, _spa_statistics
+    from covertlens.parsing import analyze_bytes
+
+    for width in (17, 64):
+        clean, encoded = build_pair(
+            "spatial_lsb", width=width, height=9, payload_bytes=4
+        )
+        for fixture in (clean, encoded):
+            result = analyze_bytes(fixture.data)
+            image = result.image
+            args = (
+                result.pixels,
+                image["width"],
+                image["height"],
+                image.get("channels", 3),
+                SPA_DEFAULT_CONFIG,
+            )
+            monkeypatch.delenv("COVERTLENS_FAST_PATH", raising=False)
+            reference = _spa_statistics(*args)
+            monkeypatch.setenv("COVERTLENS_FAST_PATH", "numpy")
+            assert _spa_statistics(*args) == reference

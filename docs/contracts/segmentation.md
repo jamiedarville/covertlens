@@ -4,7 +4,7 @@ Implements: CL-39 (GEO-01), CL-52 robustness. Schema:
 [schemas/segmentation.schema.json](../../schemas/segmentation.schema.json).
 Detector-facing layer over original PNG/JPEG bytes and the CL-38 fixtures.
 
-## Method (versioned: `geometric-segmenter` 1.1.0)
+## Method (versioned: `geometric-segmenter` 1.2.0)
 
 - **Original bytes only.** PNG is decoded losslessly at native
   resolution (never resized/recompressed). Baseline JPEG is
@@ -51,8 +51,26 @@ Detector-facing layer over original PNG/JPEG bytes and the CL-38 fixtures.
   vertical overlap, rows top-to-bottom, left-to-right within a row.
 - Per element: bbox (left/top/width/height), area, gap-to-next,
   tilt angle (row-centroid regression, tolerance ±3.5°), dominant
-  colour with nearest declared-palette index and distance,
-  brightness (attribute tolerance ±1.6 px).
+  colour with its palette index and distance, brightness (attribute
+  tolerance ±1.6 px). The palette is **discovered** from the element
+  colours (CL-78): greedy clusters of radius 12 in canonical
+  hue-then-value order. `colour_palette` is only a declared prior
+  and defaults to empty; the segmenter no longer imports the fixture
+  palette.
+- **Noise (CL-78).** The border's median per-channel neighbour
+  difference estimates the noise level (about one standard
+  deviation). From level 1 to level 4 the background colour is the
+  border median rather than one noisy modal sample, the step
+  tolerance becomes `max(4, 5 × level)` and the distance floor
+  `max(3, 4.5 × level)`. At level 0 (clean renders) the exact CL-52
+  path runs unchanged; above 4 the border is treated as texture
+  (a random cover measures about 10), not noise. Results record
+  `noise_level` and the effective tolerances. Element counts hold
+  under ±3 and ±6 per-channel uniform noise (previously ±3 collapsed
+  every subfamily). **Limit:** elements whose contrast with the
+  background is below the noise floor are lost — the 235-on-238 lit
+  windows of `lit_dark` disappear from ±2 noise up, leaving only the
+  dark elements.
 
 ## Recorded failure modes (explicit, never silent)
 
@@ -69,7 +87,8 @@ encoded is CL-40's question.
 extraction on the CL-38 encoded fixtures;
 `tests/test_segmentation.py` asserts reading order and the
 height/gap/colour/angle sequences against scorer ground truth,
-plus every failure mode; `tests/test_real_images.py` asserts
+plus every failure mode; `tests/test_geometric_cl78.py` asserts the
+noise behaviour and the near-background limit; `tests/test_real_images.py` asserts
 element counts ±1 on five committed real images
 (`tests/data/real/`, licences in its README).
 The crops isolate objects above connected baselines/rails; passing five

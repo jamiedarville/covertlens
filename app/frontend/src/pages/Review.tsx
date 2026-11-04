@@ -147,6 +147,98 @@ export function SecondOpinionPanel({
   );
 }
 
+// Withheld deliveries of one run. Rows say whether a candidate decode
+// exists, never what it says.
+export function QueueTable({
+  queue,
+  selectedId,
+  busy,
+  onSelect,
+}: {
+  queue: ReviewQueue;
+  selectedId: string | null;
+  busy: boolean;
+  onSelect: (deliveryId: string) => void;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <caption>Held-back pictures in session {queue.run_id}. “Possible reading” means a reviewer may ask what the pattern would say under a code declared in advance — a hypothesis, not a recovered message.</caption>
+        <thead>
+          <tr>
+            <th>Picture (short ID)</th>
+            <th>Sender → recipient</th>
+            <th>Gate decision</th>
+            <th>Possible reading of the pattern?</th>
+            <th>Your judgement so far</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {queue.quarantined.map((d) => (
+            <tr key={d.delivery_id} className={d.delivery_id === selectedId ? "row-active" : ""}>
+              <td className="num">{d.delivery_id.slice(0, 18)}…</td>
+              <td>{d.sender_id} → {d.recipient_id}</td>
+              <td title={d.verdict ?? undefined}>{d.verdict ? verdictLabel(d.verdict) : "—"}</td>
+              <td>{d.has_candidate_decode ? "exists (reviewer only)" : "none"}</td>
+              <td title={d.disposition}>{DISPOSITION_LABELS[d.disposition] ?? d.disposition}</td>
+              <td>
+                <button type="button" className="button" onClick={() => onSelect(d.delivery_id)} disabled={busy}>
+                  Review this picture
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Candidate decode: text only after a successful reviewer read.
+export function CandidateDecodePanel({
+  available,
+  decode,
+  note,
+  role,
+  busy,
+  onRead,
+}: {
+  available: boolean;
+  decode: CandidateDecode | null;
+  note: string;
+  role: string;
+  busy: boolean;
+  onRead: () => void;
+}) {
+  if (!available) return <p className="note">No possible reading exists for this picture under any code declared in advance. That is common and, by itself, tells you little either way.</p>;
+  return (
+    <>
+      <p className="note">
+        For this picture, a possible reading exists. Only the
+        reviewer kind of user may read it; everyone else is
+        refused, and refusals are written into the audit record.
+        Even as a reviewer, treat it strictly as a hypothesis:
+        it is what the pattern <em>would</em> say <em>if</em>{" "}
+        that code had been used. It is not a recovered message.
+      </p>
+      <p>
+        <button type="button" className="button" onClick={onRead} disabled={busy}>
+          Show the possible reading (you are acting as {role})
+        </button>
+      </p>
+      {decode ? (
+        <dl className="kv kv-wide">
+          <div><dt>Code it was read with</dt><dd>{decode.code ?? "—"}</dd></div>
+          <div><dt>Possible reading (hypothesis only)</dt><dd>{decode.text}</dd></div>
+        </dl>
+      ) : (
+        note && <p className="note">{note}</p>
+      )}
+    </>
+  );
+}
+
 export default function Review() {
   const [role, setRole] = useDemoRole();
   const [runId, setRunId] = useState("");
@@ -420,37 +512,12 @@ export default function Review() {
           {queue.quarantined.length === 0 ? (
             <p className="note">Nothing is being held back in this session, so there is nothing to review. What to do: on the delivery gate page, send a picture and apply the decision “Hold the image back for review”, then come back here.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <caption>Held-back pictures in session {queue.run_id}. “Possible reading” means a reviewer may ask what the pattern would say under a code declared in advance — a hypothesis, not a recovered message.</caption>
-                <thead>
-                  <tr>
-                    <th>Picture (short ID)</th>
-                    <th>Sender → recipient</th>
-                    <th>Gate decision</th>
-                    <th>Possible reading of the pattern?</th>
-                    <th>Your judgement so far</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queue.quarantined.map((d) => (
-                    <tr key={d.delivery_id} className={d.delivery_id === selectedId ? "row-active" : ""}>
-                      <td className="num">{d.delivery_id.slice(0, 18)}…</td>
-                      <td>{d.sender_id} → {d.recipient_id}</td>
-                      <td title={d.verdict ?? undefined}>{d.verdict ? verdictLabel(d.verdict) : "—"}</td>
-                      <td>{d.has_candidate_decode ? "exists (reviewer only)" : "none"}</td>
-                      <td title={d.disposition}>{DISPOSITION_LABELS[d.disposition] ?? d.disposition}</td>
-                      <td>
-                        <button type="button" className="button" onClick={() => onSelect(d.delivery_id)} disabled={busy}>
-                          Review this picture
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <QueueTable
+              queue={queue}
+              selectedId={selectedId}
+              busy={busy}
+              onSelect={onSelect}
+            />
           )}
         </section>
       )}
@@ -502,33 +569,14 @@ export default function Review() {
           <section className="card" aria-labelledby="review-decide-heading">
             <h2 id="review-decide-heading">A possible reading, and your judgement</h2>
             <h3>What would the pattern say, under a code declared in advance? (candidate decode)</h3>
-            {detail.has_candidate_decode ? (
-              <>
-                <p className="note">
-                  For this picture, a possible reading exists. Only the
-                  reviewer kind of user may read it; everyone else is
-                  refused, and refusals are written into the audit record.
-                  Even as a reviewer, treat it strictly as a hypothesis:
-                  it is what the pattern <em>would</em> say <em>if</em>{" "}
-                  that code had been used. It is not a recovered message.
-                </p>
-                <p>
-                  <button type="button" className="button" onClick={onDecode} disabled={busy}>
-                    Show the possible reading (you are acting as {role})
-                  </button>
-                </p>
-                {decode ? (
-                  <dl className="kv kv-wide">
-                    <div><dt>Code it was read with</dt><dd>{decode.code ?? "—"}</dd></div>
-                    <div><dt>Possible reading (hypothesis only)</dt><dd>{decode.text}</dd></div>
-                  </dl>
-                ) : (
-                  decodeNote && <p className="note">{decodeNote}</p>
-                )}
-              </>
-            ) : (
-              <p className="note">No possible reading exists for this picture under any code declared in advance. That is common and, by itself, tells you little either way.</p>
-            )}
+            <CandidateDecodePanel
+              available={detail.has_candidate_decode}
+              decode={decode}
+              note={decodeNote}
+              role={role}
+              busy={busy}
+              onRead={onDecode}
+            />
 
             <h3>Your judgement (called a “disposition”)</h3>
             <p className="note">

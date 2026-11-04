@@ -36,14 +36,42 @@ recall is reported per subfamily in the benchmark output.
 
 ## Guards
 
-- Height or size alone never triggers enforcement: the detector
-  remains log-only triage with unfrozen thresholds
-  (`enforceable: false`); the benchmark never marks it
-  enforceable.
+- Height or size alone never triggers enforcement. Under the CL-54
+  freeze (`frozen-1.2.0`) a `structure_claimed` finding is
+  quarantined; every other finding is decided by the frozen ladder
+  and the guard `height_or_size_alone_never_enforces` checks that
+  none of them withholds (`enforcement.mode: frozen_ladder`).
 - `general_geometric_coverage_claimed` is always `false` — no
   general geometric coverage is claimed from a single subfamily.
 - Scores are evidence, never decoded messages (C-09) and never
   equated with collusion (C-02).
+
+## Verification
+
+## Rows added in CL-78 (benchmark 2.0.0)
+
+- **Structured rows are varied.** `build_structured_pair` draws its
+  payload from a development or held-out pool (disjoint, and no
+  word is in the trigram model's word list) and its grid or palette
+  from the index. Each row reports `distinct_images` and
+  `distinct_payloads`; the check `structured_rows_use_distinct_images`
+  replaces the old recall ≥ 0.8 check, which held only because the
+  five pairs were one image.
+- **Jittered attacker** (`jittered_attacker`): ±1, ±2 and ±3 px on
+  height (10 px step) and gap (6 px step), structured and random
+  payloads, with an unjittered baseline on the same payloads and
+  `receiver_decodable` (jitter under half a step). Check: ±1 px costs
+  at most one structure claim against the baseline.
+- **Every-other-level attacker** (`every_other_level_attacker`):
+  payloads that never use two adjacent levels; the discovered step
+  may be twice the encoder's, and both count as a match.
+- **Random-payload false structure** (`random_payload_structure`):
+  100 random height payloads, the measured claim rate, and a
+  one-sided binomial test against the stated level.
+- **Scene context.** The positive control is the fixed DECAF scene,
+  not the first random payload a seed scan happened to claim; the
+  same scene with height declared must not log at score 0
+  (`structured_declared_not_silently_logged`).
 
 ## Verification
 

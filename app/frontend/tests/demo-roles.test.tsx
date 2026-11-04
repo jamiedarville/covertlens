@@ -4,6 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  ApiError,
+  createGateRun,
   fetchReviewAudit,
   fetchReviewerImage,
   fetchTraceRun,
@@ -71,4 +73,26 @@ test("role picker warns when the server has demo roles switched off", () => {
   );
   assert.doesNotMatch(on, /demo-roles-off/);
   assert.match(on, /none \(deny-by-default\)/);
+});
+
+// Conflict regression: preserve main's declared-channel API and useful errors
+// alongside the plain-English session wording.
+test("starting a session forwards openly declared shape measurements", async () => {
+  const calls = stubFetch(200, { run_id: "session-1" });
+  assert.equal(await createGateRun("session-1", ["height", "gap"]), "session-1");
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+    run_id: "session-1",
+    declared_channels: ["height", "gap"],
+  });
+});
+
+test("session errors retain the server's reason and status", async () => {
+  stubFetch(409, { detail: "Channels cannot change after the first delivery." });
+  await assert.rejects(createGateRun("session-1", ["height"]), (error: unknown) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.status, 409);
+    assert.match(error.message, /session could not be started/);
+    assert.match(error.message, /Channels cannot change after the first delivery/);
+    return true;
+  });
 });

@@ -40,12 +40,12 @@ import re
 import secrets
 import sqlite3
 import threading
-from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from ._validation import make_need
+from ._validation import now_iso as _now
 
 LEADERBOARD_SCHEMA = "covertlens.leaderboard-entry"
 LEADERBOARD_VERSION = "1.0.0"
@@ -58,10 +58,6 @@ KIND_FAMILY = {
     "metadata": "metadata",
 }
 _NAME = re.compile(r"^[A-Za-z0-9 _.\-]{1,40}$")
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 @lru_cache(maxsize=8)

@@ -10,6 +10,7 @@ validates structure and fail-closed behaviour, never invented numbers.
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import Any
@@ -194,6 +195,23 @@ def second_opinion_allows_images(manifest: dict[str, Any]) -> bool:
     """
     block = manifest.get("second_opinion") or {}
     return block.get("allow_images") is True
+
+
+@functools.lru_cache(maxsize=1)
+def _shipped_declared_channels() -> tuple[str, ...]:
+    return tuple(declared_geometric_channels(load_manifest()))
+
+
+def manifest_scene_context() -> dict[str, Any] | None:
+    """Scene context declared in the shipped manifest, or None (CL-78).
+
+    The default for production analysis when a run declares nothing
+    itself. The shipped manifest declares no channels.
+    """
+    channels = _shipped_declared_channels()
+    if not channels:
+        return None
+    return {"declared_channels": list(channels), "context": "manifest"}
 
 
 def declared_geometric_channels(manifest: dict[str, Any]) -> list[str]:

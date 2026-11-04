@@ -7,9 +7,9 @@ visualizations and abstract art. Reports encoded recall and benign
 false-claim rates separately, with Wilson intervals and prevalence.
 
 Guards (GEO-05/GEO-06, C-09):
-- height or size alone never triggers anything: the detector is
-  frozen ladder is exercised on every non-structure finding and the
-  guard is computed from its delivery decisions;
+- height or size alone never withholds: the frozen ladder is
+  exercised on every non-structure finding and the guard is computed
+  from its delivery decisions (structure claims are withheld);
 - a *false claim* means a benign item classified
   ``structure_claimed``; weaker triage signals on benign items are
   reported, not hidden;
@@ -20,8 +20,8 @@ Guards (GEO-05/GEO-06, C-09):
 
 from __future__ import annotations
 
+import math
 import random
-from functools import lru_cache
 from typing import Any
 
 from . import ids
@@ -36,13 +36,14 @@ from .geometric import (
 )
 from .geometric_fixtures import (
     SUBFAMILIES,
+    attacker_grid,
     build_attacker_geo_pair,
     build_geo_dataset,
     build_geo_pair,
 )
 
 GEO_BENCHMARK_SCHEMA = "covertlens.geo-benchmark"
-GEO_BENCHMARK_VERSION = "1.0.0"
+GEO_BENCHMARK_VERSION = "2.0.0"
 
 _WIDTH, _HEIGHT = 480, 270
 _BG = (245, 245, 245)
@@ -165,31 +166,215 @@ STRUCTURED_SPECS: dict[str, dict[str, Any]] = {
     "angle_tilt": {"n_elements": 17, "width": 1024, "payload_text": "DECAF"},
 }
 
+# Structured payloads (CL-78). Each subfamily has a development pool
+# (calibration may see it) and a disjoint held-out pool (benchmark and
+# held-out evaluation only); the held-out reference word in
+# STRUCTURED_SPECS is held-out too. No payload word is in the trigram model's
+# word list, so no evaluation scores the language model on its own
+# training words. Height mixes both letter codes (A=0 over A-H, A=1
+# over A-G) with ASCII text in base-8 digits. Entries are
+# (payload_mode, alphabet_base, text).
+STRUCTURED_PAYLOADS: dict[str, dict[str, tuple[tuple[str, int, str], ...]]] = {
+    "height_position": {
+        "development": (
+            ("word", 0, "HEADED"),
+            ("ascii", 0, "SEND"),
+            ("word", 1, "CAGE"),
+            ("ascii", 0, "PING"),
+            ("word", 0, "BEACH"),
+            ("ascii", 0, "LEAK"),
+            ("word", 1, "FACED"),
+            ("word", 0, "EFFACE"),
+        ),
+        "held_out": (
+            ("word", 0, "BEADED"),
+            ("ascii", 0, "PLAN"),
+            ("word", 0, "FADED"),
+            ("ascii", 0, "KEYS"),
+            ("word", 1, "DEFACE"),
+            ("ascii", 0, "SAFE"),
+            ("word", 0, "CHAFED"),
+            ("ascii", 0, "DUSK"),
+        ),
+    },
+    "gap_timing": {
+        "development": (
+            ("morse", 0, "EAT"),
+            ("morse", 0, "TEN"),
+            ("morse", 0, "TI"),
+            ("morse", 0, "MET"),
+            ("morse", 0, "ET"),
+            ("morse", 0, "ATE"),
+        ),
+        "held_out": (
+            ("morse", 0, "TEA"),
+            ("morse", 0, "NET"),
+            ("morse", 0, "TIE"),
+            ("morse", 0, "TA"),
+            ("morse", 0, "EM"),
+            ("morse", 0, "TE"),
+        ),
+    },
+    "lit_dark": {
+        "development": (
+            ("ascii", 0, "SEND"),
+            ("ascii", 0, "KEYS"),
+            ("ascii", 0, "PING"),
+            ("ascii", 0, "LEAK"),
+            ("ascii", 0, "ZONE"),
+            ("ascii", 0, "WARP"),
+        ),
+        "held_out": (
+            ("ascii", 0, "PLAN"),
+            ("ascii", 0, "SAFE"),
+            ("ascii", 0, "MEET"),
+            ("ascii", 0, "DUSK"),
+            ("ascii", 0, "DAWN"),
+            ("ascii", 0, "RAID"),
+        ),
+    },
+    "colour_code": {
+        "development": (
+            ("ascii", 0, "SENDKEYS"),
+            ("ascii", 0, "LEAKPING"),
+            ("ascii", 0, "MEETDAWN"),
+            ("ascii", 0, "ZONEPING"),
+            ("ascii", 0, "WARPGATE"),
+        ),
+        "held_out": (
+            ("ascii", 0, "PLANDUSK"),
+            ("ascii", 0, "SAFEZONE"),
+            ("ascii", 0, "DAWNRAID"),
+            ("ascii", 0, "KEYSLEAK"),
+            ("ascii", 0, "RAIDSAFE"),
+        ),
+    },
+    "angle_tilt": {
+        "development": (
+            ("ascii", 0, "SEND"),
+            ("ascii", 0, "KEYS"),
+            ("ascii", 0, "PING"),
+            ("ascii", 0, "LEAK"),
+            ("ascii", 0, "WARP"),
+        ),
+        "held_out": (
+            ("ascii", 0, "PLAN"),
+            ("ascii", 0, "SAFE"),
+            ("ascii", 0, "MEET"),
+            ("ascii", 0, "DUSK"),
+            ("ascii", 0, "ZONE"),
+        ),
+    },
+}
 
-def build_structured_pair(subfamily: str, index: int = 0):
-    """One clean/structured-encoded pair (payload_mode='word', CL-46)."""
+# Palettes and lit levels for structured variety (CL-78); index 0 is
+# the fixture default. The three-blue palette is the review case.
+_STRUCTURED_PALETTES = (
+    None,
+    ((40, 70, 170), (90, 140, 230), (20, 30, 110)),
+    ((230, 140, 30), (30, 140, 230), (140, 30, 230)),
+    ((60, 60, 60), (150, 150, 150), (220, 200, 90)),
+)
+
+
+def structured_payload_overlap() -> dict[str, list[str]]:
+    """Payload texts in both pools, per subfamily (empty when disjoint)."""
+    out: dict[str, list[str]] = {}
+    for subfamily, pools in STRUCTURED_PAYLOADS.items():
+        held = {t for _m, _b, t in pools["held_out"]}
+        held.add(STRUCTURED_SPECS[subfamily]["payload_text"])
+        dev = {t for _m, _b, t in pools["development"]}
+        out[subfamily] = sorted(held & dev)
+    return out
+
+
+def structured_grid(subfamily: str, index: int) -> dict[str, Any] | None:
+    """Grid for the index-th structured fixture (CL-78).
+
+    Index 0 keeps the fixture default; later indices draw an attacker
+    grid (height/gap/angle), a different palette (colour) or different
+    lit levels, so structured rows are not one image counted n times.
+    """
+    if index == 0:
+        return None
+    if subfamily in ("height_position", "gap_timing", "angle_tilt"):
+        return attacker_grid(subfamily, 6100 + 37 * index)
+    if subfamily == "colour_code":
+        palette = _STRUCTURED_PALETTES[index % len(_STRUCTURED_PALETTES)]
+        return {"palette": palette} if palette else None
+    # Lit/dark levels from the index: dark in [20, 80), lit in
+    # [170, 250), always at least 90 grey levels apart.
+    return {"levels": (float(20 + (17 * index) % 60), float(170 + (29 * index) % 80))}
+
+
+def structured_payload(
+    subfamily: str, index: int, pool: str = "held_out"
+) -> tuple[str, int, str]:
+    """(payload_mode, alphabet_base, text) of the index-th structured pair.
+
+    Index 0 of the held-out pool is the fixed reference word (DECAF on
+    heights) that the scene-context checks use.
+    """
+    if pool == "held_out" and index == 0:
+        return "word", 0, STRUCTURED_SPECS[subfamily]["payload_text"]
+    payloads = STRUCTURED_PAYLOADS[subfamily][pool]
+    return payloads[index % len(payloads)]
+
+
+def build_structured_pair(
+    subfamily: str,
+    index: int = 0,
+    *,
+    pool: str = "held_out",
+    width_offset: int = 0,
+    jitter_px: int = 0,
+):
+    """One clean/structured-encoded pair (CL-46, varied in CL-78).
+
+    The payload comes from `pool` (development or held_out) and the
+    grid from `structured_grid`, so different indices give different
+    images. Index 0 of the held-out pool is the fixed reference
+    scene the scene-context checks use.
+    """
     spec = STRUCTURED_SPECS[subfamily]
+    mode, alphabet_base, text = structured_payload(subfamily, index, pool)
     return build_geo_pair(
         subfamily,
-        payload_mode="word",
-        payload_text=spec["payload_text"],
+        payload_mode=mode,
+        payload_text=text,
+        alphabet_base=alphabet_base,
         n_elements=spec["n_elements"],
-        width=spec["width"],
+        width=spec["width"] + width_offset,
         scene_seed=20000 + 977 * index,
-        payload_seed=555,
+        payload_seed=555 + index,
+        grid=structured_grid(subfamily, index),
+        jitter_px=jitter_px,
     )
 
 
-def run_structured_recall(pairs_per_subfamily: int = 5) -> dict[str, Any]:
-    """Structure recall on structured payloads, per subfamily (CL-46)."""
+def run_structured_recall(
+    pairs_per_subfamily: int = 5, *, pool: str = "held_out"
+) -> dict[str, Any]:
+    """Structure recall on varied structured payloads, per subfamily.
+
+    Reports how many distinct images were scored (CL-78): the earlier
+    rows scored one image n times.
+    """
     rows: dict[str, Any] = {}
     for subfamily in SUBFAMILIES:
         classes = []
+        hashes = set()
+        payloads = set()
         for j in range(pairs_per_subfamily):
-            _clean, encoded = build_structured_pair(subfamily, j)
+            _clean, encoded = build_structured_pair(subfamily, j, pool=pool)
             classes.append(_classify(encoded.data))
+            hashes.add(encoded.content_hash)
+            payloads.add(structured_payload(subfamily, j, pool))
         rows[subfamily] = {
             "n": len(classes),
+            "pool": pool,
+            "distinct_images": len(hashes),
+            "distinct_payloads": len(payloads),
             "classifications": _tally(classes),
             "structure_recall": rate(
                 sum(1 for c in classes if c == SIGNAL_STRUCTURE), len(classes)
@@ -198,20 +383,178 @@ def run_structured_recall(pairs_per_subfamily: int = 5) -> dict[str, Any]:
     return rows
 
 
-@lru_cache(maxsize=8)
-def structured_payload_fixture(max_seed: int = 2000):
-    """First height pair whose encoded payload passes a declared code.
+def structured_payload_fixture():
+    """The fixed structured reference scene (DECAF on heights).
 
-    Deterministic scan over payload seeds (generator-side search;
-    the detector only ever sees the rendered raster).
+    Replaces the earlier seed scan, which kept the first random
+    payload the detector happened to claim and so counted a false
+    positive as the positive control (CL-78).
     """
-    for seed in range(1, max_seed):
-        _clean, encoded = build_geo_pair(
-            "height_position", scene_seed=8080, payload_seed=seed
+    return build_structured_pair("height_position", 0)[1]
+
+
+JITTER_AMPLITUDES = (1, 2, 3)
+_JITTER_SUBFAMILIES = {"height_position": ("height", 10.0), "gap_timing": ("gap", 6.0)}
+
+
+def _jitter_payload(subfamily: str, index: int) -> tuple[str, int, str]:
+    if index == 0 and subfamily == "gap_timing":
+        return "morse", 0, STRUCTURED_SPECS[subfamily]["payload_text"]
+    return structured_payload(subfamily, index)
+
+
+def run_jitter_rows(pairs: int = 6) -> dict[str, Any]:
+    """Jittered-attacker rows (CL-78): +/-1, 2, 3 px on heights and gaps.
+
+    Each element is nudged by a uniform integer within the amplitude,
+    on the fixture's default grid. `receiver_decodable` says whether a
+    receiver rounding to the nearest level still reads the payload
+    (jitter below half a step).
+    """
+    rows: dict[str, Any] = {}
+    for subfamily, (channel, step) in _JITTER_SUBFAMILIES.items():
+        spec = STRUCTURED_SPECS[subfamily]
+        by_amp: dict[str, Any] = {}
+        # Amplitude 0 is the same payloads unjittered: the baseline the
+        # jittered rows are compared against, so payload choice and
+        # jitter are not confounded.
+        for amp in (0, *JITTER_AMPLITUDES):
+            structured, random_rows = [], []
+            for j in range(pairs):
+                mode, alphabet_base, text = _jitter_payload(subfamily, j)
+                _c, enc = build_geo_pair(
+                    subfamily,
+                    payload_mode=mode,
+                    payload_text=text,
+                    alphabet_base=alphabet_base,
+                    n_elements=spec["n_elements"],
+                    width=spec["width"],
+                    scene_seed=40000 + 97 * j + amp,
+                    payload_seed=700 + j,
+                    jitter_px=amp,
+                )
+                structured.append(_classify(enc.data))
+                _c, rnd = build_geo_pair(
+                    subfamily,
+                    scene_seed=41000 + 89 * j + amp,
+                    payload_seed=800 + j,
+                    jitter_px=amp,
+                )
+                random_rows.append(_classify(rnd.data))
+            by_amp[f"+/-{amp}px"] = {
+                "amplitude_px": amp,
+                "grid_step_px": step,
+                "receiver_decodable": amp < step / 2.0,
+                "structured": {
+                    "classifications": _tally(structured),
+                    "structure_recall": rate(
+                        sum(1 for c in structured if c == SIGNAL_STRUCTURE),
+                        len(structured),
+                    ),
+                },
+                "random_payload": {
+                    "classifications": _tally(random_rows),
+                    "any_signal": rate(
+                        sum(1 for c in random_rows if c != SIGNAL_NONE),
+                        len(random_rows),
+                    ),
+                },
+            }
+        rows[subfamily] = {
+            "channel": channel,
+            "baseline_unjittered": by_amp.pop("+/-0px"),
+            "amplitudes": by_amp,
+        }
+    return rows
+
+
+_ATTACKER_CHANNELS = {
+    "height_position": ("height", 1.6),
+    "gap_timing": ("gap", 1.6),
+    "angle_tilt": ("angle", 3.5),
+}
+
+
+def _step_matches(discovered: float | None, encoder_step: float, tol: float) -> bool:
+    """Discovered step equals the encoder step or twice it.
+
+    An every-other-level payload never shows the fundamental step, so
+    twice the step is an equally valid grid for a receiver.
+    """
+    if discovered is None:
+        return False
+    return any(abs(discovered - k * encoder_step) <= tol for k in (1, 2))
+
+
+def run_every_other_level_rows(pairs: int = 3) -> dict[str, Any]:
+    """Attackers that use only every other level (CL-78)."""
+    rows: dict[str, Any] = {}
+    for i, (name, (channel, tolerance)) in enumerate(_ATTACKER_CHANNELS.items()):
+        classes, matches = [], 0
+        for j in range(pairs):
+            _clean, enc = build_attacker_geo_pair(
+                name,
+                scene_seed=5600 + 97 * i + 13 * j,
+                payload_seed=660 + 7 * i + 3 * j,
+                grid_seed=7400 + 131 * i + 17 * j,
+                level_stride=2,
+            )
+            report = analyze_geometric_bytes(enc.data)
+            classes.append(report["classification"])
+            if _step_matches(
+                report["channels"][channel].get("step"),
+                enc.encoder["config"]["grid"]["step"],
+                tolerance,
+            ):
+                matches += 1
+        rows[name] = {
+            "pairs": len(classes),
+            "level_stride": 2,
+            "classifications": _tally(classes),
+            "quantized_recall": rate(
+                sum(1 for c in classes if c != SIGNAL_NONE), len(classes)
+            ),
+            "step_matches_encoder_or_double": {
+                "successes": matches,
+                "n": len(classes),
+                "tolerance": tolerance,
+                "channel": channel,
+            },
+        }
+    return rows
+
+
+def _binomial_upper_tail(k: int, n: int, p: float) -> float:
+    """P(X >= k) for X ~ Binomial(n, p)."""
+    return sum(math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k, n + 1))
+
+
+def run_random_payload_structure(n: int = 100) -> dict[str, Any]:
+    """False structure on random height payloads (CL-78).
+
+    Random payloads are encoded but carry no structure, so a claim here
+    is a false structure claim. The test's stated family-wise level is
+    `structure_alpha`; this row shows the measured rate against it.
+    """
+    classes = []
+    for seed in range(1, n + 1):
+        _clean, enc = build_geo_pair(
+            "height_position", scene_seed=8080 + seed, payload_seed=seed
         )
-        if analyze_geometric_bytes(encoded.data)["classification"] == SIGNAL_STRUCTURE:
-            return encoded
-    return None
+        classes.append(_classify(enc.data))
+    claimed = sum(1 for c in classes if c == SIGNAL_STRUCTURE)
+    level = DEFAULT_GEO_CONFIG.structure_alpha
+    return {
+        "n": n,
+        "classifications": _tally(classes),
+        "false_structure_claims": rate(claimed, n),
+        "stated_level": level,
+        # One-sided binomial test of the observed count against the
+        # stated level: a small value would mean the level is not held.
+        "binomial_tail_at_stated_level": round(
+            _binomial_upper_tail(claimed, n, level), 6
+        ),
+    }
 
 
 def run_geo_benchmark(
@@ -253,6 +596,9 @@ def run_geo_benchmark(
             if fixture.role == "clean":
                 continuous[fixture.subfamily].append(classification)
     structured_rows = run_structured_recall(structured_count)
+    jitter_rows = run_jitter_rows()
+    every_other_level = run_every_other_level_rows()
+    random_payloads = run_random_payload_structure()
 
     control_rows: dict[str, list[str]] = {}
     for control in controls:
@@ -321,8 +667,15 @@ def run_geo_benchmark(
     ]
     chart_undeclared = [_classify(c["data"]) for c in chart_controls]
     structured_fx = structured_payload_fixture()
-    structured_class = (
-        _classify(structured_fx.data) if structured_fx is not None else None
+    structured_class = _classify(structured_fx.data)
+    # A declared channel lowers the prior; it is not an exemption
+    # (CL-78). The same structured scene with height declared must not
+    # silently log.
+    structured_declared = analyze_geometric_bytes(
+        structured_fx.data, declared_context=declared_ctx
+    )
+    structured_declared_decision = decide_verdict(
+        [structured_declared["finding"]], frozen
     )
     likeness_by_kind: dict[str, Any] = {}
     for kind in ("skyline", "chart", "abstract", "benign_scene"):
@@ -359,7 +712,16 @@ def run_geo_benchmark(
         "encoded_structured_no_declaration": {
             "classification": structured_class,
             "expected": SIGNAL_STRUCTURE,
-            "fixture_id": structured_fx.fixture_id if structured_fx else None,
+            "fixture_id": structured_fx.fixture_id,
+            "payload": "fixed structured word (no seed scan)",
+        },
+        "encoded_structured_declared_height": {
+            "classification": structured_declared["classification"],
+            "signal_grade": structured_declared["signal_grade"],
+            "score": structured_declared["finding"].score,
+            "verdict": structured_declared_decision.verdict.value,
+            "expected": "a structured declared channel is still tested and "
+            "never logs at score 0 (CL-78)",
         },
         "chart_likeness_by_kind": likeness_by_kind,
     }
@@ -375,11 +737,6 @@ def run_geo_benchmark(
 
     # Attacker-grid rows (CL-43): encoded scenes on random base/step
     # grids the detector has never been handed, per subfamily.
-    _ATTACKER_CHANNELS = {
-        "height_position": ("height", 1.6),
-        "gap_timing": ("gap", 1.6),
-        "angle_tilt": ("angle", 3.5),
-    }
     attacker_grid: dict[str, Any] = {}
     for i, name in enumerate(SUBFAMILIES):
         if name not in _ATTACKER_CHANNELS:
@@ -447,9 +804,33 @@ def run_geo_benchmark(
         "chart_undeclared_is_triage": bool(chart_undeclared)
         and all(c == "quantized_without_structure" for c in chart_undeclared),
         "structured_undeclared_claimed": structured_class == SIGNAL_STRUCTURE,
-        "structured_recall_at_least_0.8_each_subfamily": all(
-            (row["structure_recall"]["rate"] or 0.0) >= 0.8
-            for row in structured_rows.values()
+        "structured_declared_not_silently_logged": (
+            structured_declared["finding"].score > 0.0
+            and structured_declared_decision.verdict.value != "log"
+        ),
+        "structured_rows_use_distinct_images": all(
+            row["distinct_images"] == row["n"] for row in structured_rows.values()
+        ),
+        "jitter_rows_present": set(jitter_rows) == set(_JITTER_SUBFAMILIES)
+        and all(
+            len(row["amplitudes"]) == len(JITTER_AMPLITUDES)
+            for row in jitter_rows.values()
+        ),
+        # +/-1 px must not cost structure recall: at most one miss
+        # against the same payloads unjittered (CL-78).
+        "jitter_1px_keeps_structure_recall": all(
+            row["amplitudes"]["+/-1px"]["structured"]["structure_recall"]["successes"]
+            >= row["baseline_unjittered"]["structured"]["structure_recall"]["successes"]
+            - 1
+            for row in jitter_rows.values()
+        ),
+        "every_other_level_step_matches": all(
+            row["step_matches_encoder_or_double"]["successes"]
+            >= row["quantized_recall"]["successes"]
+            for row in every_other_level.values()
+        ),
+        "random_payload_false_structure_within_stated_level": (
+            random_payloads["binomial_tail_at_stated_level"] >= 0.01
         ),
         "attacker_grid_rows_present": all(
             name in attacker_grid for name in SUBFAMILIES
@@ -467,15 +848,18 @@ def run_geo_benchmark(
         "benchmark": {"name": "geometric-benchmark", "version": GEO_BENCHMARK_VERSION},
         "detector": {
             "config_version": DEFAULT_GEO_CONFIG.version,
-            "threshold_status": DEFAULT_GEO_CONFIG.status,
-            "enforceable": False,
+            "config_status": DEFAULT_GEO_CONFIG.status,
+            "frozen_config_version": frozen.version,
+            "geometric_threshold_status": frozen.for_family("geometric").status,
+            "enforceable": frozen.for_family("geometric").status == "frozen",
         },
         "enforcement": {
-            "mode": "log_only_triage",
+            "mode": "frozen_ladder",
+            "structure_claims_withheld": True,
             "height_or_size_alone_triggers_enforcement": False,
-            "reason": "geometric thresholds are unfrozen placeholders; "
-            "scene context plus quantization/structure tests "
-            "inform triage only (GEO-05)",
+            "reason": "under the CL-54 freeze a structure_claimed finding "
+            "is quarantined; quantization without structure, declared "
+            "channels and scene context never withhold (GEO-05)",
         },
         "fixtures": {
             "dataset_fixtures": len(fixtures),
@@ -490,6 +874,9 @@ def run_geo_benchmark(
         "subfamilies": subfamilies,
         "scene_context": scene_context,
         "attacker_grid": attacker_grid,
+        "jittered_attacker": jitter_rows,
+        "every_other_level_attacker": every_other_level,
+        "random_payload_structure": random_payloads,
         "benign_controls": control_report,
         "overall_context_only": {
             "note": "pooled numbers are context only; coverage is "
@@ -534,8 +921,8 @@ def validate_geo_benchmark(report: dict[str, Any]) -> list[str]:
     enforcement = report.get("enforcement", {})
     if enforcement.get("height_or_size_alone_triggers_enforcement") is not False:
         errors.append("height/size alone must never trigger enforcement")
-    if report.get("detector", {}).get("enforceable") is not False:
-        errors.append("geometric detector must remain non-enforceable here")
+    if enforcement.get("mode") != "frozen_ladder":
+        errors.append("enforcement mode must name the frozen ladder")
     for name, block in report.get("subfamilies", {}).items():
         for side in ("encoded", "benign"):
             for key, metric in block.get(side, {}).items():
