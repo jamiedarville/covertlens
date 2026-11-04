@@ -32,7 +32,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dev dependencies
-        run: python -m pip install -e ".[dev]"
+        # `web` brings FastAPI and Starlette so `mypy app` sees their
+        # types instead of reporting missing stubs (CL-78).
+        run: python -m pip install -e ".[dev,web]"
 
       - name: Lint
         run: ruff check covertlens tests app scripts
@@ -41,7 +43,7 @@ jobs:
         run: ruff format --check covertlens tests app scripts
 
       - name: Type check
-        run: mypy covertlens
+        run: mypy covertlens app
 
       - name: Schema validation tests
         env:

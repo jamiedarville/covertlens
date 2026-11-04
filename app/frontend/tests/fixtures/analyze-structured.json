@@ -1,0 +1,1727 @@
+{
+ "analysis": {
+  "artifact_id": null,
+  "artifact_version_id": null,
+  "content_hash": "sha256:3587243bd690cf1d1ba9d77daf0b2a22acf2cc7502d0f5dd785aaadc9a84f60f",
+  "coverage": {
+   "pixels_parsed": 49152,
+   "rows_parsed": 128
+  },
+  "elapsed_ms": 0.336,
+  "errors": [],
+  "findings": [
+   {
+    "coverage": {
+     "applicable": true,
+     "channels": 3,
+     "config_version": "1.0.0",
+     "media_kind": "png",
+     "pairs_total": 128,
+     "pairs_used": 5,
+     "pixels_examined": 49152,
+     "rows_parsed": 128,
+     "samples_examined": 147456
+    },
+    "detector_name": "lsb-pov-chisquare",
+    "detector_version": "1.0.0",
+    "evidence": {
+     "chi_square": 147456.0,
+     "chi_square_per_df": 36864.0,
+     "degrees_of_freedom": 4,
+     "detector_config_version": "1.0.0",
+     "lsb_one_fraction": 0.0,
+     "pairs_used": 5,
+     "pov_imbalance": 1.0,
+     "statistic": "pairs_of_values_chi_square"
+    },
+    "family": "spatial_lsb",
+    "limitations": [
+     "global pairs-of-values chi-square over sample LSBs; LSB-matching (+/-1) and content-adaptive embedding may evade it",
+     "calibrated only on procedural synthetic covers; natural-image covers are untested",
+     "score is evidence, not demonstrated collusion (C-02); thresholds unfrozen until CL-27"
+    ],
+    "schema_version": "1.0.0",
+    "score": 2.712673611111111e-05
+   },
+   {
+    "coverage": {
+     "applicable": true,
+     "channels": 3,
+     "config_version": "1.1.0",
+     "media_kind": "png",
+     "pairs_examined": 73728,
+     "pairs_horizontal": 73728,
+     "pixels_examined": 49152,
+     "samples_examined": 147456
+    },
+    "detector_name": "lsb-sample-pairs",
+    "detector_version": "1.0.0",
+    "evidence": {
+     "detector_config_version": "1.1.0",
+     "pair_lsb_agreement": 1.0,
+     "pair_lsb_randomness": 0.0,
+     "pair_smooth_fraction": 1.0,
+     "pairs_examined": 73728,
+     "reliable": true,
+     "statistic": "sample_pair_lsb_agreement_randomness"
+    },
+    "family": "spatial_lsb",
+    "limitations": [
+     "sample-pair statistic over adjacent-pair LSB agreement; it requires spatially correlated (smooth) covers and is gated to 0 as unreliable where adjacent-pair correlation is absent",
+     "calibrated only on procedural smooth-field covers (CL-61); natural-image covers are untested",
+     "score is evidence, not demonstrated collusion (C-02); thresholds unfrozen (CL-61 does not refreeze the CL-27/CL-54 points)"
+    ],
+    "schema_version": "1.0.0",
+    "score": 0.0
+   },
+   {
+    "coverage": {
+     "applicable": true,
+     "config_version": "1.0.0",
+     "entries": [],
+     "entries_examined": 0,
+     "media_kind": "png"
+    },
+    "detector_name": "metadata-ancillary-entries",
+    "detector_version": "1.0.0",
+    "evidence": {
+     "allowed_entries": 0,
+     "detector_config_version": "1.0.0",
+     "payload_keyword_present": false,
+     "statistic": "declared_keyword_ancillary_entry_rule",
+     "unknown_entries": 0
+    },
+    "family": "metadata",
+    "limitations": [
+     "ancillary metadata only (PNG tEXt/iTXt, JPEG APPn); metadata in unsupported containers or stripped by intermediaries is invisible",
+     "declared-keyword rule: payload under an undeclared keyword scores as weak unexplained metadata, not strong evidence",
+     "allowed task metadata is benign by policy, so a payload disguised under an allowed keyword evades the strong rule",
+     "score is evidence, not a decoded message or demonstrated collusion (C-02); thresholds unfrozen until CL-27"
+    ],
+    "schema_version": "1.0.0",
+    "score": 0.0
+   },
+   {
+    "coverage": {
+     "applicable": true,
+     "channels_tested": [
+      "angle",
+      "colour",
+      "gap",
+      "height",
+      "lit"
+     ],
+     "config_status": "measurement_parameters",
+     "config_version": "3.0.0",
+     "elements": 12,
+     "media_kind": "png",
+     "segmenter": "geometric-segmenter 1.2.0",
+     "structure_channels_tested": [
+      "height"
+     ],
+     "structure_tests": 1
+    },
+    "detector_name": "geometric-quantization-structure",
+    "detector_version": "3.0.0",
+    "evidence": {
+     "channels": {
+      "angle": {
+       "applicable": false,
+       "decodable": false,
+       "decode_support_fraction": 1.0,
+       "decode_tolerance": 3.5,
+       "detail": "constant or too-short sequence; no grid to discover",
+       "elements": 12,
+       "grid": {
+        "offset": null,
+        "source": "discovered",
+        "step": null
+       },
+       "levels_used": 1,
+       "max_abs_residual": 0.0,
+       "max_residual": 0.0,
+       "mean_abs_residual": 0.0,
+       "null_exceedance": 1.0,
+       "offset": null,
+       "quantized": false,
+       "rayleigh_R": 0.0,
+       "residuals": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "rms_residual": 0.0,
+       "score": 0.0,
+       "step": null,
+       "strict_support_fraction": 1.0,
+       "support_fraction": 0.0,
+       "supporting": 0,
+       "symbol_count": 12,
+       "symbol_range": [
+        0,
+        0
+       ],
+       "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+      },
+      "colour": {
+       "applicable": false,
+       "decodable": false,
+       "decode_support_fraction": 1.0,
+       "decode_tolerance": 12.0,
+       "elements": 12,
+       "grid": {
+        "levels": [
+         [
+          70,
+          110,
+          160
+         ]
+        ],
+        "min_level_separation": null,
+        "offset": null,
+        "palette_source": "discovered_colour_clusters",
+        "source": "discovered",
+        "step": null
+       },
+       "levels_used": 1,
+       "max_abs_residual": 0.0,
+       "max_residual": 0.0,
+       "mean_abs_residual": 0.0,
+       "null_exceedance": null,
+       "offset": null,
+       "quantization_method": "separated_palette_clusters",
+       "quantized": false,
+       "rayleigh_R": 0.0,
+       "residuals": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "rms_residual": 0.0,
+       "score": 0.0,
+       "step": null,
+       "support_fraction": 1.0,
+       "supporting": 12,
+       "symbol_count": 12,
+       "symbol_range": [
+        0,
+        0
+       ],
+       "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+      },
+      "gap": {
+       "applicable": false,
+       "decodable": false,
+       "decode_support_fraction": 1.0,
+       "decode_tolerance": 1.6,
+       "detail": "constant or too-short sequence; no grid to discover",
+       "elements": 11,
+       "grid": {
+        "offset": null,
+        "source": "discovered",
+        "step": null
+       },
+       "levels_used": 1,
+       "max_abs_residual": 0.0,
+       "max_residual": 0.0,
+       "mean_abs_residual": 0.0,
+       "null_exceedance": 1.0,
+       "offset": null,
+       "quantized": false,
+       "rayleigh_R": 0.0,
+       "residuals": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "rms_residual": 0.0,
+       "score": 0.0,
+       "step": null,
+       "strict_support_fraction": 1.0,
+       "support_fraction": 0.0,
+       "supporting": 0,
+       "symbol_count": 11,
+       "symbol_range": [
+        0,
+        0
+       ],
+       "symbols_digest": "sha256:b843addb373e1fced826dfadcbf29b336287365b64293fdb25149f61a61f0ebf"
+      },
+      "height": {
+       "applicable": true,
+       "decodable": true,
+       "decode_support_fraction": 1.0,
+       "decode_tolerance": 2.5,
+       "elements": 12,
+       "grid": {
+        "base": 16.0,
+        "offset": 16.0,
+        "source": "discovered",
+        "step": 10.0
+       },
+       "levels_used": 5,
+       "max_abs_residual": 0.0,
+       "max_residual": 0.0,
+       "mean_abs_residual": 0.0,
+       "null": {
+        "exceedance_by_null": {
+         "fractional_parts": 0.0,
+         "uniform": 0.0
+        },
+        "replicates_per_null": 200,
+        "seed": 1723
+       },
+       "null_exceedance": 0.0,
+       "offset": 16.0,
+       "quantized": true,
+       "rayleigh_R": 1.0,
+       "residuals": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "rms_residual": 0.0,
+       "score": 1.0,
+       "step": 10.0,
+       "strict_support_fraction": 1.0,
+       "support_fraction": 1.0,
+       "supporting": 12,
+       "symbol_count": 12,
+       "symbol_range": [
+        0,
+        5
+       ],
+       "symbols_digest": "sha256:273bb8d576c61ddb2137c1212d423adee1c9a20adb365cce826880c8aff792c8"
+      },
+      "lit": {
+       "applicable": false,
+       "decodable": false,
+       "decode_support_fraction": 1.0,
+       "decode_tolerance": 18.0,
+       "detail": "constant or too-short sequence; no grid to discover",
+       "elements": 12,
+       "grid": {
+        "offset": null,
+        "source": "discovered",
+        "step": null
+       },
+       "levels_used": 1,
+       "max_abs_residual": 0.0,
+       "max_residual": 0.0,
+       "mean_abs_residual": 0.0,
+       "null_exceedance": 1.0,
+       "offset": null,
+       "quantized": false,
+       "rayleigh_R": 0.0,
+       "residuals": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "rms_residual": 0.0,
+       "score": 0.0,
+       "step": null,
+       "strict_support_fraction": 1.0,
+       "support_fraction": 0.0,
+       "supporting": 0,
+       "symbol_count": 12,
+       "symbol_range": [
+        0,
+        0
+       ],
+       "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+      }
+     },
+     "chart_likeness": {
+      "baseline_present": false,
+      "features": {
+       "axis_text_marks": 0.0,
+       "baseline_axis": 0.0,
+       "equal_gaps": 0.15,
+       "equal_widths": 0.2
+      },
+      "score": 0.35
+     },
+     "classification": "structure_claimed",
+     "declared_context": null,
+     "height_prior": null,
+     "label": "evidence_aid_not_decoded_message",
+     "primary_channel": "height",
+     "signal_grade": "enforceable_grade",
+     "structure": {
+      "channel": "height",
+      "claimed": true,
+      "code": "alphabet_position_a0",
+      "codes_evaluated": [
+       {
+        "claimed": true,
+        "code": "alphabet_position_a0",
+        "codes": [
+         "alphabet_position_a0",
+         "alphabet_position_a1",
+         "base_k_digits"
+        ],
+        "kind": "text",
+        "level": 0.01,
+        "log_likelihood_ratio": 0.854025,
+        "null_exceedance": 0.0025,
+        "null_replicates_run": 1999,
+        "passes_undeclared_level": true,
+        "printable_fraction": 1.0,
+        "reason": "trigram likelihood beats the symbol-shuffle null at the stated level",
+        "symbol_frame": "as_discovered",
+        "trigram_score": -2.926078
+       }
+      ],
+      "declared_channel": false,
+      "level": 0.01,
+      "log_likelihood_ratio": 0.854025,
+      "null_exceedance": 0.0025,
+      "passes_undeclared_level": true,
+      "periodicity_stat": null,
+      "printable_fraction": 1.0,
+      "reason": "trigram likelihood beats the symbol-shuffle null at the stated level",
+      "trigram_score": -2.926078,
+      "undeclared_level": 0.01
+     },
+     "structure_by_channel": {
+      "height": {
+       "claimed": true,
+       "code": "alphabet_position_a0",
+       "declared_channel": false,
+       "level": 0.01,
+       "null_exceedance": 0.0025,
+       "passes_undeclared_level": true,
+       "undeclared_level": 0.01
+      }
+     }
+    },
+    "family": "geometric",
+    "limitations": [
+     "quantization alone is not encoding: legitimate charts and layouts are grid-snapped by design (GEO-05)",
+     "detector calibration uses procedural synthetic scenes; five real-image segmentation checks do not establish general natural-image detection coverage",
+     "structure is claimed only under a declared code in DECLARED_CODES; unregistered mappings are never inferred",
+     "structure needs at least 8 symbols: shorter sequences cannot beat the shuffle null at the stated level and top out at triage",
+     "enforcement requires the frozen geometric ladder points; synthetic calibration does not establish natural-image coverage"
+    ],
+    "schema_version": "1.0.0",
+    "score": 0.95
+   }
+  ],
+  "image": {
+   "bit_depth": 8,
+   "channels": 3,
+   "color_type": 2,
+   "height": 128,
+   "width": 384
+  },
+  "input_bytes": 147662,
+  "limitations": [
+   "parser subset: 8-bit non-interlaced PNG; metadata channels scored separately (CL-23)"
+  ],
+  "limits": {
+   "max_decompressed_bytes": 134217728,
+   "max_height": 8192,
+   "max_input_bytes": 10485760,
+   "max_pixels": 20000000,
+   "max_runtime_s": 2.0,
+   "max_width": 8192,
+   "version": "1.0.0"
+  },
+  "media_kind": "png",
+  "parser": {
+   "name": "covertlens.bounded-parser",
+   "version": "1.1.0"
+  },
+  "schema": "covertlens.analysis-result",
+  "schema_version": 1,
+  "status": "parsed",
+  "transform_applied": false
+ },
+ "decision": {
+  "artifact_version_id": null,
+  "config_version": "frozen-1.4.0",
+  "content_hash": null,
+  "delivery": "withhold",
+  "delivery_id": null,
+  "enforceable": true,
+  "equated_with_collusion": false,
+  "families_without_findings": [
+   "jpeg_dct"
+  ],
+  "findings_count": 4,
+  "halt_execution": false,
+  "ladder_version": "1.0.0",
+  "per_family": [
+   {
+    "detectors": [
+     "lsb-pov-chisquare@1.0.0",
+     "lsb-sample-pairs@1.0.0"
+    ],
+    "enforcement_fail_run_at": 0.248701,
+    "enforcement_quarantine_at": 0.24362,
+    "family": "spatial_lsb",
+    "findings": 2,
+    "max_score": 2.7e-05,
+    "thresholds_status": "frozen",
+    "triage_flag_at": 0.21674,
+    "verdict": "log"
+   },
+   {
+    "detectors": [
+     "metadata-ancillary-entries@1.0.0"
+    ],
+    "enforcement_fail_run_at": 0.901269,
+    "enforcement_quarantine_at": 0.901172,
+    "family": "metadata",
+    "findings": 1,
+    "max_score": 0.0,
+    "thresholds_status": "frozen",
+    "triage_flag_at": 0.450586,
+    "verdict": "log"
+   },
+   {
+    "detectors": [
+     "geometric-quantization-structure@3.0.0"
+    ],
+    "enforcement_fail_run_at": 1.0,
+    "enforcement_quarantine_at": 0.696774,
+    "family": "geometric",
+    "findings": 1,
+    "max_score": 0.95,
+    "thresholds_status": "frozen",
+    "triage_flag_at": 0.381814,
+    "verdict": "quarantine"
+   }
+  ],
+  "schema": "covertlens.verdict-decision",
+  "schema_version": 1,
+  "verdict": "quarantine"
+ },
+ "declared_context": null,
+ "geometric": {
+  "channels": {
+   "angle": {
+    "applicable": false,
+    "decodable": false,
+    "decode_support_fraction": 1.0,
+    "decode_tolerance": 3.5,
+    "detail": "constant or too-short sequence; no grid to discover",
+    "elements": 12,
+    "grid": {
+     "offset": null,
+     "source": "discovered",
+     "step": null
+    },
+    "levels_used": 1,
+    "max_abs_residual": 0.0,
+    "max_residual": 0.0,
+    "mean_abs_residual": 0.0,
+    "null_exceedance": 1.0,
+    "offset": null,
+    "quantized": false,
+    "rayleigh_R": 0.0,
+    "residuals": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rms_residual": 0.0,
+    "score": 0.0,
+    "step": null,
+    "strict_support_fraction": 1.0,
+    "support_fraction": 0.0,
+    "supporting": 0,
+    "symbol_count": 12,
+    "symbol_range": [
+     0,
+     0
+    ],
+    "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+   },
+   "colour": {
+    "applicable": false,
+    "decodable": false,
+    "decode_support_fraction": 1.0,
+    "decode_tolerance": 12.0,
+    "elements": 12,
+    "grid": {
+     "levels": [
+      [
+       70,
+       110,
+       160
+      ]
+     ],
+     "min_level_separation": null,
+     "offset": null,
+     "palette_source": "discovered_colour_clusters",
+     "source": "discovered",
+     "step": null
+    },
+    "levels_used": 1,
+    "max_abs_residual": 0.0,
+    "max_residual": 0.0,
+    "mean_abs_residual": 0.0,
+    "null_exceedance": null,
+    "offset": null,
+    "quantization_method": "separated_palette_clusters",
+    "quantized": false,
+    "rayleigh_R": 0.0,
+    "residuals": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rms_residual": 0.0,
+    "score": 0.0,
+    "step": null,
+    "support_fraction": 1.0,
+    "supporting": 12,
+    "symbol_count": 12,
+    "symbol_range": [
+     0,
+     0
+    ],
+    "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+   },
+   "gap": {
+    "applicable": false,
+    "decodable": false,
+    "decode_support_fraction": 1.0,
+    "decode_tolerance": 1.6,
+    "detail": "constant or too-short sequence; no grid to discover",
+    "elements": 11,
+    "grid": {
+     "offset": null,
+     "source": "discovered",
+     "step": null
+    },
+    "levels_used": 1,
+    "max_abs_residual": 0.0,
+    "max_residual": 0.0,
+    "mean_abs_residual": 0.0,
+    "null_exceedance": 1.0,
+    "offset": null,
+    "quantized": false,
+    "rayleigh_R": 0.0,
+    "residuals": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rms_residual": 0.0,
+    "score": 0.0,
+    "step": null,
+    "strict_support_fraction": 1.0,
+    "support_fraction": 0.0,
+    "supporting": 0,
+    "symbol_count": 11,
+    "symbol_range": [
+     0,
+     0
+    ],
+    "symbols_digest": "sha256:b843addb373e1fced826dfadcbf29b336287365b64293fdb25149f61a61f0ebf"
+   },
+   "height": {
+    "applicable": true,
+    "decodable": true,
+    "decode_support_fraction": 1.0,
+    "decode_tolerance": 2.5,
+    "elements": 12,
+    "grid": {
+     "base": 16.0,
+     "offset": 16.0,
+     "source": "discovered",
+     "step": 10.0
+    },
+    "levels_used": 5,
+    "max_abs_residual": 0.0,
+    "max_residual": 0.0,
+    "mean_abs_residual": 0.0,
+    "null": {
+     "exceedance_by_null": {
+      "fractional_parts": 0.0,
+      "uniform": 0.0
+     },
+     "replicates_per_null": 200,
+     "seed": 1723
+    },
+    "null_exceedance": 0.0,
+    "offset": 16.0,
+    "quantized": true,
+    "rayleigh_R": 1.0,
+    "residuals": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rms_residual": 0.0,
+    "score": 1.0,
+    "step": 10.0,
+    "strict_support_fraction": 1.0,
+    "support_fraction": 1.0,
+    "supporting": 12,
+    "symbol_count": 12,
+    "symbol_range": [
+     0,
+     5
+    ],
+    "symbols_digest": "sha256:273bb8d576c61ddb2137c1212d423adee1c9a20adb365cce826880c8aff792c8"
+   },
+   "lit": {
+    "applicable": false,
+    "decodable": false,
+    "decode_support_fraction": 1.0,
+    "decode_tolerance": 18.0,
+    "detail": "constant or too-short sequence; no grid to discover",
+    "elements": 12,
+    "grid": {
+     "offset": null,
+     "source": "discovered",
+     "step": null
+    },
+    "levels_used": 1,
+    "max_abs_residual": 0.0,
+    "max_residual": 0.0,
+    "mean_abs_residual": 0.0,
+    "null_exceedance": 1.0,
+    "offset": null,
+    "quantized": false,
+    "rayleigh_R": 0.0,
+    "residuals": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rms_residual": 0.0,
+    "score": 0.0,
+    "step": null,
+    "strict_support_fraction": 1.0,
+    "support_fraction": 0.0,
+    "supporting": 0,
+    "symbol_count": 12,
+    "symbol_range": [
+     0,
+     0
+    ],
+    "symbols_digest": "sha256:7d9d182766ebc92e9a621c3261748520ec5a0175fa571cdbb9e6b3b093cac125"
+   }
+  },
+  "chart_likeness": {
+   "baseline_present": false,
+   "features": {
+    "axis_text_marks": 0.0,
+    "baseline_axis": 0.0,
+    "equal_gaps": 0.15,
+    "equal_widths": 0.2
+   },
+   "score": 0.35
+  },
+  "classification": "structure_claimed",
+  "declared_context": null,
+  "overlay": {
+   "channels": {
+    "angle": {
+     "periodogram": {
+      "available": false,
+      "discovered_rayleigh_R": 0.0,
+      "discovered_step": null,
+      "points": [],
+      "reason": "constant or too-short sequence; no sweep"
+     },
+     "residual_histogram": {
+      "bin_edges": [
+       -3.5,
+       -2.7222,
+       -1.9444,
+       -1.1667,
+       -0.3889,
+       0.3889,
+       1.1667,
+       1.9444,
+       2.7222,
+       3.5
+      ],
+      "counts": [
+       0,
+       0,
+       0,
+       0,
+       12,
+       0,
+       0,
+       0,
+       0
+      ],
+      "tolerance": 3.5
+     },
+     "sequence_attribute": "angle_deg",
+     "tolerance": 3.5,
+     "unit": "degrees",
+     "values": [
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0,
+      -0.0
+     ]
+    },
+    "colour": {
+     "periodogram": {
+      "available": false,
+      "discovered_rayleigh_R": 0.0,
+      "discovered_step": null,
+      "points": [],
+      "reason": "colour is scored by discovered, well-separated palette clusters, not a Rayleigh grid"
+     },
+     "residual_histogram": {
+      "bin_edges": [
+       -12.0,
+       -9.3333,
+       -6.6667,
+       -4.0,
+       -1.3333,
+       1.3333,
+       4.0,
+       6.6667,
+       9.3333,
+       12.0
+      ],
+      "counts": [
+       0,
+       0,
+       0,
+       0,
+       12,
+       0,
+       0,
+       0,
+       0
+      ],
+      "tolerance": 12.0
+     },
+     "sequence_attribute": "colour_index",
+     "tolerance": 12.0,
+     "unit": "palette index",
+     "values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gap": {
+     "periodogram": {
+      "available": false,
+      "discovered_rayleigh_R": 0.0,
+      "discovered_step": null,
+      "points": [],
+      "reason": "constant or too-short sequence; no sweep"
+     },
+     "residual_histogram": {
+      "bin_edges": [
+       -1.6,
+       -1.2444,
+       -0.8889,
+       -0.5333,
+       -0.1778,
+       0.1778,
+       0.5333,
+       0.8889,
+       1.2444,
+       1.6
+      ],
+      "counts": [
+       0,
+       0,
+       0,
+       0,
+       11,
+       0,
+       0,
+       0,
+       0
+      ],
+      "tolerance": 1.6
+     },
+     "sequence_attribute": "gap_to_next",
+     "tolerance": 1.6,
+     "unit": "px",
+     "values": [
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0
+     ]
+    },
+    "height": {
+     "periodogram": {
+      "available": true,
+      "discovered_rayleigh_R": 1.0,
+      "discovered_step": 10.0,
+      "points": [
+       {
+        "rayleigh_R": 0.440166,
+        "step": 3.2
+       },
+       {
+        "rayleigh_R": 0.295145,
+        "step": 3.6
+       },
+       {
+        "rayleigh_R": 0.166667,
+        "step": 4.0
+       },
+       {
+        "rayleigh_R": 0.212189,
+        "step": 4.4
+       },
+       {
+        "rayleigh_R": 0.694447,
+        "step": 4.8
+       },
+       {
+        "rayleigh_R": 0.733781,
+        "step": 5.2
+       },
+       {
+        "rayleigh_R": 0.297381,
+        "step": 5.6
+       },
+       {
+        "rayleigh_R": 0.144338,
+        "step": 6.0
+       },
+       {
+        "rayleigh_R": 0.253205,
+        "step": 6.4
+       },
+       {
+        "rayleigh_R": 0.197149,
+        "step": 6.8
+       },
+       {
+        "rayleigh_R": 0.258523,
+        "step": 7.2
+       },
+       {
+        "rayleigh_R": 0.127622,
+        "step": 7.6
+       },
+       {
+        "rayleigh_R": 0.263523,
+        "step": 8.0
+       },
+       {
+        "rayleigh_R": 0.293549,
+        "step": 8.4
+       },
+       {
+        "rayleigh_R": 0.384489,
+        "step": 8.8
+       },
+       {
+        "rayleigh_R": 0.671777,
+        "step": 9.2
+       },
+       {
+        "rayleigh_R": 0.914749,
+        "step": 9.6
+       },
+       {
+        "rayleigh_R": 1.0,
+        "step": 10.0
+       },
+       {
+        "rayleigh_R": 0.92698,
+        "step": 10.4
+       },
+       {
+        "rayleigh_R": 0.750847,
+        "step": 10.8
+       },
+       {
+        "rayleigh_R": 0.544345,
+        "step": 11.2
+       },
+       {
+        "rayleigh_R": 0.377704,
+        "step": 11.6
+       },
+       {
+        "rayleigh_R": 0.300463,
+        "step": 12.0
+       },
+       {
+        "rayleigh_R": 0.294309,
+        "step": 12.4
+       },
+       {
+        "rayleigh_R": 0.296452,
+        "step": 12.8
+       },
+       {
+        "rayleigh_R": 0.275961,
+        "step": 13.2
+       },
+       {
+        "rayleigh_R": 0.232239,
+        "step": 13.6
+       },
+       {
+        "rayleigh_R": 0.178089,
+        "step": 14.0
+       },
+       {
+        "rayleigh_R": 0.135594,
+        "step": 14.4
+       },
+       {
+        "rayleigh_R": 0.131392,
+        "step": 14.8
+       },
+       {
+        "rayleigh_R": 0.162658,
+        "step": 15.2
+       },
+       {
+        "rayleigh_R": 0.202957,
+        "step": 15.6
+       },
+       {
+        "rayleigh_R": 0.237178,
+        "step": 16.0
+       },
+       {
+        "rayleigh_R": 0.260095,
+        "step": 16.4
+       },
+       {
+        "rayleigh_R": 0.270716,
+        "step": 16.8
+       },
+       {
+        "rayleigh_R": 0.270014,
+        "step": 17.2
+       },
+       {
+        "rayleigh_R": 0.259991,
+        "step": 17.6
+       },
+       {
+        "rayleigh_R": 0.243232,
+        "step": 18.0
+       },
+       {
+        "rayleigh_R": 0.222688,
+        "step": 18.4
+       },
+       {
+        "rayleigh_R": 0.201578,
+        "step": 18.8
+       },
+       {
+        "rayleigh_R": 0.183273,
+        "step": 19.2
+       },
+       {
+        "rayleigh_R": 0.170935,
+        "step": 19.6
+       },
+       {
+        "rayleigh_R": 0.166667,
+        "step": 20.0
+       },
+       {
+        "rayleigh_R": 0.170613,
+        "step": 20.4
+       },
+       {
+        "rayleigh_R": 0.181001,
+        "step": 20.8
+       },
+       {
+        "rayleigh_R": 0.195226,
+        "step": 21.2
+       },
+       {
+        "rayleigh_R": 0.210896,
+        "step": 21.6
+       },
+       {
+        "rayleigh_R": 0.226241,
+        "step": 22.0
+       },
+       {
+        "rayleigh_R": 0.240093,
+        "step": 22.4
+       },
+       {
+        "rayleigh_R": 0.251746,
+        "step": 22.8
+       },
+       {
+        "rayleigh_R": 0.260818,
+        "step": 23.2
+       },
+       {
+        "rayleigh_R": 0.267151,
+        "step": 23.6
+       },
+       {
+        "rayleigh_R": 0.270739,
+        "step": 24.0
+       },
+       {
+        "rayleigh_R": 0.27168,
+        "step": 24.4
+       },
+       {
+        "rayleigh_R": 0.270142,
+        "step": 24.8
+       },
+       {
+        "rayleigh_R": 0.268509,
+        "step": 25.0
+       }
+      ],
+      "reason": null
+     },
+     "residual_histogram": {
+      "bin_edges": [
+       -1.6,
+       -1.2444,
+       -0.8889,
+       -0.5333,
+       -0.1778,
+       0.1778,
+       0.5333,
+       0.8889,
+       1.2444,
+       1.6
+      ],
+      "counts": [
+       0,
+       0,
+       0,
+       0,
+       12,
+       0,
+       0,
+       0,
+       0
+      ],
+      "tolerance": 1.6
+     },
+     "sequence_attribute": "height",
+     "tolerance": 1.6,
+     "unit": "px",
+     "values": [
+      46.0,
+      56.0,
+      36.0,
+      16.0,
+      66.0,
+      46.0,
+      56.0,
+      36.0,
+      16.0,
+      66.0,
+      46.0,
+      56.0
+     ]
+    },
+    "lit": {
+     "periodogram": {
+      "available": false,
+      "discovered_rayleigh_R": 0.0,
+      "discovered_step": null,
+      "points": [],
+      "reason": "constant or too-short sequence; no sweep"
+     },
+     "residual_histogram": {
+      "bin_edges": [
+       -18.0,
+       -14.0,
+       -10.0,
+       -6.0,
+       -2.0,
+       2.0,
+       6.0,
+       10.0,
+       14.0,
+       18.0
+      ],
+      "counts": [
+       0,
+       0,
+       0,
+       0,
+       12,
+       0,
+       0,
+       0,
+       0
+      ],
+      "tolerance": 18.0
+     },
+     "sequence_attribute": "brightness",
+     "tolerance": 18.0,
+     "unit": "grey levels",
+     "values": [
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333,
+      113.333
+     ]
+    }
+   },
+   "version": "1.0.0"
+  },
+  "primary_channel": "height",
+  "segmentation": {
+   "detail": "",
+   "element_count": 12,
+   "elements": [
+    {
+     "angle_deg": -0.0,
+     "area": 552,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 46,
+     "index": 0,
+     "left": 16,
+     "top": 66,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 672,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 56,
+     "index": 1,
+     "left": 38,
+     "top": 56,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 432,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 36,
+     "index": 2,
+     "left": 60,
+     "top": 76,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 192,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 16,
+     "index": 3,
+     "left": 82,
+     "top": 96,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 792,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 66,
+     "index": 4,
+     "left": 104,
+     "top": 46,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 552,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 46,
+     "index": 5,
+     "left": 126,
+     "top": 66,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 672,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 56,
+     "index": 6,
+     "left": 148,
+     "top": 56,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 432,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 36,
+     "index": 7,
+     "left": 170,
+     "top": 76,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 192,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 16,
+     "index": 8,
+     "left": 192,
+     "top": 96,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 792,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 66,
+     "index": 9,
+     "left": 214,
+     "top": 46,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 552,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": 10,
+     "height": 46,
+     "index": 10,
+     "left": 236,
+     "top": 66,
+     "width": 12
+    },
+    {
+     "angle_deg": -0.0,
+     "area": 672,
+     "brightness": 113.333,
+     "colour": [
+      70,
+      110,
+      160
+     ],
+     "colour_distance": 0.0,
+     "colour_index": 0,
+     "gap_to_next": null,
+     "height": 56,
+     "index": 11,
+     "left": 258,
+     "top": 56,
+     "width": 12
+    }
+   ],
+   "failure_modes": [
+    {
+     "meaning": "no foreground candidates remain after background-region removal and morphological cleanup",
+     "status": "no_foreground"
+    },
+    {
+     "meaning": "fewer than min_elements repeated components found",
+     "status": "too_few_elements"
+    },
+    {
+     "meaning": "not a PNG raster or a supported baseline-JPEG raster",
+     "status": "unsupported_media"
+    },
+    {
+     "meaning": "input exceeds byte or pixel limits for this segmenter",
+     "status": "limit_exceeded"
+    },
+    {
+     "meaning": "bytes claim to be PNG/JPEG but do not decode",
+     "status": "corrupt_input"
+    },
+    {
+     "meaning": "a vector source was intercepted but could not be parsed (CL-41); clearance is refused, never inferred from the raster",
+     "status": "corrupt_source"
+    }
+   ],
+   "height": 128,
+   "media_kind": "png",
+   "schema": "covertlens.segmentation",
+   "schema_version": 1,
+   "segmenter": {
+    "name": "geometric-segmenter",
+    "version": "1.2.0"
+   },
+   "sequences": {
+    "angle_deg": [
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0
+    ],
+    "brightness": [
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333,
+     113.333
+    ],
+    "colour_index": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "gap_to_next": [
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     10,
+     null
+    ],
+    "height": [
+     46,
+     56,
+     36,
+     16,
+     66,
+     46,
+     56,
+     36,
+     16,
+     66,
+     46,
+     56
+    ],
+    "top": [
+     66,
+     56,
+     76,
+     96,
+     46,
+     66,
+     56,
+     76,
+     96,
+     46,
+     66,
+     56
+    ],
+    "width": [
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12,
+     12
+    ]
+   },
+   "status": "ok",
+   "tolerances": {
+    "angle_tolerance_deg": 3.5,
+    "attribute_tolerance_px": 1.6,
+    "background_bucket_shift": 4,
+    "background_distance_floor": 3.0,
+    "background_distance_tolerance": 24.0,
+    "background_step_tolerance": 4.0,
+    "coherent_colour_fraction": 0.9,
+    "effective_distance_floor": 3.0,
+    "effective_step_tolerance": 4.0,
+    "min_component_pixels": 8,
+    "morphology_3x3_open_close": true,
+    "noise_adaptive_from": 1.0,
+    "noise_adaptive_max": 4.0,
+    "noise_level": 0.0,
+    "preserve_thin_components": true
+   },
+   "width": 384
+  },
+  "signal_grade": "enforceable_grade",
+  "status": "ok",
+  "structure": {
+   "channel": "height",
+   "claimed": true,
+   "code": "alphabet_position_a0",
+   "codes_evaluated": [
+    {
+     "claimed": true,
+     "code": "alphabet_position_a0",
+     "codes": [
+      "alphabet_position_a0",
+      "alphabet_position_a1",
+      "base_k_digits"
+     ],
+     "kind": "text",
+     "level": 0.01,
+     "log_likelihood_ratio": 0.854025,
+     "null_exceedance": 0.0025,
+     "null_replicates_run": 1999,
+     "passes_undeclared_level": true,
+     "printable_fraction": 1.0,
+     "reason": "trigram likelihood beats the symbol-shuffle null at the stated level",
+     "symbol_frame": "as_discovered",
+     "trigram_score": -2.926078
+    }
+   ],
+   "declared_channel": false,
+   "level": 0.01,
+   "log_likelihood_ratio": 0.854025,
+   "null_exceedance": 0.0025,
+   "passes_undeclared_level": true,
+   "periodicity_stat": null,
+   "printable_fraction": 1.0,
+   "reason": "trigram likelihood beats the symbol-shuffle null at the stated level",
+   "trigram_score": -2.926078,
+   "undeclared_level": 0.01
+  },
+  "structure_by_channel": {
+   "height": {
+    "claimed": true,
+    "code": "alphabet_position_a0",
+    "declared_channel": false,
+    "level": 0.01,
+    "null_exceedance": 0.0025,
+    "passes_undeclared_level": true,
+    "undeclared_level": 0.01
+   }
+  }
+ },
+ "status": "parsed"
+}

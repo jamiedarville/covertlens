@@ -67,14 +67,15 @@ def test_shipped_freeze_matches_recalibration_and_is_enforceable():
     assert frozen["families"] == report["families"]
     assert frozen["development_dataset_hash"] == report["development_dataset_hash"]
     assert frozen["geometric_detector"] == report["geometric_detector"]
-    assert config.version == "frozen-1.3.0"
-    # CL-68 keeps the CL-54 geometric points exactly.
+    assert config.version == "frozen-1.4.0"
+    # CL-78 re-freezes geometric for detector 3.0.0; quarantine sits
+    # above the non-structure score ceiling (0.5).
     geometric = config.for_family("geometric")
     assert (
         geometric.triage_flag_at,
         geometric.enforcement_quarantine_at,
         geometric.enforcement_fail_run_at,
-    ) == (0.5, 0.708319, 1.0)
+    ) == (0.381814, 0.696774, 1.0)
     assert all(fam.status == "frozen" for fam in config.families.values())
     # A frozen config changes CL-17 behaviour: enforcement points are
     # no longer log-only.

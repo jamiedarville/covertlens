@@ -72,10 +72,19 @@ def test_analyze_returns_four_families_and_decision(client, geo_encoded):
         "quantized_without_structure",
         "structure_claimed",
     )
-    assert payload["decision"]["enforceable"] is False
-    # Reviewer-only material is stripped from API responses (CL-46).
+    # Decisions use the shipped freeze, not the log-only default (CL-78).
+    from covertlens.calibration import load_frozen_thresholds
+
+    frozen, _ = load_frozen_thresholds()
+    assert payload["decision"]["config_version"] == frozen.version
+    assert payload["decision"]["enforceable"] is True
+    # Reviewer-only material is stripped from API responses (CL-46),
+    # and channel symbol sequences never leave the library (CL-78).
     assert "candidate_decode" not in response.text
     assert "DECAF" not in response.text
+    for channel in payload["geometric"]["channels"].values():
+        assert "symbols" not in channel
+        assert channel["symbols_digest"].startswith("sha256:")
 
 
 def test_analyze_rejects_garbage_without_hanging(client):

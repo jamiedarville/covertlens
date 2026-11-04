@@ -197,8 +197,13 @@ def shape_record(
     num = sum((y - mean_y) * centres[y] for y in ordered_y)
     den = sum((y - mean_y) ** 2 for y in ordered_y) or 1.0
     colour = shape.colour
-    palette_index = min(
-        range(len(palette)), key=lambda i: math.dist(colour, palette[i])
+    # With no fixed palette (the default since CL-78) the index is set
+    # later from the palette discovered over every element, exactly as
+    # on the raster path (`build_vector_result`).
+    palette_index = (
+        min(range(len(palette)), key=lambda i: math.dist(colour, palette[i]))
+        if palette
+        else 0
     )
     return {
         "left": left,
@@ -209,7 +214,9 @@ def shape_record(
         "area": area,
         "colour": list(colour),
         "colour_index": palette_index,
-        "colour_distance": round(math.dist(colour, palette[palette_index]), 3),
+        "colour_distance": (
+            round(math.dist(colour, palette[palette_index]), 3) if palette else 0.0
+        ),
         "brightness": round(sum(colour) / 3.0, 3),
         "angle_deg": round(math.degrees(math.atan(-(num / den))), 3),
         "_kind": shape.kind,
@@ -459,8 +466,10 @@ def build_vector_result(
     limitations: tuple[str, ...],
 ) -> VectorParse:
     """Reading-ordered records wrapped in a SegmentationResult + notes."""
-    from .segmentation import SegmentationResult
+    from .segmentation import SegmentationResult, assign_colour_indices
 
+    # Same discovered palette as the raster path (CL-78).
+    assign_colour_indices(raw, config)
     elements = element_records(raw, config.row_overlap_fraction)
     detail_bits = []
     if unparsed:

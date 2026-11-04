@@ -24,7 +24,9 @@ coordinates and measure them with `covertlens._shapes`, using the
 CL-39 definitions: a pixel counts when its centre is inside the
 shape; bbox, area and gap are pixel counts; tilt is the row-centroid
 regression; colour is the painted colour (opacity composited over the
-background) with the nearest declared-palette index. Shapes covering
+background) with its index in the palette discovered over all
+visible elements, as on the raster path (CL-78; a declared
+`colour_palette` still overrides discovery). Shapes covering
 at least half the canvas are background panels. Shapes painted in the
 background colour, or smaller than `min_component_pixels`, are
 invisible in the raster and are dropped exactly as segmentation drops

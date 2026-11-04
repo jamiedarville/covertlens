@@ -57,7 +57,7 @@ def cache_key() -> dict[str, str]:
 
 def write_json(path: Path, body: Any) -> None:
     """Readers see either a complete old document or a complete new one."""
-    from covertlens.cli import _payload_json
+    from covertlens.cli import payload_json as _payload_json
 
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as f:
         f.write(_payload_json(body))

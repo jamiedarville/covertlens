@@ -472,6 +472,29 @@ class RuntimeConfig:
         return self._version
 
 
+def _require_store_root(path: Path, store: ArtifactStore) -> None:
+    """Refuse to treat anything but this store's own root as deletable (CL-78).
+
+    The path must be a real directory (not a symlink), resolve to the
+    store's root, hold the store's database and blob directory, and not
+    be a filesystem root or the home directory.
+    """
+    if path.is_symlink():
+        raise ValueError(f"retirement path {path} is a symlink, not a store root")
+    resolved = path.resolve()
+    store_root = getattr(store, "root", None)
+    if store_root is None or Path(store_root).resolve() != resolved:
+        raise ValueError(
+            f"retirement path {path} is not the root of the store being retired"
+        )
+    if resolved == Path(resolved.anchor) or resolved == Path.home().resolve():
+        raise ValueError(f"refusing to retire {resolved}")
+    if path.exists() and not (
+        (path / "covertlens.sqlite3").is_file() and (path / "blobs").is_dir()
+    ):
+        raise ValueError(f"retirement path {path} does not look like a store root")
+
+
 class DatasetRetirement:
     """Governed lifecycle: request → separate approval → bundled deletion."""
 
@@ -489,6 +512,9 @@ class DatasetRetirement:
         self._config_version = config_version
         self._policy = policy if policy is not None else load_runtime_policy()
         self._store_root = Path(store_root) if store_root is not None else None
+        if self._store_root is not None:
+            # Only the store's own root may ever be deleted (CL-78).
+            _require_store_root(self._store_root, store)
         self._state = "active"
         self._requester: str | None = None
 
@@ -558,6 +584,9 @@ class DatasetRetirement:
             raise RuntimeError("retirement requires an approved request first")
         bundle = self.reproducibility_bundle(dataset_id)
         if self._store_root is not None and self._store_root.exists():
+            # Re-checked at deletion time: the directory could have been
+            # swapped (e.g. for a symlink) since construction.
+            _require_store_root(self._store_root, self._store)
             shutil.rmtree(self._store_root)
         self._state = "deleted"
         self._audit.append(

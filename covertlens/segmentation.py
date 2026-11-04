@@ -40,8 +40,12 @@ Method (versioned in `SegmenterConfig`):
 4. Per element, a numeric attribute record is extracted: bounding
    box (left/top/width/height), area, gap to the next element in
    the row, tilt angle (row-centroid regression), dominant colour
-   with nearest declared-palette index + distance, and mean
-   brightness.
+   with its palette index + distance, and mean brightness. The
+   palette is *discovered* from the element colours (CL-78): greedy
+   clusters of radius `colour_cluster_radius`, in a canonical
+   hue-then-value order. A declared palette (`colour_palette`) is
+   only a prior; the default is empty, so no fixture palette is
+   ever handed to the detector.
 
 Failure modes are explicit statuses, never silent empty results:
 `no_foreground`, `too_few_elements`, `unsupported_media`,
@@ -54,6 +58,7 @@ message (C-09).
 
 from __future__ import annotations
 
+import colorsys
 import math
 import struct
 from dataclasses import asdict, dataclass, field
@@ -61,13 +66,14 @@ from typing import Any
 
 from ._validation import make_need
 from .acceleration import numpy_backend
-from .geometric_fixtures import GRIDS
 from .jpeg_pixels import JpegDecodeError, decode_jpeg_rgb, probe_jpeg_size
 from .parsing import AnalysisResult
 from .png_pixels import PngDecodeError, decode_png_rgb
 
 SEGMENTER_NAME = "geometric-segmenter"
-SEGMENTER_VERSION = "1.1.0"
+# CL-78: colour indices come from a discovered palette, not the
+# fixture palette.
+SEGMENTER_VERSION = "1.2.0"  # also CL-78: noise-adaptive background
 SEGMENTATION_SCHEMA = "covertlens.segmentation"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _JPEG_MAGIC = b"\xff\xd8\xff"
@@ -112,9 +118,11 @@ class SegmenterConfig:
     row_overlap_fraction: float = 0.5
     max_input_bytes: int = 10 * 1024 * 1024
     max_pixels: int = 2_000_000
-    colour_palette: tuple[tuple[int, int, int], ...] = tuple(
-        GRIDS["colour_code"]["palette"]
-    )
+    # Declared palette prior; empty means discover it (CL-78).
+    colour_palette: tuple[tuple[int, int, int], ...] = ()
+    # CL-78: element colours within this Euclidean RGB distance of a
+    # cluster's seed colour share a palette index.
+    colour_cluster_radius: float = 12.0
     angle_tolerance_deg: float = 3.5
     attribute_tolerance_px: float = 1.6
     # CL-52 robustness: a component containing any pixel farther
@@ -139,6 +147,19 @@ class SegmenterConfig:
     background_step_tolerance: float = 4.0
     # CL-52: 3x3 morphological open/close on the candidate mask.
     morphology: bool = True
+    # CL-78: sensor-style noise. The border's median per-channel
+    # neighbour difference estimates the noise level; on a flat border
+    # at or above `noise_adaptive_from`, the background colour is the
+    # border median (not one noisy modal sample) and the step and
+    # distance tolerances scale with the measured level. Clean renders
+    # (level 0) and gradient or textured borders keep the exact CL-52
+    # behaviour.
+    noise_adaptive_from: float = 1.0
+    # Above this level the border is texture, not noise (a random cover
+    # measures ~10): adapting there would turn texture into elements.
+    noise_adaptive_max: float = 4.0
+    noise_step_factor: float = 5.0
+    noise_floor_factor: float = 4.5
     # Opening erases coherent components thinner than the kernel (chart
     # axes, rules and fine dashes). Restore those from the original mask.
     preserve_thin_components: bool = True
@@ -160,6 +181,10 @@ class SegmentationResult:
     detail: str = ""
     media_kind: str = ""
     config: SegmenterConfig = field(default_factory=SegmenterConfig)
+    # CL-78: measured border noise and the tolerances actually used.
+    noise_level: float = 0.0
+    effective_step_tolerance: float | None = None
+    effective_distance_floor: float | None = None
 
     @property
     def ok(self) -> bool:
@@ -203,12 +228,67 @@ class SegmentationResult:
                 "coherent_colour_fraction": self.config.coherent_colour_fraction,
                 "background_bucket_shift": self.config.background_bucket_shift,
                 "background_step_tolerance": self.config.background_step_tolerance,
+                "noise_adaptive_from": self.config.noise_adaptive_from,
+                "noise_adaptive_max": self.config.noise_adaptive_max,
+                "noise_level": self.noise_level,
+                "effective_step_tolerance": self.effective_step_tolerance,
+                "effective_distance_floor": self.effective_distance_floor,
                 "morphology_3x3_open_close": self.config.morphology,
                 "preserve_thin_components": self.config.preserve_thin_components,
             },
             "failure_modes": list(FAILURE_MODES),
             "decoded_message": None,
         }
+
+
+def _colour_order_key(colour: tuple[int, ...]) -> tuple[int, int, float]:
+    """Canonical palette order: achromatic first by value, then by hue."""
+    r, g, b = (c / 255.0 for c in colour[:3])
+    hue, saturation, value = colorsys.rgb_to_hsv(r, g, b)
+    if saturation < 0.12:
+        return (0, 0, value)
+    return (1, int(round(hue * 360)) % 360, value)
+
+
+def discover_palette(
+    colours: list[tuple[int, ...]], radius: float
+) -> list[tuple[int, ...]]:
+    """Palette levels discovered from element colours (CL-78).
+
+    Greedy clustering: distinct colours in descending frequency each
+    join the nearest existing cluster whose seed is within `radius`,
+    or seed a new one. Seeds are returned in canonical hue-then-value
+    order, so indices do not depend on element order.
+    """
+    counts: dict[tuple[int, ...], int] = {}
+    for colour in colours:
+        counts[colour] = counts.get(colour, 0) + 1
+    seeds: list[tuple[int, ...]] = []
+    for colour in sorted(counts, key=lambda c: (-counts[c], c)):
+        if seeds:
+            nearest = min(seeds, key=lambda s: math.dist(colour, s))
+            if math.dist(colour, nearest) <= radius:
+                continue
+        seeds.append(colour)
+    return sorted(seeds, key=_colour_order_key)
+
+
+def assign_colour_indices(
+    elements: list[dict[str, Any]], config: SegmenterConfig
+) -> None:
+    """Set `colour_index` and `colour_distance` on each element in place."""
+    colours = [tuple(int(v) for v in e["colour"]) for e in elements]
+    palette = list(config.colour_palette) or discover_palette(
+        colours, config.colour_cluster_radius
+    )
+    for element, colour in zip(elements, colours):
+        if not palette:
+            element["colour_index"] = 0
+            element["colour_distance"] = 0.0
+            continue
+        index = min(range(len(palette)), key=lambda i: math.dist(colour, palette[i]))
+        element["colour_index"] = index
+        element["colour_distance"] = round(math.dist(colour, palette[index]), 3)
 
 
 def _components(
@@ -423,6 +503,69 @@ def _background_colour(
     return max(in_bucket, key=lambda c: in_bucket[c])
 
 
+def _border_noise(
+    pixels: bytes, width: int, height: int, background: tuple[int, int, int]
+) -> tuple[float, tuple[int, int, int], bool]:
+    """Noise level, robust background colour and flatness of the border.
+
+    Uses border pixels within 24 (Euclidean RGB) of the modal colour.
+    The level is the median per-channel difference between adjacent
+    border pixels (about one standard deviation of per-pixel noise);
+    the colour is the per-channel median of those pixels; the border is
+    *flat* when the medians of its runs agree to within twice the
+    noise level (CL-78).
+    """
+    ring: list[int] = list(range(width))
+    ring += [(height - 1) * width + x for x in range(width)]
+    ring += [y * width for y in range(1, height - 1)]
+    ring += [y * width + width - 1 for y in range(1, height - 1)]
+
+    def near(idx: int) -> tuple[int, int, int] | None:
+        c = (pixels[idx * 3], pixels[idx * 3 + 1], pixels[idx * 3 + 2])
+        return c if math.dist(c, background) <= 24.0 else None
+
+    diffs: list[int] = []
+    channels: list[list[int]] = [[], [], []]
+    for run in (
+        range(width),
+        range((height - 1) * width, height * width),
+        range(0, width * height, width),
+        range(width - 1, width * height, width),
+    ):
+        previous = None
+        for idx in run:
+            c = near(idx)
+            if c is not None:
+                for k in range(3):
+                    channels[k].append(c[k])
+                if previous is not None:
+                    diffs.extend(abs(a - b) for a, b in zip(c, previous))
+            previous = c
+    if not diffs:
+        return 0.0, background, False
+    diffs.sort()
+    level = float(diffs[len(diffs) // 2])
+    median = tuple(sorted(values)[len(values) // 2] for values in channels)
+    # Flat apart from noise: the medians of 16 border runs agree. A
+    # gradient or textured border (a cover image) fails, and keeps the
+    # CL-52 gradient handling instead of noise adaptation.
+    run_medians: list[tuple[int, ...]] = []
+    chunk = max(1, len(ring) // 16)
+    for start in range(0, len(ring) - chunk + 1, chunk):
+        segment = [near(idx) for idx in ring[start : start + chunk]]
+        kept = [c for c in segment if c is not None]
+        if len(kept) * 2 < len(segment):
+            return level, (median[0], median[1], median[2]), False
+        run_medians.append(
+            tuple(sorted(c[k] for c in kept)[len(kept) // 2] for k in range(3))
+        )
+    spread = max(
+        (math.dist(a, b) for a in run_medians for b in run_medians), default=0.0
+    )
+    flat = spread <= 2.0 * max(level, 1.0)
+    return level, (median[0], median[1], median[2]), flat
+
+
 def _background_region(
     pixels: bytes,
     width: int,
@@ -585,16 +728,32 @@ def segment_image(
     background = _background_colour(
         pixels, width, height, active.background_bucket_shift
     )
+    step_tolerance = active.background_step_tolerance
+    distance_floor = active.background_distance_floor
+    distance_tolerance = active.background_distance_tolerance
+    noise_level, robust_background, flat = _border_noise(
+        pixels, width, height, background
+    )
+    if flat and active.noise_adaptive_from <= noise_level <= active.noise_adaptive_max:
+        background = robust_background
+        step_tolerance = max(step_tolerance, active.noise_step_factor * noise_level)
+        distance_floor = max(distance_floor, active.noise_floor_factor * noise_level)
+        distance_tolerance = max(distance_tolerance, 2.0 * distance_floor)
     region = _background_region(
         pixels,
         width,
         height,
         background,
         active.background_bucket_shift,
-        active.background_step_tolerance,
+        step_tolerance,
     )
-    tolerance_sq = active.background_distance_tolerance**2
-    floor_sq = active.background_distance_floor**2
+    noise_info: dict[str, Any] = {
+        "noise_level": noise_level,
+        "effective_step_tolerance": round(step_tolerance, 4),
+        "effective_distance_floor": round(distance_floor, 4),
+    }
+    tolerance_sq = distance_tolerance**2
+    floor_sq = distance_floor**2
     br, bg, bb = background
     np = numpy_backend()
     dist_sq: list[float]
@@ -650,6 +809,7 @@ def segment_image(
             height=height,
             media_kind=media_kind,
             config=active,
+            **noise_info,
         )
 
     raw = []
@@ -709,10 +869,6 @@ def segment_image(
         mean_y = sum(ordered_y) / len(ordered_y)
         num = sum((y - mean_y) * row_centres[y] for y in ordered_y)
         den = sum((y - mean_y) ** 2 for y in ordered_y) or 1.0
-        palette_index = min(
-            range(len(active.colour_palette)),
-            key=lambda i: math.dist(colour, active.colour_palette[i]),
-        )
         raw.append(
             {
                 "left": min(xs),
@@ -722,14 +878,11 @@ def segment_image(
                 "bottom": max(ys),
                 "area": len(points),
                 "colour": list(colour),
-                "colour_index": palette_index,
-                "colour_distance": round(
-                    math.dist(colour, active.colour_palette[palette_index]), 3
-                ),
                 "brightness": round(sum(colour) / 3.0, 3),
                 "angle_deg": round(math.degrees(math.atan(-(num / den))), 3),
             }
         )
+    assign_colour_indices(raw, active)
     ordered = reading_order(raw, active.row_overlap_fraction)
     elements: list[dict[str, Any]] = []
     for i, comp in enumerate(ordered):
@@ -770,6 +923,7 @@ def segment_image(
             elements=elements,
             media_kind=media_kind,
             config=active,
+            **noise_info,
         )
     return SegmentationResult(
         "ok",
@@ -779,6 +933,7 @@ def segment_image(
         detail=detail,
         media_kind=media_kind,
         config=active,
+        **noise_info,
     )
 
 

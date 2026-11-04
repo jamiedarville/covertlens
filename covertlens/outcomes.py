@@ -19,6 +19,7 @@ delivery: parse (CL-13) → detectors (CL-14/15/23 callables) → verdict
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -236,6 +237,13 @@ def finalize_run_outcome(records: Iterable[dict[str, Any]]) -> str:
     return "completed"
 
 
+@functools.lru_cache(maxsize=1)
+def _manifest_error_classes() -> dict[str, str]:
+    """Error classes from the shipped manifest, loaded once."""
+    manifest = load_manifest()
+    return dict((manifest.get("error_behavior") or {}).get("classes") or {})
+
+
 def validate_outcome(record: dict[str, Any]) -> list[str]:
     """Return validation errors for one outcome record; empty is valid."""
     errors: list[str] = []
@@ -277,8 +285,7 @@ def validate_outcome(record: dict[str, Any]) -> list[str]:
             bool((record.get("reason") or {}).get("code")),
             "detection_failure needs a structured reason code",
         )
-    manifest = load_manifest()
-    classes = (manifest.get("error_behavior") or {}).get("classes") or {}
+    classes = _manifest_error_classes()
     if record.get("error_class") is not None:
         need(
             classes.get(record["error_class"]) == "no_clean_verdict_withhold",

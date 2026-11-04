@@ -31,7 +31,8 @@ that an artifact produced an action (REV-01).
 ## API and page
 
 `GET /api/trace/runs/{run_id}` builds the view from the
-persistent gate's trace plus fresh deterministic analysis of the
+persistent gate's trace plus deterministic analysis (cached per
+artifact version and the run's declared scene context, CL-78) of the
 stored bytes (the CL-59 recompute pattern). It needs a demo role
 with `trace.read` on the run (researcher or reviewer; viewer → 403,
 CL-78). Unknown runs return an empty view for the requested ID.

@@ -70,7 +70,9 @@ def percentile(values: list[float], q: float) -> float:
     if not values:
         raise ValueError("percentile needs at least one value")
     ordered = sorted(values)
-    rank = max(1, math.ceil(q * len(ordered)))
+    # Nearest-rank; round() strips float noise (0.07 * 100 is
+    # 7.000000000000001) before the ceiling.
+    rank = max(1, math.ceil(round(q * len(ordered), 9)))
     return ordered[min(rank, len(ordered)) - 1]
 
 

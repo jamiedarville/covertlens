@@ -6,21 +6,24 @@ Release state: **release_with_limitations** (CL-35 scorecard:
 is exercised by `python -m covertlens handoff-demo`
 (`covertlens.handoff.run_handoff_verification`).
 
-## 1. Thresholds (frozen-1.0.0)
+## 1. Thresholds (frozen-1.4.0)
 
 - The live enforcement points are `config/frozen-thresholds.json`
-  (`frozen-1.0.0`, calibrated in CL-27). Triage (`flag_at`) and
-  enforcement (`quarantine_at`, `fail_run_at`) are separate points
-  per family; do not merge them.
+  (`frozen-1.4.0`, CL-78: the CL-68 banded freeze with the geometric
+  family re-frozen for detector 3.0.0; `frozen-1.2.0` is skipped).
+  Triage (`flag_at`) and enforcement (`quarantine_at`,
+  `fail_run_at`) are separate points per family; do not merge them.
 - **Change rule:** thresholds change only as a *new freeze*
-  (recalibrate on development data, bump the version, rebuild the
-  pin). Never edit a frozen config in place — `build_pin` /
-  `pin_differences` (CL-26) name `threshold_config_version` drift.
-- **Rollback:** point the campaign back at the previous pin/config.
-  Rolling back to the pre-freeze shipped config restores log-only
-  behaviour (verdicts `log`, `enforceable: false`) — verified in
-  the handoff checks. Announce the rollback in the campaign log;
-  prior verdicts are not rewritten.
+  (§8: `make refreeze`). Never edit a frozen config in place —
+  `build_pin` / `pin_differences` (CL-26) name
+  `threshold_config_version` drift. The geometric quarantine point is
+  always calibrated above the non-structure score ceiling (0.5), so
+  quantization alone never withholds.
+- **Rollback:** §7 (`COVERTLENS_FROZEN_CONFIG`). Rolling back to the
+  pre-freeze shipped config restores log-only behaviour (verdicts
+  `log`, `enforceable: false`) — verified in the handoff checks.
+  Announce the rollback in the campaign log; prior verdicts are not
+  rewritten.
 - Coverage honesty: the freeze claims calibrated bands
   (low/medium) on `gradient_noise` covers at suite-like densities.
   Outside that (CL-34), enforcement may miss — treat misses as
@@ -50,6 +53,15 @@ is exercised by `python -m covertlens handoff-demo`
   failure and never collusion evidence.
 - Triage order: check the error class first, then limits
   (CL-13: 10 MiB / 20 MP / 2 s runtime), then detector health.
+- **Where the limits live (CL-65).** Library parser limits:
+  `covertlens.parsing.ParserLimits` / `DEFAULT_LIMITS` (10 MiB input,
+  20 MP, 2 s runtime). Segmenter caps: `SegmenterConfig`
+  (10 MiB, 2 MP). Web service: `COVERTLENS_MAX_UPLOAD_BYTES` (8 MiB;
+  the body limit adds 64 KiB of multipart framing and is enforced
+  before parsing), `COVERTLENS_MAX_PIXELS` (20 MP),
+  `COVERTLENS_ANALYZE_TIMEOUT_S` (30 s wall clock per analysis or
+  generation), `COVERTLENS_WORKERS` (4), `COVERTLENS_RATE_LIMIT_PER_MIN`
+  (30 per client per minute on every upload path).
   Large JPEGs hitting the 2 s deadline are an availability issue
   (CL-29), not a detection event — see the scorecard limitation.
 - Fix the input/pipeline, then rerun (§4). Do not "resolve" an
@@ -111,7 +123,25 @@ is exercised by `python -m covertlens handoff-demo`
   uploads it as the `covertlens-static-analyze` artifact.
 - **Behind a reverse proxy**, state-changing `/api` requests must
   carry an `Origin` that matches `Host` or `X-Forwarded-Host`, or
-  is listed in `COVERTLENS_ALLOWED_ORIGINS` (comma separated).
+  is listed in `COVERTLENS_ALLOWED_ORIGINS` (comma separated). Set
+  `COVERTLENS_TRUSTED_PROXIES` to the proxy's address so the rate
+  limiter keys on the client from `X-Forwarded-For`; without it the
+  header is ignored (anyone could forge it) and every client behind
+  the proxy shares one limit.
+- **Rate limits are per process.** Each replica keeps its own
+  one-minute windows (idle windows are evicted), so N replicas allow
+  N times the rate. Put a shared limiter in the proxy for a real
+  deployment.
+- **Worker pool.** A timed-out analysis kills its worker and the
+  pool is rebuilt; a crashed worker is rebuilt and the call retried
+  once. `/api/health` reports `worker_pool_rebuilds`; a rising count
+  means inputs are hitting the deadline.
+- **Data directory.** `/api/health` returns 503 `degraded` when
+  `COVERTLENS_DATA_DIR` is not writable, when precompute failed, or
+  when the gate reload skipped versions it could not load (a damaged
+  store); gate, generation and review endpoints answer 503 with the
+  reason instead of 500, and benchmark pages say why there is no
+  cache. Fix the volume permissions and restart.
 - **Fork pull requests and the self-hosted runner.** The fork guard
   in `.github/workflows/test.yml` is in the PR's own copy of the
   workflow, so a fork can edit it. The control that holds is the
@@ -183,6 +213,9 @@ version and pin hash from the scorecard.
   with `python -m covertlens scorecard-demo --json --out config/release-scorecard.json`
   (only valid while the freeze is unchanged).
 - Benchmark/report caches for the web service: `python scripts/precompute.py --data-dir /data`.
+- Frontend test fixture `app/frontend/tests/fixtures/analyze-structured.json`:
+  re-save `app.analysis_worker.analyze_bytes(structured_payload_fixture().data)`
+  after an API shape change or a re-freeze (`npm test` reads it).
 - Benchmark JSON for review: the CLI demos (`benchmark-lsb`, `benchmark-dct`,
   `geo-benchmark-demo`, `frozen-demo`, `robustness-demo`, `adaptive-demo`),
   each with `--json --out <path>`.

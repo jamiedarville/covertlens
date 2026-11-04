@@ -52,11 +52,15 @@ import base64
 import concurrent.futures
 import hashlib
 import json
+import logging
+import multiprocessing
 import os
 import re
+import signal
+import tempfile
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -70,13 +74,14 @@ from fastapi.responses import (
     Response,
     StreamingResponse,
 )
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import covertlens
 from covertlens.manifest import load_manifest
 from covertlens.pinning import default_detector_versions
 
 from . import auth
-from .analysis_worker import analyze_bytes
+from .analysis_worker import analyze_bytes, frozen_config, public_geometric
 from .generation_worker import generate_image
 
 DATA_DIR = Path(os.environ.get("COVERTLENS_DATA_DIR", "/data"))
@@ -102,6 +107,23 @@ MAX_UPLOAD_BYTES = int(
     os.environ.get("COVERTLENS_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))
 )
 RATE_LIMIT_PER_MIN = int(os.environ.get("COVERTLENS_RATE_LIMIT_PER_MIN", "30"))
+# Request bodies are capped before any parsing (CL-78): multipart
+# uploads at the upload limit plus room for the form framing, other
+# /api bodies at a small JSON limit.
+MULTIPART_OVERHEAD_BYTES = 64 * 1024
+MAX_JSON_BODY_BYTES = 64 * 1024
+# Rate-limited (expensive) endpoints: every upload path (CL-78).
+RATE_LIMITED = frozenset(
+    {
+        ("POST", "/api/analyze"),
+        ("POST", "/api/generate"),
+        ("POST", "/api/gate/deliveries"),
+    }
+)
+# Client IPs allowed to set X-Forwarded-For (a reverse proxy), comma
+# separated. Without it the socket peer address is the client.
+TRUSTED_PROXIES_ENV = "COVERTLENS_TRUSTED_PROXIES"
+_RATE_SWEEP_EVERY = 256
 # `X-Demo-Role` is trusted only when this is on (CL-78). Read per
 # request so tests and operators can flip it without a restart.
 DEMO_ROLES_ENV = "COVERTLENS_DEMO_ROLES"
@@ -127,18 +149,131 @@ app = FastAPI(
     redoc_url=None,
 )
 
+_log = logging.getLogger("covertlens.web")
 _pool: concurrent.futures.ProcessPoolExecutor | None = None
+_pool_lock = threading.Lock()
+_pool_rebuilds = 0
 _rate_windows: dict[str, deque] = {}
+_rate_lock = threading.Lock()
+_rate_calls = 0
 _precompute_started = False
 _precompute_lock = threading.Lock()
+_precompute_error: str | None = None
+_data_dir_status: dict[str, Any] = {"checked": False}
+
+
+def _worker_init() -> None:
+    """Pool worker start-up: default signal handling (CL-78).
+
+    Workers forked straight from the server inherited its handlers,
+    which only set a flag in the parent's copy of the server, so
+    SIGTERM did not stop them. The pool now starts workers from a
+    forkserver; resetting the defaults here keeps that true whatever
+    start method is in use.
+    """
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 def _executor() -> concurrent.futures.ProcessPoolExecutor:
     global _pool
-    if _pool is None:
-        workers = int(os.environ.get("COVERTLENS_WORKERS", "4"))
-        _pool = concurrent.futures.ProcessPoolExecutor(max_workers=workers)
-    return _pool
+    with _pool_lock:
+        if _pool is None:
+            workers = int(os.environ.get("COVERTLENS_WORKERS", "4"))
+            # forkserver: workers fork from a clean process, not from the
+            # threaded server (no inherited locks or handlers).
+            method = (
+                "forkserver"
+                if "forkserver" in multiprocessing.get_all_start_methods()
+                else "spawn"
+            )
+            _pool = concurrent.futures.ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=multiprocessing.get_context(method),
+                initializer=_worker_init,
+            )
+        return _pool
+
+
+def _discard_pool(pool: concurrent.futures.ProcessPoolExecutor) -> None:
+    """Kill a pool's workers and drop it; the next call builds a new one.
+
+    A process pool cannot cancel one running task, so a timed-out or
+    broken pool is replaced whole (CL-78). Other in-flight tasks fail
+    with BrokenProcessPool and are retried once by `_run_in_pool`.
+    """
+    global _pool, _pool_rebuilds
+    with _pool_lock:
+        if _pool is pool:
+            _pool = None
+            _pool_rebuilds += 1
+    processes = list(getattr(pool, "_processes", {}).values())
+    for process in processes:
+        try:
+            process.kill()
+        except (OSError, ValueError):
+            pass
+    pool.shutdown(wait=False, cancel_futures=True)
+
+
+async def _run_in_pool(fn: Any, *args: Any, timeout: float) -> Any:
+    """Run `fn(*args)` in the pool with a wall-clock deadline (CL-78).
+
+    On timeout the worker is killed (the pool is replaced) and
+    `TimeoutError` is raised. A broken pool (a worker died) is replaced
+    and the call retried once, so one crash never leaves the service
+    answering 500 until restart.
+    """
+    for attempt in (1, 2):
+        pool = _executor()
+        try:
+            future = pool.submit(fn, *args)
+        except concurrent.futures.process.BrokenProcessPool:
+            _discard_pool(pool)
+            continue
+        try:
+            return await asyncio.wait_for(asyncio.wrap_future(future), timeout)
+        except (TimeoutError, concurrent.futures.TimeoutError):
+            _discard_pool(pool)
+            raise TimeoutError from None
+        except concurrent.futures.process.BrokenProcessPool:
+            _discard_pool(pool)
+            if attempt == 2:
+                raise
+    raise concurrent.futures.process.BrokenProcessPool("worker pool unavailable")
+
+
+def _check_data_dir() -> dict[str, Any]:
+    """Whether DATA_DIR is writable; recorded for /api/health (CL-78)."""
+    global _data_dir_status
+    status: dict[str, Any] = {"checked": True, "path": str(DATA_DIR)}
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=DATA_DIR, prefix=".write-check-"):
+            pass
+        status["writable"] = True
+    except OSError as exc:
+        status["writable"] = False
+        status["error"] = f"{type(exc).__name__}: {exc}"
+    _data_dir_status = status
+    return status
+
+
+def _data_dir_writable() -> bool:
+    if not _data_dir_status.get("checked"):
+        _check_data_dir()
+    return bool(_data_dir_status.get("writable"))
+
+
+def _data_unavailable() -> JSONResponse:
+    return JSONResponse(
+        {
+            "detail": "data directory is not writable; gate, generation and "
+            "review state cannot be stored",
+            "data_dir": _data_dir_status,
+        },
+        status_code=503,
+    )
 
 
 def _fixtures() -> list[dict[str, Any]]:
@@ -196,9 +331,14 @@ def _precompute() -> None:
     )
     if spec is None or spec.loader is None:
         return
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module.precompute(CACHE_DIR)
+    global _precompute_error
+    try:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.precompute(CACHE_DIR)
+    except Exception as exc:  # noqa: BLE001 - reported through /api/health
+        _precompute_error = f"{type(exc).__name__}: {exc}"
+        _log.exception("precompute failed")
 
 
 def _cache_ready() -> bool:
@@ -245,6 +385,12 @@ def _startup() -> None:
         # come up and serve every request as an anonymous viewer.
         auth.OidcSettings.from_env()
         _mapping()
+    status = _check_data_dir()
+    if not status["writable"]:
+        # Reported by /api/health and by every endpoint that needs the
+        # data directory (503), instead of failing quietly (CL-78).
+        _log.error("data directory %s is not writable: %s", DATA_DIR, status["error"])
+        return
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -295,18 +441,63 @@ async def _security_and_rate_limit(request: Request, call_next):
         response = JSONResponse({"detail": "cross_site_request_blocked"}, 403)
         _apply_security_headers(response)
         return response
-    if request.url.path in ("/api/analyze", "/api/generate"):
-        now = time.time()
-        host = request.client.host if request.client else "unknown"
-        window = _rate_windows.setdefault(host, deque())
-        while window and now - window[0] > 60:
-            window.popleft()
-        if len(window) >= RATE_LIMIT_PER_MIN:
-            return JSONResponse({"detail": "rate_limited"}, status_code=429)
-        window.append(now)
+    if (request.method, request.url.path) in RATE_LIMITED and _rate_limited(
+        _client_key(request)
+    ):
+        response = JSONResponse({"detail": "rate_limited"}, status_code=429)
+        _apply_security_headers(response)
+        return response
     response = await call_next(request)
     _apply_security_headers(response)
     return response
+
+
+def _client_key(request: Request) -> str:
+    """Rate-limit key: the client IP (CL-78).
+
+    `X-Forwarded-For` is honoured only when the socket peer is a
+    trusted proxy (`COVERTLENS_TRUSTED_PROXIES`); the key is then the
+    right-most address not itself a trusted proxy. Anyone else could
+    forge the header to dodge the limit.
+    """
+    peer = request.client.host if request.client is not None else "unknown"
+    trusted = {
+        ip.strip() for ip in os.environ.get(TRUSTED_PROXIES_ENV, "").split(",") if ip
+    }
+    if peer not in trusted:
+        return peer
+    forwarded = [
+        hop.strip()
+        for hop in (request.headers.get("x-forwarded-for") or "").split(",")
+        if hop.strip()
+    ]
+    for hop in reversed(forwarded):
+        if hop not in trusted:
+            return hop
+    return peer
+
+
+def _rate_limited(key: str) -> bool:
+    """Sliding one-minute window per client; idle windows are evicted.
+
+    In-process and per replica: N replicas allow N times the rate.
+    """
+    global _rate_calls
+    now = time.time()
+    with _rate_lock:
+        _rate_calls += 1
+        if _rate_calls % _RATE_SWEEP_EVERY == 0:
+            for stale in [
+                k for k, w in _rate_windows.items() if not w or now - w[-1] > 60
+            ]:
+                del _rate_windows[stale]
+        window = _rate_windows.setdefault(key, deque())
+        while window and now - window[0] > 60:
+            window.popleft()
+        if len(window) >= RATE_LIMIT_PER_MIN:
+            return True
+        window.append(now)
+        return False
 
 
 def _apply_security_headers(response: Response) -> None:
@@ -316,6 +507,95 @@ def _apply_security_headers(response: Response) -> None:
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
+
+
+def _body_limit(path: str) -> tuple[int, str]:
+    """(max body bytes, error detail) for an unsafe /api request."""
+    if path in ("/api/analyze", "/api/gate/deliveries"):
+        return MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES, "upload_too_large"
+    if path == "/api/generate":
+        return MAX_GENERATE_BODY_BYTES, "request_too_large"
+    return MAX_JSON_BODY_BYTES, "request_too_large"
+
+
+class BodyLimitMiddleware:
+    """Cap request bodies before anything parses them (CL-78).
+
+    FastAPI reads a whole multipart form before a handler runs, so a
+    size check in the handler comes too late. This ASGI layer answers
+    413 from `Content-Length` without reading the body, and counts the
+    bytes of a chunked or unlabelled body as they arrive, stopping the
+    read at the limit.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if (
+            scope["type"] != "http"
+            or scope["method"] not in _UNSAFE_METHODS
+            or not str(scope["path"]).startswith("/api/")
+        ):
+            await self.app(scope, receive, send)
+            return
+        limit, detail = _body_limit(str(scope["path"]))
+        declared = dict(scope.get("headers") or []).get(b"content-length")
+        if declared is not None:
+            try:
+                declared_too_large = int(declared) > limit
+            except ValueError:
+                declared_too_large = False
+            if declared_too_large:
+                response = JSONResponse(
+                    {"detail": detail, "limit_bytes": limit}, status_code=413
+                )
+                _apply_security_headers(response)
+                await response(scope, receive, send)
+                return
+        received = 0
+        overflow = False
+        started = False
+
+        async def too_large() -> None:
+            response = JSONResponse(
+                {"detail": detail, "limit_bytes": limit}, status_code=413
+            )
+            _apply_security_headers(response)
+            await response(scope, receive, send)
+
+        async def limited_receive() -> Any:
+            nonlocal received, overflow
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body") or b"")
+                if received > limit:
+                    # Stop reading here. Whatever the app makes of the
+                    # error, the client gets the 413 below.
+                    overflow = True
+                    raise StarletteHTTPException(status_code=413, detail=detail)
+            return message
+
+        async def guarded_send(message: Any) -> None:
+            nonlocal started
+            if overflow:
+                if message.get("type") == "http.response.start" and not started:
+                    started = True
+                    await too_large()
+                return
+            if message.get("type") == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, guarded_send)
+        except Exception:
+            if not overflow or started:
+                raise
+            await too_large()
+
+
+app.add_middleware(BodyLimitMiddleware)
 
 
 @app.get("/docs", include_in_schema=False)
@@ -446,14 +726,34 @@ def _original_readers(run_id: str, principal: Any) -> set[str]:
 
 
 @app.get("/api/health")
-def health() -> dict[str, Any]:
-    return {
-        "status": "ok",
+def health() -> JSONResponse:
+    """Liveness plus the state a demo depends on (CL-78).
+
+    `degraded` (HTTP 503) when the data directory is not writable or
+    precompute failed; the reasons are in the body.
+    """
+    writable = _data_dir_writable()
+    problems = []
+    if not writable:
+        problems.append("data_dir_not_writable")
+    if _precompute_error is not None:
+        problems.append("precompute_failed")
+    gate_reload = _gate_instance.reload_report() if _gate_instance else None
+    if gate_reload and gate_reload["skipped_versions"]:
+        problems.append("gate_reload_skipped_versions")
+    body = {
+        "status": "degraded" if problems else "ok",
+        "problems": problems,
         "version": covertlens.__version__,
         "git_sha": GIT_SHA,
         "precompute_started": _precompute_started,
+        "precompute_error": _precompute_error,
         "cache_ready": _cache_ready(),
+        "data_dir": _data_dir_status,
+        "worker_pool_rebuilds": _pool_rebuilds,
+        "gate_reload": gate_reload,
     }
+    return JSONResponse(body, status_code=503 if problems else 200)
 
 
 @app.get("/api/version")
@@ -484,12 +784,53 @@ def fixture_png(digest: str) -> Response:
     return JSONResponse({"detail": "fixture_not_found"}, status_code=404)
 
 
+def _scene_context(
+    declared_channels: Any, context: Any = None
+) -> dict[str, Any] | None:
+    """Validate a caller's geometric scene declaration (CL-45, CL-78).
+
+    Accepts a list or a comma-separated string of channel names; an
+    empty declaration is None. Unknown names raise ValueError.
+    """
+    from covertlens.manifest import GEOMETRIC_CHANNEL_NAMES
+
+    if declared_channels is None:
+        return None
+    if isinstance(declared_channels, str):
+        names = [n.strip() for n in declared_channels.split(",") if n.strip()]
+    elif isinstance(declared_channels, list):
+        names = [str(n).strip() for n in declared_channels if str(n).strip()]
+    else:
+        raise ValueError("declared_channels must be a list or comma-separated names")
+    unknown = sorted(set(names) - set(GEOMETRIC_CHANNEL_NAMES))
+    if unknown:
+        raise ValueError(
+            f"unknown geometric channel(s) {unknown}; "
+            f"choose from {list(GEOMETRIC_CHANNEL_NAMES)}"
+        )
+    if not names:
+        return None
+    return {
+        "declared_channels": sorted(set(names)),
+        "context": str(context).strip() if context else "declared_by_caller",
+    }
+
+
 @app.post("/api/analyze")
-async def analyze(request: Request, file: UploadFile = File(...)) -> JSONResponse:
-    content_length = request.headers.get("content-length")
-    if content_length is not None and int(content_length) > MAX_UPLOAD_BYTES:
-        # Size limit enforced before the body is read.
-        return JSONResponse({"detail": "upload_too_large"}, status_code=413)
+async def analyze(
+    file: UploadFile = File(...),
+    declared_channels: str | None = Form(None),
+    scene_context: str | None = Form(None),
+) -> JSONResponse:
+    """Analyze one upload. The body limit is enforced before parsing.
+
+    Optional `declared_channels` (comma-separated geometric channel
+    names) and `scene_context` declare the task's legitimate channels.
+    """
+    try:
+        context = _scene_context(declared_channels, scene_context)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         return JSONResponse({"detail": "upload_too_large"}, status_code=413)
@@ -497,12 +838,11 @@ async def analyze(request: Request, file: UploadFile = File(...)) -> JSONRespons
         max_pixels = int(os.environ.get("COVERTLENS_MAX_PIXELS", str(20_000_000)))
     except ValueError:
         max_pixels = 20_000_000
-    future = _executor().submit(analyze_bytes, data, max_pixels)
     try:
-        payload = await asyncio.wait_for(
-            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S
+        payload = await _run_in_pool(
+            analyze_bytes, data, max_pixels, context, timeout=ANALYZE_TIMEOUT_S
         )
-    except (TimeoutError, concurrent.futures.TimeoutError):
+    except TimeoutError:
         return JSONResponse(
             {
                 "status": "timeout",
@@ -512,6 +852,8 @@ async def analyze(request: Request, file: UploadFile = File(...)) -> JSONRespons
                 "decision": None,
             }
         )
+    except concurrent.futures.process.BrokenProcessPool:
+        return JSONResponse({"detail": "analysis_worker_unavailable"}, status_code=503)
     return JSONResponse(payload)
 
 
@@ -552,9 +894,8 @@ def _record_red_team(result: dict[str, Any]) -> str:
 @app.post("/api/generate")
 async def generate(request: Request) -> JSONResponse:
     """Generate one red-team image from JSON parameters (CL-51)."""
-    content_length = request.headers.get("content-length")
-    if content_length is not None and int(content_length) > MAX_GENERATE_BODY_BYTES:
-        return JSONResponse({"detail": "request_too_large"}, status_code=413)
+    if not _data_dir_writable():
+        return _data_unavailable()
     if not _is_json(request):
         return JSONResponse(
             {"detail": "content type must be application/json"}, status_code=415
@@ -566,13 +907,14 @@ async def generate(request: Request) -> JSONResponse:
         params = json.loads(body or b"{}")
     except json.JSONDecodeError:
         return JSONResponse({"detail": "invalid_json"}, status_code=400)
-    future = _executor().submit(generate_image, params)
     try:
-        result = await asyncio.wait_for(
-            asyncio.wrap_future(future), timeout=ANALYZE_TIMEOUT_S
-        )
-    except (TimeoutError, concurrent.futures.TimeoutError):
+        result = await _run_in_pool(generate_image, params, timeout=ANALYZE_TIMEOUT_S)
+    except TimeoutError:
         return JSONResponse({"detail": "generation_timeout"}, status_code=504)
+    except concurrent.futures.process.BrokenProcessPool:
+        return JSONResponse(
+            {"detail": "generation_worker_unavailable"}, status_code=503
+        )
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     version_id = _record_red_team(result)
@@ -607,9 +949,22 @@ _gate_instance: Any = None
 _gate_lock = threading.Lock()
 
 
+class DataDirUnavailable(RuntimeError):
+    """The data directory cannot hold gate or review state (CL-78)."""
+
+
+@app.exception_handler(DataDirUnavailable)
+async def _data_dir_unavailable(_request: Request, _exc: Exception) -> JSONResponse:
+    response = _data_unavailable()
+    _apply_security_headers(response)
+    return response
+
+
 def _gate() -> Any:
     """Persistent gate singleton over the file-backed store."""
     global _gate_instance
+    if _gate_instance is None and not _data_dir_writable():
+        raise DataDirUnavailable(str(DATA_DIR))
     with _gate_lock:
         if _gate_instance is None:
             from covertlens.gate import InterceptionGate
@@ -625,6 +980,55 @@ def _reset_gate_for_tests() -> None:
     with _gate_lock:
         _gate_instance = None
         _review_instance = None
+    with _analysis_lock:
+        _analysis_cache.clear()
+
+
+# Analysis results by (artifact version, scene context) (CL-78). The
+# gate-analyze, review-detail and trace endpoints each re-analysed
+# stored bytes on every call; versions are immutable, so one analysis
+# per version and context serves them all.
+ANALYSIS_CACHE_SIZE = 256
+_analysis_cache: OrderedDict[tuple[str, str], tuple[Any, Any]] = OrderedDict()
+_analysis_lock = threading.Lock()
+
+
+def _context_key(context: dict[str, Any] | None) -> str:
+    if not context:
+        return ""
+    return json.dumps(
+        {k: context.get(k) for k in ("declared_channels", "context")}, sort_keys=True
+    )
+
+
+def _analysis_for(gate: Any, record: Any, actor_id: str) -> tuple[Any, Any]:
+    """(AnalysisResult, geometric report or None) for a delivery, cached.
+
+    Uses the run's declared scene context (CL-45/CL-78). Callers must
+    not mutate the returned report; use `public_geometric` for output.
+    """
+    from covertlens.metadata import analyze_all_with_geometric
+
+    context = gate.scene_context(record.run_id)
+    key = (record.artifact_version_id, _context_key(context))
+    with _analysis_lock:
+        hit = _analysis_cache.get(key)
+        if hit is not None:
+            _analysis_cache.move_to_end(key)
+            return hit
+    data = gate.store.get_original(
+        record.artifact_version_id, actor_id=actor_id, purpose="analysis"
+    )
+    value = analyze_all_with_geometric(
+        data,
+        artifact_version_id=record.artifact_version_id,
+        declared_context=context,
+    )
+    with _analysis_lock:
+        _analysis_cache[key] = value
+        while len(_analysis_cache) > ANALYSIS_CACHE_SIZE:
+            _analysis_cache.popitem(last=False)
+    return value
 
 
 def _delivery_payload(record: Any) -> dict[str, Any]:
@@ -707,6 +1111,12 @@ def gate_runs(request: Request) -> dict[str, Any]:
 
 @app.post("/api/gate/runs")
 async def gate_create_run(request: Request) -> JSONResponse:
+    """Create a run id; optionally declare its scene context first.
+
+    `declared_channels` (list of geometric channel names) and `context`
+    are the run's declaration (CL-45). It must come before the run's
+    first delivery (409 afterwards).
+    """
     body, error = await _json_object(request)
     if error is not None:
         return error
@@ -718,7 +1128,25 @@ async def gate_create_run(request: Request) -> JSONResponse:
     denied = _tenant_guard(request, run_id)
     if denied is not None:
         return denied
-    return JSONResponse({"run_id": run_id, "known_runs": gate_runs(request)["runs"]})
+    gate = _gate()
+    try:
+        context = _scene_context(body.get("declared_channels"), body.get("context"))
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    if context is not None:
+        try:
+            gate.declare_scene_context(
+                run_id, context["declared_channels"], context["context"]
+            )
+        except ValueError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=409)
+    return JSONResponse(
+        {
+            "run_id": run_id,
+            "known_runs": gate_runs(request)["runs"],
+            "scene_context": gate.scene_context(run_id),
+        }
+    )
 
 
 @app.post("/api/gate/deliveries")
@@ -768,6 +1196,7 @@ def gate_run_detail(run_id: str, request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "run_id": run_id,
+            "scene_context": gate.scene_context(run_id),
             "deliveries": deliveries,
             "events": events,
             "access_report": gate.access_attempt_report(),
@@ -795,21 +1224,21 @@ def gate_analyze_delivery(delivery_id: str, request: Request) -> JSONResponse:
             status_code=409,
         )
     try:
-        data = gate.store.get_original(
-            record.artifact_version_id,
-            actor_id=identity.actor_id if identity is not None else "gate-analyzer",
-            purpose="analysis",
+        result, _geometric = _analysis_for(
+            gate,
+            record,
+            identity.actor_id if identity is not None else "gate-analyzer",
         )
     except Exception as exc:  # noqa: BLE001
         return _gate_error(exc)
-    from covertlens.metadata import analyze_all_bytes
     from covertlens.verdicts import decide_verdict
 
-    result = analyze_all_bytes(data)
-    decision = decide_verdict(result.findings)
+    # The shipped freeze decides, not the log-only library default.
+    decision = decide_verdict(result.findings, frozen_config())
     return JSONResponse(
         {
             "delivery": _delivery_payload(record),
+            "scene_context": gate.scene_context(record.run_id),
             "analysis": result.to_dict(),
             "decision": decision.to_dict(),
             "suggested_verdict": decision.to_dict()["verdict"],
@@ -1251,7 +1680,9 @@ def _review_delivery_row(gate: Any, workspace: Any, record: Any) -> dict[str, An
     row = _delivery_payload(record)
     decode_id = None
     if record.state == "withheld":
-        decode_id = workspace.ensure_candidate_decode(record.run_id, record)
+        decode_id = workspace.ensure_candidate_decode(
+            record.run_id, record, declared_context=gate.scene_context(record.run_id)
+        )
     row["disposition"] = workspace.disposition(record.run_id, record.delivery_id)
     row["has_candidate_decode"] = decode_id is not None
     row["decode_id"] = decode_id
@@ -1310,28 +1741,20 @@ def review_delivery_detail(delivery_id: str, request: Request) -> JSONResponse:
     denied = _tenant_guard(request, record.run_id)
     if denied is not None:
         return denied
-    from covertlens.geometric import analyze_geometric_bytes
-    from covertlens.metadata import analyze_all_bytes
-
     # Store access log names the requester (CL-67), purpose "analysis".
-    data = gate.store.get_original(
-        record.artifact_version_id,
-        actor_id=principal.actor_id if auth.auth_mode() == "oidc" else "review-detail",
-        purpose="analysis",
+    analysis, geometric = _analysis_for(
+        gate,
+        record,
+        principal.actor_id if auth.auth_mode() == "oidc" else "review-detail",
     )
-    analysis = analyze_all_bytes(data, artifact_version_id=record.artifact_version_id)
-    geometric = analyze_geometric_bytes(data)
-    geometric.pop("candidate_decode", None)  # reviewer-only (CL-46/CL-59)
-    geometric.pop("finding", None)
-    segmentation = geometric.get("segmentation")
-    if isinstance(segmentation, dict):
-        segmentation.pop("decoded_message", None)
     row = _review_delivery_row(gate, workspace, record)
     return JSONResponse(
         {
             **row,
+            "scene_context": gate.scene_context(record.run_id),
             "analysis": analysis.to_dict(),
-            "geometric": geometric,
+            # Reviewer-only fields stripped (CL-46/CL-59).
+            "geometric": public_geometric(geometric) if geometric else None,
         }
     )
 
@@ -1343,7 +1766,9 @@ def review_candidate_decode(delivery_id: str, request: Request) -> JSONResponse:
     try:
         record = gate.get_delivery(delivery_id)
         principal, _role = _demo_principal(request, record.run_id)
-        decode_id = workspace.ensure_candidate_decode(record.run_id, record)
+        decode_id = workspace.ensure_candidate_decode(
+            record.run_id, record, declared_context=gate.scene_context(record.run_id)
+        )
         if decode_id is None:
             return JSONResponse(
                 {"detail": "no candidate decode for this delivery"}, status_code=404
@@ -1554,7 +1979,6 @@ def trace_run(run_id: str, request: Request) -> JSONResponse:
 
     Needs `trace.read` on the run (CL-78).
     """
-    from covertlens.metadata import analyze_all_bytes
     from covertlens.trace_explorer import build_trace_explorer
 
     try:
@@ -1565,18 +1989,14 @@ def trace_run(run_id: str, request: Request) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
     gate = _gate()
-    results = []
-    for record in gate.deliveries(run_id):
-        data = gate.store.get_original(
-            record.artifact_version_id,
-            actor_id=principal.actor_id
-            if auth.auth_mode() == "oidc"
-            else "trace-explorer",
-            purpose="analysis",
-        )
-        results.append(
-            analyze_all_bytes(data, artifact_version_id=record.artifact_version_id)
-        )
+    results = [
+        _analysis_for(
+            gate,
+            record,
+            principal.actor_id if auth.auth_mode() == "oidc" else "trace-explorer",
+        )[0]
+        for record in gate.deliveries(run_id)
+    ]
     view = build_trace_explorer(gate.events(run_id), results)
     if view["run_id"] is None:
         view["run_id"] = run_id
@@ -1763,8 +2183,11 @@ async def leaderboard_submit(request: Request) -> JSONResponse:
         )
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-    client_host = request.client.host if request.client else "unknown"
-    rate_key = identity.actor_id if identity is not None else f"ip:{client_host}"
+    # Anonymous submitters are keyed like the upload limiter: by the
+    # client behind a trusted proxy, never a forgeable header (CL-78).
+    rate_key = (
+        identity.actor_id if identity is not None else f"ip:{_client_key(request)}"
+    )
     if not _leaderboard_rate_ok(rate_key):
         return JSONResponse({"detail": "rate_limited"}, status_code=429)
     version_id = str(body.get("artifact_version_id") or "")
@@ -1877,6 +2300,17 @@ def benchmark(name: str) -> Response:
         current = None
     if current == _cache_key() and cache_file.exists():
         return Response(cache_file.read_bytes(), media_type="application/json")
+    if _precompute_error is not None or not _data_dir_writable():
+        # Never "computing" forever (CL-78): say why there is no cache.
+        return JSONResponse(
+            {
+                "status": "unavailable",
+                "benchmark": name,
+                "precompute_error": _precompute_error,
+                "data_dir": _data_dir_status,
+            },
+            status_code=503,
+        )
     _start_precompute()
     return JSONResponse({"status": "computing", "benchmark": name}, status_code=202)
 
@@ -1894,6 +2328,11 @@ def comparison() -> JSONResponse:
     cache_file = CACHE_DIR / "comparison.json"
     if cache_file.exists():
         return JSONResponse(json.loads(cache_file.read_text()))
+    if _precompute_error is not None or not _data_dir_writable():
+        return JSONResponse(
+            {"status": "unavailable", "precompute_error": _precompute_error},
+            status_code=503,
+        )
     _start_precompute()
     return JSONResponse(
         {"status": "computing", "comparison": "height_position"}, status_code=202

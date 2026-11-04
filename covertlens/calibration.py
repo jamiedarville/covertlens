@@ -35,7 +35,9 @@ Development textures are per family (`CALIBRATED_TEXTURES`): the
 pixel detectors' clean baselines depend on cover texture, and one
 per-family point cannot serve every texture (CL-68 measurement), so
 LSB/DCT calibrate on `gradient_noise`; metadata is texture-independent
-and calibrates on all three. Geometric keeps its CL-54 rules.
+and calibrates on all three. Geometric keeps its CL-54 rules, with
+one CL-78 floor: its quarantine point must lie above the
+non-structure score ceiling, so quantization alone never withholds.
 
 The owners' freeze is the shipped `config/frozen-thresholds.json`:
 versioned points, acceptance targets, calibrated coverage (media and
@@ -56,7 +58,12 @@ from typing import Any
 
 from ._validation import make_need
 from .fixtures import Fixture
-from .geometric import DEFAULT_GEO_CONFIG, GEO_DETECTOR_NAME, GEO_DETECTOR_VERSION
+from .geometric import (
+    DEFAULT_GEO_CONFIG,
+    GEO_DETECTOR_NAME,
+    GEO_DETECTOR_VERSION,
+    NON_STRUCTURE_SCORE_CEILING,
+)
 from .geometric_fixtures import GeoFixture
 from .metadata import analyze_all_bytes
 from .pinning import dataset_hash
@@ -64,10 +71,10 @@ from .splits import SPLITS
 from .verdicts import FamilyThresholds, ThresholdConfig
 
 CALIBRATION_SCHEMA = "covertlens.calibration"
-CALIBRATION_VERSION = "1.1.0"
-# frozen-1.2.0 is the label used by the unmerged CL-78 branch; this
-# freeze skips it so one label never names two different freezes.
-FROZEN_CONFIG_VERSION = "frozen-1.3.0"
+CALIBRATION_VERSION = "1.2.0"
+# frozen-1.2.0 was the label on the unmerged CL-78 branch and is
+# skipped so one label never names two different freezes.
+FROZEN_CONFIG_VERSION = "frozen-1.4.0"
 FROZEN_PATH = (
     Path(__file__).resolve().parent.parent / "config" / "frozen-thresholds.json"
 )
@@ -177,11 +184,16 @@ def calibrate_family(
     recall_target: float = RECALL_TARGET,
     precision_target: float = PRECISION_TARGET,
     refined_rules: bool = False,
+    enforcement_floor: float | None = None,
 ) -> dict[str, Any]:
     """Select triage/enforcement candidates for one family's dev scores.
 
     `refined_rules` applies the CL-68 free-recall triage and the
     fail-run-above-every-negative rule (module docstring).
+
+    `enforcement_floor` (CL-78): the quarantine point must lie strictly
+    above it. Geometric passes its non-structure score ceiling, so
+    quantization alone can never be calibrated into withholding.
     """
     if not positive or not negative:
         raise ValueError("calibration needs positive and negative development scores")
@@ -199,7 +211,8 @@ def calibrate_family(
             for c in candidates
             if c <= triage and _metrics(positive, negative, c)["fp"] == admitted
         )
-    stricter = [c for c in candidates if c > triage]
+    floor = triage if enforcement_floor is None else max(triage, enforcement_floor)
+    stricter = [c for c in candidates if c > floor]
     quarantine = next(
         (
             c
@@ -309,6 +322,9 @@ def calibrate_thresholds(
             recall_target=recall_target,
             precision_target=precision_target,
             refined_rules=refined,
+            enforcement_floor=(
+                NON_STRUCTURE_SCORE_CEILING if family == "geometric" else None
+            ),
         )
         if (
             refined

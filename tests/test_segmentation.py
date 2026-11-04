@@ -91,7 +91,7 @@ def test_failure_modes_are_explicit(dataset):
 
 def test_method_and_tolerances_recorded(dataset):
     doc = segment_image(_one(dataset, "lit_dark", "encoded").data).to_dict()
-    assert doc["segmenter"] == {"name": "geometric-segmenter", "version": "1.1.0"}
+    assert doc["segmenter"] == {"name": "geometric-segmenter", "version": "1.2.0"}
     assert doc["tolerances"]["angle_tolerance_deg"] == 3.5
     assert doc["tolerances"]["background_distance_tolerance"] == 24.0
     assert doc["tolerances"]["background_distance_floor"] == 3.0

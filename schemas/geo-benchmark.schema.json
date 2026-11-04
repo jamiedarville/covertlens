@@ -4,7 +4,8 @@
   "title": "CovertLens geometric benchmark with benign controls (CL-42)",
   "type": "object",
   "required": ["schema", "subfamilies", "benign_controls", "coverage",
-               "enforcement", "prevalence"],
+               "enforcement", "prevalence", "jittered_attacker",
+               "every_other_level_attacker", "random_payload_structure"],
   "properties": {
     "schema": {"const": "covertlens.geo-benchmark"},
     "coverage": {
@@ -24,7 +25,7 @@
       "type": "object",
       "properties": {
         "height_or_size_alone_triggers_enforcement": {"const": false},
-        "mode": {"const": "log_only_triage"}
+        "mode": {"const": "frozen_ladder"}
       }
     },
     "equated_with_collusion": {"const": false}

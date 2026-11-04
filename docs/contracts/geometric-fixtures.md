@@ -38,9 +38,17 @@ artifact.
 - Splits follow the CL-10 lineage-group policy
   (`assign_geo_splits` / `validate_geo_splits`): a scene pair and
   its derivatives never span splits.
-- Thresholds for this family remain unfrozen placeholders
-  (§8.3/CL-27 rule): CL-38 ships fixtures and measurement only;
-  segmentation/scoring are CL-39/CL-40, the benchmark CL-42.
+- CL-38 shipped fixtures and measurement only; segmentation and
+  scoring are CL-39/CL-40, the benchmark CL-42, and the family's
+  thresholds froze in CL-54 (re-frozen as `frozen-1.2.0` in CL-78).
+- CL-78 generator options, recorded in the encoder config like the
+  attacker grid: `alphabet_base` (height letter code A=0 or A=1),
+  `level_stride` (every-other-level attacker), `jitter_px` (uniform
+  integer jitter on encoded heights and gaps; such fixtures are
+  verified by attribute, since past half a step no receiver can read
+  them) and a custom colour `palette`. The payload text is never
+  recorded: the encoder config is part of the detector-facing
+  manifest.
 
 ## Verification
 

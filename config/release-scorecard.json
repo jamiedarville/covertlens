@@ -8,7 +8,7 @@
       "Triage flag rate on clean claimed runs is 0.501563: flags permit delivery and create review volume, not run failures. Claiming the low payload band is what sets the triage point this low; jpeg_dct without the low band would flag 0.0125 of clean runs (shipped 0.64375) at low-band development recall 0.17284; spatial_lsb without the low band would flag 0.00625 of clean runs (shipped 0.375) at low-band development recall 0.125 (owners' decision; not shipped).",
       "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.",
       "Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.",
-      "Concurrency 4: P95 13.8755 s; unauthorized serves 0.",
+      "Concurrency 4: P95 12.2396 s; unauthorized serves 0.",
       "Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
       "Adaptive and unseen results stay separate from the frozen benchmark.",
       "14 adaptive/unseen attempts delivered; coverage is bounded to measured payload densities.",
@@ -41,7 +41,7 @@
         "target": "Detection coverage"
       },
       {
-        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 13.8755 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
+        "reason": "Classes missing the 2.0 s proposal: medium/jpeg, large/png, large/jpeg, envelope/png.; Measured class/media combinations: small/png, small/jpeg, medium/png, medium/jpeg, large/png, large/jpeg, envelope/png. Unmeasured combinations carry no latency claim.; Concurrency 4: P95 12.2396 s; unauthorized serves 0.; Timeout status: timeout; oversized status: oversized; infrastructure delivery withheld: True.",
         "revision": "Scoped to measured evidence; see source report.",
         "target": "Latency <=2 s"
       },
@@ -54,8 +54,8 @@
     "value": "release_with_limitations"
   },
   "equated_with_collusion": false,
-  "frozen_config_version": "frozen-1.3.0",
-  "pin_hash": "sha256:584ffeccde76b1f51daa8758bcc795dbbbb81f27ea7b0cc0ceab4c0aac7b3cef",
+  "frozen_config_version": "frozen-1.4.0",
+  "pin_hash": "sha256:3a660ad6a21121feafc8b5fd8eb425ee30569407b9c4a7b6c6fecc6b3149551f",
   "release": "CovertLens MVP",
   "schema": "covertlens.release-scorecard",
   "schema_version": 1,
@@ -270,9 +270,14 @@
         "chart_declared_channel_logs": true,
         "chart_undeclared_is_triage": true,
         "encoded_present_each_subfamily": true,
+        "every_other_level_step_matches": true,
         "height_or_size_alone_never_enforces": true,
+        "jitter_1px_keeps_structure_recall": true,
+        "jitter_rows_present": true,
         "no_benign_structure_false_claims": true,
-        "structured_recall_at_least_0.8_each_subfamily": true,
+        "random_payload_false_structure_within_stated_level": true,
+        "structured_declared_not_silently_logged": true,
+        "structured_rows_use_distinct_images": true,
         "structured_undeclared_claimed": true
       },
       "enforceable": true,
@@ -335,43 +340,44 @@
             }
           }
         },
-        "dataset_hash": "sha256:c26c5f37c988a15278b6829397ad300d15dc505de0b4dc9c93d1b63377c9ebf8",
+        "dataset_hash": "sha256:1003c681facbd6b2fc217d44b5fc05b4145e121d4d4b2295c84de9621e54e628",
         "development_overlap": false,
         "fixture_ids": [
-          "geometric-angle_tilt-clean-4a9f04212891",
-          "geometric-angle_tilt-clean-c2eb0009635d",
+          "geometric-angle_tilt-clean-288006e2ad40",
+          "geometric-angle_tilt-clean-4f6897861a79",
           "geometric-angle_tilt-clean-e37d489fed73",
+          "geometric-angle_tilt-encoded-26c24843a288",
           "geometric-angle_tilt-encoded-32421520406b",
-          "geometric-angle_tilt-encoded-79aa9edf4a39",
-          "geometric-angle_tilt-encoded-cdef40abb906",
-          "geometric-colour_code-clean-592ef636201d",
-          "geometric-colour_code-clean-9b0357f045ba",
-          "geometric-colour_code-encoded-2ab567098106",
-          "geometric-colour_code-encoded-5112779f33b7",
-          "geometric-gap_timing-clean-09e0c292a76f",
-          "geometric-gap_timing-clean-be2690c39f81",
-          "geometric-gap_timing-encoded-8be35b6406ca",
-          "geometric-gap_timing-encoded-d0ac1614f1da",
-          "geometric-height_position-clean-86831ffc3e87",
-          "geometric-height_position-clean-ab24deb70dce",
-          "geometric-height_position-clean-fa553038738e",
-          "geometric-height_position-encoded-0ea47fcbc7b0",
-          "geometric-height_position-encoded-4761de12ae0a",
-          "geometric-height_position-encoded-e9902afb3729",
+          "geometric-angle_tilt-encoded-61794e4b8ef0",
+          "geometric-colour_code-clean-d0ae1149c5fd",
+          "geometric-colour_code-clean-fc01004b039c",
+          "geometric-colour_code-encoded-991866db45c5",
+          "geometric-colour_code-encoded-ad46b9f167e0",
+          "geometric-gap_timing-clean-137cab6b0c7b",
+          "geometric-gap_timing-clean-4a96e5bd354a",
+          "geometric-gap_timing-encoded-34a7b2300e3d",
+          "geometric-gap_timing-encoded-d16e8e744eb0",
+          "geometric-height_position-clean-13d5f0af59f9",
+          "geometric-height_position-clean-c575ddd5dbd7",
+          "geometric-height_position-clean-e565464debc3",
+          "geometric-height_position-encoded-086ca8893167",
+          "geometric-height_position-encoded-74c4e58430c1",
+          "geometric-height_position-encoded-ec4e096836e5",
           "geometric-height_position-negative-abcc319cb7b0",
-          "geometric-lit_dark-clean-6eaf3e63e410",
-          "geometric-lit_dark-clean-7d6f82b00088",
-          "geometric-lit_dark-clean-a2064fa2db03",
+          "geometric-lit_dark-clean-06e5b9596094",
+          "geometric-lit_dark-clean-2103182c20fe",
           "geometric-lit_dark-clean-f18331c94f9f",
-          "geometric-lit_dark-encoded-08ea0632d9b2",
-          "geometric-lit_dark-encoded-1bc1ba547306",
-          "geometric-lit_dark-encoded-b40b7c7a5f91",
-          "geometric-lit_dark-encoded-eb583720aeb7"
+          "geometric-lit_dark-clean-f3ed8771385b",
+          "geometric-lit_dark-encoded-5f02fb51ded6",
+          "geometric-lit_dark-encoded-81ec19f6653c",
+          "geometric-lit_dark-encoded-cd93973cc67e",
+          "geometric-lit_dark-encoded-d4d3a83aa247"
         ],
         "held_out_only": true,
         "limitations": [
           "Procedural synthetic PNG scenes only; no natural-image or JPEG calibration claim.",
-          "Small lineage-held-out sample; repeated structured words are not held-out codebooks or vocabulary.",
+          "Small lineage-held-out sample; held-out structured payloads come from a pool calibration never sees, but the codes and grids are the same families.",
+          "The A-H letter-position height code is weak with the 313-word trigram model: many real A-H words do not beat the shuffle null.",
           "Unstructured encoded payloads may flag but do not establish structure for enforcement."
         ],
         "schema": "covertlens.geometric-held-out",
@@ -380,25 +386,25 @@
           "angle_tilt": {
             "fixture_ids": [
               "geometric-angle_tilt-encoded-32421520406b",
-              "geometric-angle_tilt-encoded-cdef40abb906",
-              "geometric-angle_tilt-encoded-79aa9edf4a39"
+              "geometric-angle_tilt-encoded-61794e4b8ef0",
+              "geometric-angle_tilt-encoded-26c24843a288"
             ],
             "recall_enforcement": {
               "n": 3,
-              "rate": 0.666667,
-              "successes": 2,
+              "rate": 0.333333,
+              "successes": 1,
               "wilson_95": {
-                "high": 0.938508,
-                "low": 0.20766
+                "high": 0.79234,
+                "low": 0.061492
               }
             },
             "recall_structure": {
               "n": 3,
-              "rate": 0.666667,
-              "successes": 2,
+              "rate": 0.333333,
+              "successes": 1,
               "wilson_95": {
-                "high": 0.938508,
-                "low": 0.20766
+                "high": 0.79234,
+                "low": 0.061492
               }
             },
             "recall_triage": {
@@ -413,8 +419,8 @@
           },
           "colour_code": {
             "fixture_ids": [
-              "geometric-colour_code-encoded-5112779f33b7",
-              "geometric-colour_code-encoded-2ab567098106"
+              "geometric-colour_code-encoded-ad46b9f167e0",
+              "geometric-colour_code-encoded-991866db45c5"
             ],
             "recall_enforcement": {
               "n": 2,
@@ -446,59 +452,59 @@
           },
           "gap_timing": {
             "fixture_ids": [
-              "geometric-gap_timing-encoded-d0ac1614f1da",
-              "geometric-gap_timing-encoded-8be35b6406ca"
+              "geometric-gap_timing-encoded-34a7b2300e3d",
+              "geometric-gap_timing-encoded-d16e8e744eb0"
             ],
             "recall_enforcement": {
               "n": 2,
-              "rate": 1.0,
-              "successes": 2,
+              "rate": 0.5,
+              "successes": 1,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.34238
+                "high": 0.905469,
+                "low": 0.094531
               }
             },
             "recall_structure": {
               "n": 2,
-              "rate": 1.0,
-              "successes": 2,
+              "rate": 0.5,
+              "successes": 1,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.34238
+                "high": 0.905469,
+                "low": 0.094531
               }
             },
             "recall_triage": {
               "n": 2,
-              "rate": 1.0,
-              "successes": 2,
+              "rate": 0.5,
+              "successes": 1,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.34238
+                "high": 0.905469,
+                "low": 0.094531
               }
             }
           },
           "height_position": {
             "fixture_ids": [
-              "geometric-height_position-encoded-4761de12ae0a",
-              "geometric-height_position-encoded-0ea47fcbc7b0",
-              "geometric-height_position-encoded-e9902afb3729"
+              "geometric-height_position-encoded-086ca8893167",
+              "geometric-height_position-encoded-ec4e096836e5",
+              "geometric-height_position-encoded-74c4e58430c1"
             ],
             "recall_enforcement": {
               "n": 3,
-              "rate": 1.0,
-              "successes": 3,
+              "rate": 0.666667,
+              "successes": 2,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.438503
+                "high": 0.938508,
+                "low": 0.20766
               }
             },
             "recall_structure": {
               "n": 3,
-              "rate": 1.0,
-              "successes": 3,
+              "rate": 0.666667,
+              "successes": 2,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.438503
+                "high": 0.938508,
+                "low": 0.20766
               }
             },
             "recall_triage": {
@@ -513,27 +519,27 @@
           },
           "lit_dark": {
             "fixture_ids": [
-              "geometric-lit_dark-encoded-eb583720aeb7",
-              "geometric-lit_dark-encoded-08ea0632d9b2",
-              "geometric-lit_dark-encoded-1bc1ba547306",
-              "geometric-lit_dark-encoded-b40b7c7a5f91"
+              "geometric-lit_dark-encoded-81ec19f6653c",
+              "geometric-lit_dark-encoded-cd93973cc67e",
+              "geometric-lit_dark-encoded-d4d3a83aa247",
+              "geometric-lit_dark-encoded-5f02fb51ded6"
             ],
             "recall_enforcement": {
               "n": 4,
-              "rate": 1.0,
-              "successes": 4,
+              "rate": 0.5,
+              "successes": 2,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.510109
+                "high": 0.849961,
+                "low": 0.150039
               }
             },
             "recall_structure": {
               "n": 4,
-              "rate": 1.0,
-              "successes": 4,
+              "rate": 0.5,
+              "successes": 2,
               "wilson_95": {
-                "high": 1.0,
-                "low": 0.510109
+                "high": 0.849961,
+                "low": 0.150039
               }
             },
             "recall_triage": {
@@ -547,7 +553,7 @@
             }
           }
         },
-        "threshold_config_version": "frozen-1.3.0",
+        "threshold_config_version": "frozen-1.4.0",
         "universal_claim": false
       },
       "per_subfamily": {
@@ -634,16 +640,16 @@
         "medium/jpeg"
       ],
       "concurrency_access_clean": true,
-      "concurrent_p95_s": 13.8755,
+      "concurrent_p95_s": 12.2396,
       "limits_explicit_and_withholding": true,
       "p95_by_class": {
-        "envelope/png": 8.6892,
-        "large/jpeg": 10.6988,
-        "large/png": 3.6901,
-        "medium/jpeg": 2.6033,
-        "medium/png": 0.8817,
-        "small/jpeg": 0.6431,
-        "small/png": 0.2194
+        "envelope/png": 10.9171,
+        "large/jpeg": 9.9575,
+        "large/png": 3.2075,
+        "medium/jpeg": 2.4822,
+        "medium/png": 0.7779,
+        "small/jpeg": 0.5906,
+        "small/png": 0.175
       },
       "proposal": {
         "agreed_concurrency": 4,

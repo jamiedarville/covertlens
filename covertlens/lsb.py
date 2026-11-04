@@ -40,7 +40,7 @@ from ._stats import (
     wilson,
 )
 from ._validation import make_need
-from .acceleration import sample_counts
+from .acceleration import sample_counts, spa_pair_counts
 from .fixtures import Fixture
 from .parsing import (
     AnalysisResult,
@@ -513,11 +513,16 @@ def _spa_statistics(
     the score is the pair-LSB randomness ``1 - 2*|agreement - 0.5|``
     where pair analysis is reliable.
     """
+    fast = spa_pair_counts(samples, width, height, channels, config.pair_max_diff)
     pairs = 0
     agree = 0
     smooth = 0
     horizontal = 0
-    for y in range(height):
+    if fast is not None:
+        # Exact optional path (COVERTLENS_FAST_PATH=numpy); identical counts.
+        pairs, agree, smooth = fast
+        horizontal = pairs
+    for y in range(height if fast is None else 0):
         for c in range(channels):
             base = (y * width) * channels + c
             prev_u = prev_v = 0
