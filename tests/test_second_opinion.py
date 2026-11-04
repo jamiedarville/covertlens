@@ -380,3 +380,81 @@ def test_api_opinion_flow_with_fake_provider(
         )
         assert denied.status_code == 403
     assert os.environ.get("COVERTLENS_SECOND_OPINION_API_KEY") == SENTINEL
+
+
+def test_http_provider_image_request_and_finish_reason(monkeypatch):
+    import base64
+    import io
+
+    from covertlens.second_opinion import HttpProvider
+
+    requests = []
+
+    def respond(request, timeout):
+        requests.append(json.loads(request.data))
+        return io.BytesIO(
+            json.dumps(
+                {
+                    "id": "req-receiver",
+                    "model": "muse-spark-1.3",
+                    "choices": [
+                        {"message": {"content": ""}, "finish_reason": "length"}
+                    ],
+                    "usage": {"completion_tokens": 2048},
+                }
+            ).encode()
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", respond)
+    schema = {
+        "type": "object",
+        "properties": {"message": {"type": ["string", "null"]}},
+        "required": ["message"],
+        "additionalProperties": False,
+    }
+    provider = HttpProvider(_config(provider="meta"), response_schema=schema)
+    response = provider.complete(
+        "Read the picture. Return JSON.", images=[b"original-image"]
+    )
+    assert response.finish_reason == "length"
+    assert response.request_id == "req-receiver"
+    assert response.output_tokens == 2048
+    assert requests[0]["response_format"]["json_schema"]["schema"] == schema
+    content = requests[0]["messages"][0]["content"]
+    assert (
+        content[0]["image_url"]["url"]
+        == "data:image/png;base64," + base64.b64encode(b"original-image").decode()
+    )
+
+
+@pytest.mark.parametrize(
+    "failure,expected_status,expected_code",
+    [
+        ("http", 400, "api_rejected"),
+        ("timeout", None, "api_timeout"),
+        ("connection", None, "api_connection"),
+    ],
+)
+def test_http_provider_errors_preserve_safe_diagnostics(
+    monkeypatch, failure, expected_status, expected_code
+):
+    import urllib.error
+
+    from covertlens.second_opinion import HttpProvider, ProviderRequestError
+
+    def fail(*args, **kwargs):
+        if failure == "http":
+            raise urllib.error.HTTPError(
+                "https://example.test/" + SENTINEL, 400, SENTINEL, {}, None
+            )
+        if failure == "timeout":
+            raise TimeoutError(SENTINEL)
+        raise urllib.error.URLError(SENTINEL)
+
+    monkeypatch.setattr("urllib.request.urlopen", fail)
+    with pytest.raises(ProviderRequestError) as caught:
+        HttpProvider(_config(provider="meta")).complete("Read a picture")
+    assert caught.value.http_status == expected_status
+    assert caught.value.code == expected_code
+    assert SENTINEL not in str(caught.value)
+    assert SENTINEL not in repr(caught.value)

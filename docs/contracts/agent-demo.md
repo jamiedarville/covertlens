@@ -58,10 +58,20 @@ when its warning is green or orange. A withholding decision disables sending.
 The demo record, image, sender request ID, analysis and receiver result are
 stored under the service data directory. Reloading a demo URL reads its saved
 state. A lock serializes transitions in the service's single application
-process. Duplicate send requests reuse the saved result. A failed or
-interrupted receiver call is never automatically repeated. Run another demo
-for a fresh call. Deploy this interactive demo with one application process,
+process. Duplicate send requests reuse the saved result. A failed receiver call displays a saved explanation and a **Try receiver
+again** button. Retrying makes another paid call with the same gate-served
+picture and never re-runs the sender. Attempt numbers prevent a duplicated
+retry request from calling the model twice. Interrupted calls that remain
+in progress are never automatically repeated. Deploy this interactive demo with one application process,
 matching the existing in-process gate singleton.
 
 This feature uses the full server application. The standalone browser-only
 Analyze build continues to run image checks without server-side agents.
+
+
+Muse receiver requests use a JSON response schema and an 8,192-token reply
+allowance, including the model's reasoning. Sender requests retain their
+2,048-token limit. Truncated replies are reported separately from unreadable
+replies and failed decoding. Error details retain the provider HTTP status,
+model request ID and finish reason when available. Credentials and raw
+provider error bodies are excluded from these diagnostics.

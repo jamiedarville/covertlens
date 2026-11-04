@@ -1027,6 +1027,19 @@ async def agent_demo_step(
             result = {"message": service.load(demo_id)["message"]}
         elif operation == "analyze":
             result = await asyncio.to_thread(service.analyze, demo_id)
+        elif operation == "retry":
+            body, error = await _json_object(request)
+            if error is not None:
+                return error
+            attempt = body.get("attempt")
+            if isinstance(attempt, bool) or not isinstance(attempt, int):
+                return JSONResponse(
+                    {
+                        "detail": "Reload the saved demo before trying the receiver again."
+                    },
+                    400,
+                )
+            result = await asyncio.to_thread(service.retry_receiver, demo_id, attempt)
         elif operation in ("block", "send"):
             result = await asyncio.to_thread(service.decide, demo_id, operation)
         else:
