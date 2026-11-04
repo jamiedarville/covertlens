@@ -110,10 +110,13 @@ export function ProvenanceLine({
 }) {
   return (
     <p className="note">
-      Library {value?.library_version ?? "unavailable"} · config{" "}
-      {value?.config_version ?? "unavailable"}
-      {detectorConfig ? ` · detector config ${detectorConfig}` : ""} · computed{" "}
-      {value?.computed_at ?? "unavailable"} · {value?.source}
+      How these numbers were produced — software (library) version{" "}
+      {value?.library_version ?? "unavailable"} · settings (config)
+      version {value?.config_version ?? "unavailable"}
+      {detectorConfig ? ` · this check’s settings version ${detectorConfig}` : ""} ·
+      calculated on {value?.computed_at ?? "unavailable"} · produced by:{" "}
+      {value?.source}. If the versions change, treat the numbers as
+      belonging to the old version until they are measured again.
     </p>
   );
 }
@@ -121,7 +124,7 @@ export function ProvenanceLine({
 export function ExactData({ value }: { value: unknown }) {
   return (
     <details>
-      <summary>Exact source values</summary>
+      <summary>Show the exact numbers behind this section (for specialists)</summary>
       <pre className="source-values">{JSON.stringify(value, null, 2)}</pre>
     </details>
   );
@@ -132,13 +135,13 @@ function Roc({ points, title }: { points: Point[]; title: string }) {
     (p) =>
       p.recall?.estimate != null && p.false_positive_rate?.estimate != null,
   );
-  if (!valid.length) return <p>No positive samples for this band.</p>;
+  if (!valid.length) return <p>No test pictures with hidden information were available at this hiding amount, so there is nothing to draw. Choose “All amounts” above.</p>;
   return (
     <svg
       className="chart"
       viewBox="0 0 600 300"
       role="img"
-      aria-label={`${title}: true positive rate against false positive rate`}
+      aria-label={`${title}: how many cheating pictures are caught (upwards) against how many innocent pictures are wrongly flagged (sideways), for each possible cut-off. Curves towards the top-left are better.`}
     >
       <title>{title}</title>
       <path d="M 50 15 V 255 H 575" fill="none" className="chart-axis" />
@@ -172,13 +175,12 @@ function Roc({ points, title }: { points: Point[]; title: string }) {
           className="chart-dot-sequence"
         >
           <title>
-            Threshold {p.threshold}; recall {p.recall?.estimate}; false positive
-            rate {p.false_positive_rate?.estimate}
+            Cut-off {p.threshold}; share of cheating pictures caught {p.recall?.estimate}; share of innocent pictures wrongly flagged {p.false_positive_rate?.estimate}
           </title>
         </circle>
       ))}
       <text x="50" y="280" className="chart-text">
-        0 · False positive rate
+        0 · Share of innocent pictures wrongly flagged
       </text>
       <text x="575" y="280" textAnchor="end" className="chart-text">
         1
@@ -236,7 +238,7 @@ function Rate({ value }: { value?: Interval }) {
     <>
       {value?.estimate == null
         ? "not measured"
-        : `${value.estimate} [${value.ci_low}, ${value.ci_high}] (n=${value.n})`}
+        : `${value.estimate} (true value likely between ${value.ci_low} and ${value.ci_high}; based on ${value.n} test pictures)`}
     </>
   );
 }
@@ -268,32 +270,38 @@ function FamilyChart({
         detectorConfig={report.detector.config.version}
       />
       <label>
-        Payload band{" "}
+        How much was hidden? (“payload band” — hiding more is usually easier to catch){" "}
         <select value={band} onChange={(e) => setBand(e.target.value)}>
-          <option value="all">All bands</option>
+          <option value="all">All amounts together</option>
           {Object.keys(report.by_payload_band).map((b) => (
             <option key={b}>{b}</option>
           ))}
         </select>
       </label>
       <p>
-        ROC AUC:{" "}
+        Overall ability to tell cheating from innocent pictures (ROC
+        AUC — 1 is perfect, 0.5 is no better than guessing):{" "}
         {band === "all"
           ? report.roc_auc.estimate
           : (bandRow?.roc_auc_vs_negatives ?? "not measured")}
-        . Bars show 95% Wilson recall intervals.
+        . The thin vertical lines on the chart show the likely range for
+        each point (a 95% “Wilson” interval — long lines mean few test
+        pictures, so the value is uncertain).
       </p>
-      <Roc points={points} title={`${name}, ${band}`} />
+      <Roc points={points} title={`${name}, ${band === "all" ? "all hiding amounts" : band}`} />
       <div className="table-scroll">
         <table>
           <caption>
-            Exact operating-point values and 95% Wilson intervals
+            The exact numbers behind the chart: for each possible
+            cut-off, the share of cheating pictures caught and the share
+            of innocent pictures wrongly flagged, each with its likely
+            range.
           </caption>
           <thead>
             <tr>
-              <th>Threshold</th>
-              <th>Recall</th>
-              <th>False positive rate</th>
+              <th>Score cut-off (flag if score is at least this)</th>
+              <th>Share of cheating pictures caught (“recall”)</th>
+              <th>Share of innocent pictures wrongly flagged (“false positive rate”)</th>
             </tr>
           </thead>
           <tbody>
@@ -318,7 +326,7 @@ function FamilyChart({
 export default function Benchmarks() {
   const [reports, setReports] = useState<Reports | null>(null);
   const [provenance, setProvenance] = useState<Record<string, Provenance>>({});
-  const [message, setMessage] = useState("Loading cached reports…");
+  const [message, setMessage] = useState("Loading the saved accuracy reports…");
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -341,13 +349,13 @@ export default function Benchmarks() {
         if (cancelled) return;
         if (responses.some((r) => r.status === 202)) {
           setMessage(
-            "Reports are computing. This page will refresh when they are ready.",
+            "The accuracy reports are being calculated on the server. This can take a while; this page will refresh itself when they are ready — you can leave it open.",
           );
           timer = setTimeout(load, 5000);
           return;
         }
         if (responses.some((r) => !r.ok))
-          throw new Error("Could not load benchmark reports. Reload to retry.");
+          throw new Error("The accuracy reports could not be loaded. What to do: reload this page to try again.");
         const payloads = await Promise.all(
           responses.map((r) => r.json() as Promise<unknown>),
         );
@@ -371,7 +379,12 @@ export default function Benchmarks() {
   if (!reports)
     return (
       <>
-        <h1>Benchmarks</h1>
+        <h1>How accurate are the checks?</h1>
+        <p>
+          This page will show measured test results: of pictures known to
+          hide something, how many were caught — and of innocent
+          pictures, how many were wrongly flagged.
+        </p>
         <p role="status">{message}</p>
       </>
     );
@@ -388,14 +401,43 @@ export function BenchmarkResults({
   initialView?: string;
 }) {
   const [view, setView] = useState(initialView);
+  const tabLabels: Record<string, string> = {
+    frozen: "Main test (unseen pictures, fixed settings)",
+    curves: "Trade-off curves (choosing a cut-off)",
+    geometric: "Shape-pattern tests",
+    ablations: "Which parts of the checker matter?",
+    latency: "How fast is it?",
+    robustness: "Tricky attempts to sneak past",
+  };
   return (
     <>
-      <h1>Benchmarks</h1>
+      <h1>How accurate are the checks? (benchmarks)</h1>
       <p>
-        Evidence at recorded configurations. Small samples produce wide
-        intervals; results apply within each report’s declared coverage.
+        CovertLens was tested on pictures where the truth is known: some
+        really do hide information, others are innocent. This page shows,
+        for each kind of test, how many cheating pictures were caught and
+        how many innocent ones were wrongly flagged. The first tab (“Main
+        test”) is the one that counts most: fixed settings, tested on
+        pictures that were kept aside and never used while setting the
+        cut-offs.
       </p>
-      <div className="report-tabs" role="group" aria-label="Report category">
+      <div className="card">
+        <h2>Words used on this page</h2>
+        <dl className="kv kv-wide">
+          <div><dt>Caught share (“recall”)</dt><dd>Of pictures that really hid something, the share that were flagged. Higher is better.</dd></div>
+          <div><dt>Wrongly flagged share (“false positive rate”)</dt><dd>Of innocent pictures, the share wrongly flagged. Lower is better.</dd></div>
+          <div><dt>Accuracy of flags (“precision”)</dt><dd>Of pictures that were flagged or held back, the share that really were cheating. Higher is better.</dd></div>
+          <div><dt>Likely range (“Wilson 95% interval”)</dt><dd>The true value probably lies inside this range. A wide range means few test pictures — be cautious.</dd></div>
+          <div><dt>Cut-off (“threshold”)</dt><dd>The score at or above which a picture is flagged or held back.</dd></div>
+          <div><dt>“Frozen” settings, “held-out” pictures</dt><dd>Settings were locked first, then tested on pictures kept aside — like marking an exam with a fixed answer key on unseen questions.</dd></div>
+        </dl>
+      </div>
+      <p className="note">
+        Every result only covers the kinds of pictures actually tested
+        (stated with each report). Good results on these tests do not
+        promise the same on different kinds of pictures.
+      </p>
+      <div className="report-tabs" role="group" aria-label="Which set of test results to show">
         {[
           "frozen",
           "curves",
@@ -409,20 +451,32 @@ export function BenchmarkResults({
             aria-pressed={view === name}
             onClick={() => setView(name)}
           >
-            {name}
+            {tabLabels[name] ?? name}
           </button>
         ))}
       </div>
       {view === "frozen" && (
         <section>
-          <h2>Frozen held-out benchmark</h2>
+          <h2>Main test: fixed settings, unseen pictures</h2>
+          <p>
+            The cut-offs were locked (“frozen”) using separate practice
+            pictures, then applied unchanged to these kept-aside
+            (“held-out”) pictures. Start with the first table:
+            “flagged for attention” is the gentler outcome (delivered but
+            marked); “held back or run stopped” is the strict, blocking
+            outcome.
+          </p>
           <ProvenanceLine value={provenance.frozen} />
           <table>
+            <caption>
+              Each value is a share from 0 to 1, followed by its likely
+              range (wide ranges mean few test pictures).
+            </caption>
             <thead>
               <tr>
-                <th>Family</th>
-                <th>Triage recall [Wilson 95%]</th>
-                <th>Enforcement precision [Wilson 95%]</th>
+                <th>Check</th>
+                <th>Cheating pictures at least flagged for attention</th>
+                <th>When a picture was held back or the run stopped, share that really were cheating</th>
               </tr>
             </thead>
             <tbody>
@@ -446,12 +500,13 @@ export function BenchmarkResults({
           {Object.entries(reports.frozen.held_out.families).map(
             ([name, row]) => (
               <article key={name}>
-                <h3>{name}: held-out payload bands</h3>
+                <h3>{name}: does hiding more make it easier to catch?</h3>
                 <table>
+                  <caption>Share caught at the “flag for attention” cut-off, split by how much was hidden (the “payload band”).</caption>
                   <thead>
                     <tr>
-                      <th>Band</th>
-                      <th>Recall [Wilson 95%]</th>
+                      <th>Amount hidden</th>
+                      <th>Share caught, with likely range</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -470,6 +525,7 @@ export function BenchmarkResults({
               </article>
             ),
           )}
+          <h3>Trade-offs the project accepted, in the report’s own words</h3>
           <ul>
             {reports.frozen.tradeoffs.map((s) => (
               <li key={s}>{s}</li>
@@ -480,23 +536,28 @@ export function BenchmarkResults({
       )}
       {view === "curves" && (
         <section>
-          <h2>Development fixture ROC curves</h2>
+          <h2>The trade-off in choosing a cut-off</h2>
           <p>
-            Threshold sweeps over the synthetic development suite. These curves
-            do not extend the frozen held-out claim.
+            Moving the cut-off trades one error for another: a stricter
+            (higher) cut-off wrongly flags fewer innocent pictures but
+            catches fewer cheating ones. Each chart sweeps through all
+            possible cut-offs on the practice (“development”) pictures —
+            curves bowing towards the top-left corner are better. These
+            practice results are for choosing cut-offs; they do not add to
+            the main test’s claims.
           </p>
           <FamilyChart
-            name="Spatial LSB"
+            name="Tiny pixel changes (spatial LSB)"
             report={reports.lsb}
             provenance={provenance.lsb}
           />
           <FamilyChart
-            name="JPEG DCT"
+            name="JPEG compression data (DCT)"
             report={reports.dct}
             provenance={provenance.dct}
           />
           <FamilyChart
-            name="Metadata"
+            name="Information stored in the file (metadata)"
             report={reports.metadata.benchmark}
             provenance={provenance.metadata}
           />
@@ -504,29 +565,44 @@ export function BenchmarkResults({
       )}
       {view === "geometric" && (
         <section>
-          <h2>Geometric subfamilies</h2>
+          <h2>Shape-pattern tests, by hiding place</h2>
           <ProvenanceLine value={provenance.geometric} />
           <p>
-            Each subfamily has continuous, quantized unstructured, and quantized
-            structured rows. No general geometric coverage follows from a single
-            subfamily.
+            For each hiding place in the visible pattern (heights, gaps,
+            brightness, tilt, colour), three kinds of test picture were
+            used: values with no regular spacing (“continuous”); values on
+            a regular spacing but in no meaningful order (“quantized
+            unstructured” — like an ordinary chart); and values on a
+            regular spacing arranged to carry a code (“quantized
+            structured”). The checker should blame only the third kind.
+            Good results for one hiding place say nothing about the
+            others, so each is reported separately.
           </p>
           {Object.entries(reports.geometric.subfamilies).map(
             ([name, block]) => (
               <article key={name}>
-                <h3>{name}</h3>
+                <h3>Hiding place: {name}</h3>
                 <table>
                   <thead>
                     <tr>
-                      <th>Scene type</th>
-                      <th>Classifications</th>
-                      <th>Structure rate [Wilson 95%]</th>
+                      <th>Kind of test picture (exact name)</th>
+                      <th>How the checker classified them (counts)</th>
+                      <th>Share reported as deliberately arranged, with likely range</th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(block.rows).map(([kind, row]) => (
                       <tr key={kind}>
-                        <th>{kind}</th>
+                        <th>
+                          {kind === "continuous"
+                            ? "No regular spacing ("
+                            : kind === "quantized_unstructured"
+                              ? "Regular spacing, no meaningful order ("
+                              : kind === "quantized_structured"
+                                ? "Regular spacing carrying a code ("
+                                : "("}
+                          {kind})
+                        </th>
                         <td>{JSON.stringify(row.classifications)}</td>
                         <td>
                           {
@@ -550,22 +626,30 @@ export function BenchmarkResults({
       )}
       {view === "ablations" && (
         <section>
-          <h2>Ablation arms</h2>
+          <h2>Which parts of the checker actually help?</h2>
+          <p>
+            Each row is a version of the checker with some information
+            taken away (“ablated”) — for example, looking at the picture
+            alone versus also using surrounding context. Comparing the
+            rows shows whether each part earns its keep, or whether
+            adding it actually makes decisions worse.
+          </p>
           <ProvenanceLine value={provenance.ablations} />
           <Bars
             rows={Object.entries(reports.ablations.arms).map(
               ([label, row]) => ({ label, value: row.auc }),
             )}
-            title="AUC by ablation arm"
+            title="Overall ability to tell cheating from innocent pictures (AUC; 1 is perfect), by version of the checker"
           />
           <table>
+            <caption>All shares run from 0 to 1. The first three are “higher is better”; wrongly flagged is “lower is better”.</caption>
             <thead>
               <tr>
-                <th>Arm</th>
-                <th>AUC</th>
-                <th>Recall</th>
-                <th>Precision</th>
-                <th>False positive rate</th>
+                <th>Version of the checker (exact name)</th>
+                <th>Overall separation ability (AUC)</th>
+                <th>Cheating caught</th>
+                <th>Flags that were right</th>
+                <th>Innocent wrongly flagged</th>
               </tr>
             </thead>
             <tbody>
@@ -585,22 +669,29 @@ export function BenchmarkResults({
       )}
       {view === "latency" && (
         <section>
-          <h2>Latency by size and media</h2>
+          <h2>How long does checking take?</h2>
+          <p>
+            “P95 seconds” means: 95 out of 100 pictures of that kind were
+            checked within this time. The project aimed for 2 seconds;
+            the “2-second aim met?” column says plainly where that aim was
+            missed. A missed aim means slower delivery — it does not
+            change any accuracy result.
+          </p>
           <ProvenanceLine value={provenance.latency} />
           <Bars
             rows={reports.latency.classes.map((row) => ({
               label: `${row.class}/${row.media}`,
               value: row.p95_s,
             }))}
-            title="P95 latency in seconds"
+            title="Time to check 95 out of 100 pictures, in seconds, by picture size and type"
           />
           <table>
             <thead>
               <tr>
-                <th>Class / media</th>
-                <th>P95 seconds</th>
-                <th>Proposal met</th>
-                <th>Statuses</th>
+                <th>Picture size / type</th>
+                <th>95% checked within (seconds)</th>
+                <th>2-second aim met?</th>
+                <th>How the checks ended (counts)</th>
               </tr>
             </thead>
             <tbody>
@@ -610,12 +701,13 @@ export function BenchmarkResults({
                     {row.class}/{row.media}
                   </th>
                   <td>{row.p95_s}</td>
-                  <td>{String(row.meets_proposal)}</td>
+                  <td>{row.meets_proposal ? "yes" : "no — slower than aimed for"}</td>
                   <td>{JSON.stringify(row.statuses)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <h3>Trade-offs, in the report’s own words</h3>
           <ul>
             {reports.latency.tradeoffs.map((s) => (
               <li key={s}>{s}</li>
@@ -626,10 +718,15 @@ export function BenchmarkResults({
       )}
       {view === "robustness" && (
         <section>
-          <h2>Adaptive and unseen robustness probes</h2>
+          <h2>Tricky attempts to sneak past the checker</h2>
           <p>
-            These experiments are separate from the frozen benchmark. Their
-            outcomes never enter frozen benchmark curves or rows.
+            Separate from the main test, attackers who knew how the
+            checker works tried to evade it (for example by hiding less,
+            or using unusual pictures). “Controls” are matching innocent
+            pictures run alongside, to make sure the gate was not simply
+            blocking everything. These extra experiments explore
+            weaknesses honestly; they never feed into the main test’s
+            numbers.
           </p>
           <ProvenanceLine value={provenance.robustness} />
           <Bars
@@ -637,17 +734,18 @@ export function BenchmarkResults({
               label: row.name,
               value: row.attempts.withheld,
             }))}
-            title="Robustness attempts withheld, counts per experiment"
+            title="Sneak attempts that were held back, counted per experiment"
           />
           <table>
+            <caption>“At least flagged” counts pictures delivered but marked for attention or worse; “held back” counts only the blocking outcomes.</caption>
             <thead>
               <tr>
-                <th>Experiment</th>
-                <th>Outcome</th>
-                <th>Attempts</th>
-                <th>At triage</th>
-                <th>Withheld</th>
-                <th>Controls withheld / total</th>
+                <th>Experiment (the trick that was tried)</th>
+                <th>Overall outcome</th>
+                <th>Attempts made</th>
+                <th>At least flagged</th>
+                <th>Held back</th>
+                <th>Innocent controls held back / total</th>
               </tr>
             </thead>
             <tbody>
@@ -665,6 +763,7 @@ export function BenchmarkResults({
               ))}
             </tbody>
           </table>
+          <h3>What these experiments do not cover, in the report’s own words</h3>
           <ul>
             {reports.robustness.coverage_limitations.map((s) => (
               <li key={s}>{s}</li>

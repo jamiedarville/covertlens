@@ -10,17 +10,18 @@ import {
 } from "../api";
 import { DecisionPanel, EvidenceTables, FamilyCards } from "../components/Results";
 import { Overlay } from "../components/Overlay";
+import { TechDetails } from "../components/Help";
 
 function statusMessage(payload: AnalyzePayload): string {
   switch (payload.status) {
     case "parsed":
-      return "Analysis complete.";
+      return "Check finished. Read the decision first, then what each check found.";
     case "oversized":
-      return `Too large to analyze safely${payload.detail ? `: ${payload.detail}` : ""}. Try a smaller image.`;
+      return `This image was not checked: it is too large to check safely${payload.detail ? ` (${payload.detail})` : ""}. “Not checked” is not the same as “all clear”. What to do: try a smaller copy of the image.`;
     case "timeout":
-      return "Analysis ran past its time limit and was stopped. Try a smaller or simpler image.";
+      return "This image was not fully checked: the check took too long and was stopped. “Not checked” is not the same as “all clear”. What to do: try a smaller or simpler image.";
     default:
-      return `This file could not be analyzed (status: ${payload.status}). PNG and JPEG images are supported.`;
+      return `This file could not be checked (the checker reported: ${payload.status}). “Not checked” is not the same as “all clear”. What to do: use an ordinary PNG or JPEG picture.`;
   }
 }
 
@@ -35,6 +36,40 @@ export interface AnalyzeEngine {
   serverHandoffs: boolean;
   maxBytes?: number;
   notice?: ReactNode;
+}
+
+// Ready-made examples arrive with machine names such as
+// "geometric-height_position-encoded-98ae…". Show a plain
+// description instead, with a short id suffix so nearby examples
+// stay tellable apart (CL-79).
+export function exampleLabel(entry: FixtureEntry): string {
+  const where: Record<string, string> = {
+    height_position: "pattern in bar heights",
+    gap_timing: "pattern in gaps between bars",
+    lit_dark: "pattern in lit/dark bars",
+    colour_code: "pattern in bar colours",
+    angle_tilt: "pattern in bar tilt",
+  };
+  if (entry.kind.startsWith("benign")) {
+    const subject = (entry.kind.split(":")[1] ?? entry.fixture_id)
+      .replaceAll("_", " ")
+      .replace("benign scene", "scene");
+    const num = entry.fixture_id.split("_").pop() ?? "";
+    return `ordinary ${subject} picture, nothing hidden (number ${num})`;
+  }
+  const place = entry.subfamily
+    ? (where[entry.subfamily] ?? entry.subfamily.replaceAll("_", " "))
+    : null;
+  const kind =
+    entry.kind === "encoded"
+      ? "with hidden information"
+      : entry.kind === "clean"
+        ? "ordinary, nothing hidden"
+        : entry.kind === "negative"
+          ? "ordinary variation, nothing hidden"
+          : entry.kind.replaceAll("_", " ");
+  const short = entry.fixture_id.split("-").pop() ?? "";
+  return `${place ? `${place} — ` : ""}${kind} (example …${short.slice(0, 6)})`;
 }
 
 export const serverEngine: AnalyzeEngine = {
@@ -62,7 +97,7 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
       setPayload(preload.payload);
       setPreviewUrl(preload.imageUrl);
       setResultLabel(preload.label);
-      setStatusLine(`Showing the precomputed overlay for ${preload.label}.`);
+      setStatusLine(`Showing the ready-made example from the home page: ${preload.label}. Its measurements are drawn on the picture below.`);
     }
     let cancelled = false;
     engine
@@ -92,7 +127,7 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
   const run = async (file: File, label: string) => {
     setBusy(true);
     setError(null);
-    setStatusLine(`Analyzing ${label}…`);
+    setStatusLine(`Checking ${label}… all four checks are running on the file exactly as you provided it.`);
     setPreviewUrl(await readPreview(file));
     try {
       const result = await engine.analyze(file, setStatusLine);
@@ -104,7 +139,7 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
       const message =
         err instanceof ApiError
           ? err.message
-          : "Analysis failed. Check your connection and try again.";
+          : "The check could not be completed. What to do: check your connection, then try the same image again.";
       setError(message);
       setStatusLine(message);
     } finally {
@@ -142,13 +177,13 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
     if (!file) return;
     const okType = ["image/png", "image/jpeg"].includes(file.type) || /\.(png|jpe?g)$/i.test(file.name);
     if (!okType) {
-      setError("Please choose a PNG or JPEG image.");
+      setError("That file type cannot be checked here. What to do: choose a PNG or JPEG picture (file names ending in .png, .jpg or .jpeg).");
       setStatusLine("Please choose a PNG or JPEG image.");
       return;
     }
     if (engine.maxBytes !== undefined && file.size > engine.maxBytes) {
       const limit = `${Math.round(engine.maxBytes / (1024 * 1024))} MiB`;
-      setError(`That file is larger than this page's ${limit} limit.`);
+      setError(`That file is larger than this page's ${limit} limit, so it was not checked. What to do: export a smaller copy and try again.`);
       setStatusLine(`That file is larger than this page's ${limit} limit.`);
       return;
     }
@@ -160,10 +195,10 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
     if (!entry) return;
     setBusy(true);
     setError(null);
-    setStatusLine(`Loading example ${entry.fixture_id}…`);
+    setStatusLine(`Loading the example “${exampleLabel(entry)}”…`);
     try {
       const file = await engine.fetchExample(entry);
-      await run(file, entry.fixture_id);
+      await run(file, exampleLabel(entry));
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "That example could not be loaded.";
@@ -177,11 +212,17 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
 
   return (
     <>
-      <h1>Analyze an image</h1>
+      <h1>Check an image for hidden information</h1>
       <p>
-        Drop a PNG or JPEG below. It is scored on its original bytes across
-        the four families, and the geometric overlay is drawn from that one
-        response. Nothing you upload is decoded into text here.
+        Add a PNG or JPEG picture below. CovertLens runs its four checks on
+        the file exactly as you provide it (nothing is resized or converted
+        first), then explains — in this order — whether the image would be
+        delivered, what each check found, and the measurements behind it.
+      </p>
+      <p>
+        Two things to know first: a high score is evidence to look closer,
+        never proof that someone hid something; and this page never tries
+        to read out (“decode”) any hidden message.
       </p>
       {engine.notice}
 
@@ -198,12 +239,15 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
           takeFile(e.dataTransfer.files[0]);
         }}
       >
-        <p className="dropzone-title">Drag and drop a PNG or JPEG here</p>
+        <p className="dropzone-title">Drag and drop a PNG or JPEG picture here</p>
         <p>
           <label className="button button-primary" htmlFor="file-input">
-            Choose a file
+            Choose an image to check
           </label>{" "}
-          <span className="note">Analysis starts as soon as you choose.</span>
+          <span className="note">
+            The check starts straight away — there is no separate “upload”
+            step. Only PNG and JPEG pictures are accepted.
+          </span>
         </p>
         <input
           id="file-input"
@@ -224,27 +268,42 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
           void runExample();
         }}
       >
-        <label htmlFor="fixture-select">Or analyze a built-in example</label>
+        <label htmlFor="fixture-select">
+          No image handy? Check a ready-made example instead
+        </label>
         <select
           id="fixture-select"
           value={fixtureChoice}
           onChange={(e) => setFixtureChoice(e.target.value)}
           disabled={busy}
         >
-          <option value="">{fixtures === null ? "Loading examples…" : "Choose an example…"}</option>
+          <option value="">{fixtures === null ? "Loading the list of examples…" : "Choose an example…"}</option>
           {(fixtures ?? []).map((entry) => (
             <option key={entry.fixture_id} value={entry.fixture_id}>
-              {entry.fixture_id}
+              {exampleLabel(entry)}
             </option>
           ))}
         </select>
         <button type="submit" className="button" disabled={busy || !fixtureChoice}>
-          Analyze example
+          Check this example
         </button>
+        {!fixtureChoice && !busy && (
+          <span className="note">Choose an example from the list first — then this button becomes available.</span>
+        )}
+        {fixtures !== null && fixtures.length === 0 && (
+          <span className="note">The example list could not be loaded. You can still check your own image above.</span>
+        )}
       </form>
+      {!payload && !busy && (
+        <p className="note">
+          Nothing has been checked yet. When you add an image, the result
+          will appear here, starting with whether the image would be
+          delivered.
+        </p>
+      )}
 
       <p role="status" aria-live="polite" className="status-line">
-        {busy ? statusLine || "Analyzing…" : statusLine}
+        {busy ? statusLine || "Checking your image… larger pictures can take a little while." : statusLine}
       </p>
       {error && (
         <p className="alert" role="alert">
@@ -254,20 +313,28 @@ export default function Analyze({ engine = serverEngine }: { engine?: AnalyzeEng
 
       {payload && (
         <div ref={resultsRef} tabIndex={-1} className="results">
-          <h2>Result{resultLabel ? `: ${resultLabel}` : ""}</h2>
+          <h2>Result for {resultLabel || "your image"}</h2>
           {!parsed ? (
             <p className="alert" role="alert">{statusMessage(payload)}</p>
           ) : (
             <>
-              <p className="note hash-line">
-                {payload.analysis?.media_kind.toUpperCase()}
+              <p className="note">
+                {payload.analysis?.media_kind.toUpperCase()} picture
                 {payload.analysis?.image?.width
-                  ? ` · ${payload.analysis.image.width}×${payload.analysis.image.height}px`
+                  ? `, ${payload.analysis.image.width} pixels wide × ${payload.analysis.image.height} pixels tall`
                   : ""}
-                {payload.analysis?.content_hash
-                  ? ` · ${payload.analysis.content_hash}`
-                  : ""}
+                .
               </p>
+              {payload.analysis?.content_hash && (
+                <TechDetails summary="File fingerprint (for matching this exact file later)">
+                  <p className="note hash-line">
+                    {payload.analysis.content_hash} — a fingerprint computed
+                    from the file’s exact contents. Changing even one byte
+                    produces a different fingerprint, so this result is tied
+                    to this exact file.
+                  </p>
+                </TechDetails>
+              )}
               {payload.decision && <DecisionPanel decision={payload.decision} />}
               <FamilyCards payload={payload} />
               <Overlay

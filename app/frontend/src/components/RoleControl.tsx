@@ -46,14 +46,16 @@ export function SignInStatus({
   onSignOut?: () => void;
 }) {
   if (info === null) {
-    return <p className="note">Checking sign-in…</p>;
+    return <p className="note">Checking whether you are signed in…</p>;
   }
   if (info.auth_mode !== "oidc") {
     return (
       <p className="alert" role="alert" data-testid="auth-off">
-        Sign-in is not configured on this server, so every request acts as a
-        viewer and evidence stays closed. Set COVERTLENS_AUTH_MODE=oidc with
-        your identity provider to enable real roles.
+        Sign-in has not been set up on this server, so you are treated as
+        a viewer and the original images stay closed. What to do: ask
+        whoever runs this server to set up sign-in (they set
+        COVERTLENS_AUTH_MODE=oidc with their identity provider to enable
+        real roles).
       </p>
     );
   }
@@ -61,7 +63,8 @@ export function SignInStatus({
     return (
       <div className="demo-role" data-testid="signed-out">
         <p>
-          You are not signed in, so evidence stays closed.{" "}
+          You are not signed in, so original images stay closed. Sign in
+          with an account that is allowed to see them.{" "}
           <a className="button" href={loginHref(info, path)}>
             Sign in
           </a>
@@ -79,7 +82,7 @@ export function SignInStatus({
     <div className="demo-role" data-testid="signed-in">
       <p>
         Signed in as <strong>{info.display_name || info.actor_id}</strong> ({info.actor_id})
-        {" · "}roles: {roles}{" · "}runs: {scopes}{" "}
+        {" · "}roles: {roles} (what you are allowed to do){" · "}runs: {scopes} (which experiment sessions you may open){" "}
         {onSignOut && (
           <button type="button" className="button" onClick={onSignOut}>
             Sign out

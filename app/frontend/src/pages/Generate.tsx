@@ -10,14 +10,15 @@ import {
   type GenerateResult,
   type LeaderboardEntry,
 } from "../api";
-import { fmtExact } from "../format";
+import { fmtExact, humanizeKey, verdictLabel } from "../format";
+import { StartSteps, TechDetails } from "../components/Help";
 
 const SUBFAMILIES = [
-  { value: "height_position", label: "Bar heights" },
-  { value: "gap_timing", label: "Gaps between bars" },
-  { value: "lit_dark", label: "Lit / dark bars" },
-  { value: "colour_code", label: "Bar colours" },
-  { value: "angle_tilt", label: "Bar tilt angles" },
+  { value: "height_position", label: "In the bar heights" },
+  { value: "gap_timing", label: "In the gaps between bars" },
+  { value: "lit_dark", label: "In which bars are lit or dark" },
+  { value: "colour_code", label: "In the bar colours" },
+  { value: "angle_tilt", label: "In how much the bars tilt" },
 ];
 const GRID_SUBFAMILIES = new Set(["height_position", "gap_timing", "angle_tilt"]);
 
@@ -90,14 +91,14 @@ export default function Generate({
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setStatusLine("Generating…");
+    setStatusLine("Making your test picture…");
     try {
       const generated = await generateImage(buildParams());
       setResult(generated);
-      setStatusLine(`Generated ${generated.fixture_id}. Recorded as a red-team fixture.`);
+      setStatusLine(`Your test picture is ready below (${generated.fixture_id}). It has been saved on the server together with the settings you used, so it can become future test data. Next step: send it to “Check an image” and see whether the checks spot it.`);
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : "Generation failed. Try different parameters.";
+        err instanceof ApiError ? err.message : "The picture could not be made with those settings. What to do: change one setting (for example fewer bars) and try again.";
       setError(message);
       setStatusLine(message);
     } finally {
@@ -113,34 +114,49 @@ export default function Generate({
 
   return (
     <>
-      <h1>Generate a covert image</h1>
+      <h1>Make a test image with something hidden in it</h1>
       <p>
-        Try to smuggle a message past the gate. Pick an encoder, hide a word
-        or a seeded payload, then send the result to Analyze and see whether
-        the discovered grid, structure score, and verdict give you away.
-        Every image you generate is recorded with its full parameters as a
-        red-team fixture, so attacks that work become test data.
+        This page is for testing the checker: you deliberately hide
+        information in a picture (“red-teaming” the gate), then send the
+        picture to “Check an image” and see whether CovertLens spots it.
+        Anything you manage to smuggle through teaches the project where
+        its blind spots are — every picture you make here is saved, with
+        the settings you used, as future test data.
       </p>
+      <StartSteps heading="Try it in three steps">
+        <li>Choose <strong>where to hide the information</strong> below (the visible pattern is the easiest to understand).</li>
+        <li>Press <strong>Make the test picture</strong>. The defaults are fine for a first try.</li>
+        <li>Choose <strong>Send it to “Check an image”</strong> and see whether the checks find your hiding place.</li>
+      </StartSteps>
 
       <form onSubmit={onGenerate} className="generate-form">
         <div className="form-grid">
           <label>
-            Encoder
+            Where should the information be hidden?
             <select value={kind} onChange={(e) => setKind(e.target.value)} disabled={busy}>
-              <option value="geometric">Geometric (visible pattern)</option>
-              <option value="spatial_lsb">Spatial LSB (PNG pixels)</option>
-              <option value="jpeg_dct">JPEG DCT (frequency coefficients)</option>
-              <option value="metadata">Metadata fields</option>
+              <option value="geometric">In the visible pattern itself (bar heights, gaps, colours…)</option>
+              <option value="spatial_lsb">In tiny pixel changes in a PNG (spatial LSB)</option>
+              <option value="jpeg_dct">In the JPEG compression numbers (DCT)</option>
+              <option value="metadata">In text stored inside the file (metadata)</option>
             </select>
+            <span className="note">This chooses which of the four checks you are trying to beat. Each hiding place has its own settings below.</span>
           </label>
         </div>
 
         {kind === "geometric" && (
           <fieldset>
-            <legend>Scene and payload</legend>
+            <legend>The picture and what to hide in it</legend>
+            <p className="note">
+              The picture will show a row of bars, like a skyline. Your
+              hidden information (the “payload”) is written into one
+              measurable feature of those bars. A “seed” is simply a
+              starting number for the random choices: the same seed always
+              makes the same picture, so share the seed to let someone
+              else recreate your exact test.
+            </p>
             <div className="form-grid">
               <label>
-                Subfamily
+                Hide it in which feature of the bars?
                 <select value={subfamily} onChange={(e) => setSubfamily(e.target.value)} disabled={busy}>
                   {SUBFAMILIES.map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
@@ -148,105 +164,119 @@ export default function Generate({
                 </select>
               </label>
               <label>
-                Elements (4–40)
+                How many bars? (4 to 40)
                 <input type="number" min={4} max={40} value={nElements}
                   onChange={(e) => setNElements(e.target.value)} disabled={busy} />
+                <span className="note">More bars can carry more hidden information — and give the checker more to measure.</span>
               </label>
               <label>
-                Scene seed
+                Scene seed (starting number for the ordinary parts)
                 <input type="number" value={sceneSeed}
                   onChange={(e) => setSceneSeed(e.target.value)} disabled={busy} />
               </label>
               <label>
-                Payload seed
+                Hidden-content seed (starting number for random hidden content)
                 <input type="number" value={payloadSeed}
                   onChange={(e) => setPayloadSeed(e.target.value)} disabled={busy} />
               </label>
               <label>
-                Payload mode
+                What should be hidden?
                 <select value={payloadMode} onChange={(e) => setPayloadMode(e.target.value)} disabled={busy}>
-                  <option value="random">Random symbols</option>
-                  <option value="word">Word</option>
-                  <option value="morse">Morse</option>
-                  <option value="ascii">ASCII</option>
-                  <option value="custom">Custom text (as ASCII)</option>
+                  <option value="random">Random symbols (no meaning — hardest to tell from chance)</option>
+                  <option value="word">A short word, repeated</option>
+                  <option value="morse">Text in Morse code</option>
+                  <option value="ascii">Text as computer character codes (ASCII)</option>
+                  <option value="custom">Your own text (written as ASCII)</option>
                 </select>
+                <span className="note">Meaningful content (words, Morse, text) is what the “deliberate pattern” test looks for. Random symbols test whether spacing alone gets flagged.</span>
               </label>
               {payloadMode !== "random" && (
                 <label>
-                  Payload text
+                  Text to hide (up to 64 characters)
                   <input type="text" value={payloadText} maxLength={64}
                     onChange={(e) => setPayloadText(e.target.value)} disabled={busy} />
                   <span className="note">
                     {payloadMode === "word" && subfamily === "height_position"
-                      ? "Bar heights carry letters A–H, repeated to fill the scene."
-                      : "Encoded into the subfamily alphabet, repeated to fill the scene."}
+                      ? "Only the letters A to H can be carried by bar heights here; your word is repeated until the row of bars is filled. For example, DECAF."
+                      : "Your text is turned into the symbols this hiding place can carry, and repeated until the row of bars is filled."}
                   </span>
                 </label>
               )}
               <label>
-                Grid
+                Which regular spacing (“grid”) should the values follow?
                 <select value={gridAllowed ? gridChoice : "declared"}
                   onChange={(e) => setGridChoice(e.target.value)}
                   disabled={busy || !gridAllowed}>
-                  <option value="declared">Declared (published grid)</option>
-                  <option value="custom">Custom base and step</option>
-                  <option value="random_hidden">Random, hidden from you</option>
+                  <option value="declared">The published one the checker already knows about</option>
+                  <option value="custom">One I choose myself (starting value and step size)</option>
+                  <option value="random_hidden">A random one, kept secret from me too</option>
                 </select>
                 {!gridAllowed && (
-                  <span className="note">Lit/dark and colour use fixed levels.</span>
+                  <span className="note">Not available for this hiding place: lit/dark and colour always use fixed levels, so there is no spacing to choose.</span>
                 )}
                 {gridAllowed && gridChoice === "random_hidden" && (
-                  <span className="note">You will not be told the grid. See if Analyze finds it.</span>
+                  <span className="note">The spacing will not be shown to you either. The question is whether “Check an image” can discover it from the picture alone.</span>
+                )}
+                {gridAllowed && gridChoice === "declared" && (
+                  <span className="note">Using the spacing the checker already knows makes the pattern easiest to spot — a good first test.</span>
                 )}
               </label>
               {gridAllowed && gridChoice === "custom" && (
                 <>
                   <label>
-                    Grid base
+                    Spacing starts at (grid base)
                     <input type="number" step="any" value={gridBase}
                       onChange={(e) => setGridBase(e.target.value)} disabled={busy} />
+                    <span className="note">The smallest value, for example a shortest bar of 16 pixels.</span>
                   </label>
                   <label>
-                    Grid step
+                    Step size between allowed values (grid step)
                     <input type="number" step="any" value={gridStep}
                       onChange={(e) => setGridStep(e.target.value)} disabled={busy} />
+                    <span className="note">For example 10 means allowed heights are 16, 26, 36, … pixels.</span>
                   </label>
                 </>
               )}
             </div>
-            <p className="note">Gap scenes hold at most 10 elements and angle scenes 7 at this canvas size; larger requests are capped.</p>
+            <p className="note">At this picture size, “gaps” fit at most 10 bars and “tilt” at most 7; if you ask for more, the number is reduced for you.</p>
           </fieldset>
         )}
 
         {kind !== "geometric" && (
           <fieldset>
-            <legend>Cover and payload</legend>
+            <legend>The ordinary picture, and what to hide in it</legend>
+            <p className="note">
+              A plain “cover” picture is generated first, then your hidden
+              bytes (the “payload”) are written into it. A seed is a
+              starting number for random choices: the same seeds always
+              recreate the same test.
+            </p>
             <div className="form-grid">
               {kind === "metadata" && (
                 <label>
-                  Media kind
+                  File type to produce
                   <select value={mediaKind} onChange={(e) => setMediaKind(e.target.value)} disabled={busy}>
-                    <option value="png">PNG</option>
-                    <option value="jpeg">JPEG</option>
+                    <option value="png">PNG picture</option>
+                    <option value="jpeg">JPEG picture</option>
                   </select>
+                  <span className="note">The hidden bytes go into text fields stored inside the file, in either type.</span>
                 </label>
               )}
               <label>
-                Cover seed
+                Cover seed (starting number for the ordinary picture)
                 <input type="number" value={coverSeed}
                   onChange={(e) => setCoverSeed(e.target.value)} disabled={busy} />
               </label>
               <label>
-                Payload seed
+                Hidden-content seed (starting number for the hidden bytes)
                 <input type="number" value={payloadSeed}
                   onChange={(e) => setPayloadSeed(e.target.value)} disabled={busy} />
               </label>
               <label>
-                Payload bytes (1–512)
+                How much to hide? (1 to 512 bytes)
                 <input type="number" min={1} max={512} value={payloadBytes}
                   onChange={(e) => setPayloadBytes(e.target.value)} disabled={busy} />
-                <span className="note">Classic encoders embed seeded payload bytes.</span>
+                <span className="note">The hidden bytes are generated from the seed above. Hiding more is usually easier for the checker to spot; hiding very little is the harder test.</span>
               </label>
             </div>
           </fieldset>
@@ -254,8 +284,9 @@ export default function Generate({
 
         <p>
           <button type="submit" className="button button-primary" disabled={busy}>
-            Generate image
-          </button>
+            Make the test picture
+          </button>{" "}
+          <span className="note">The picture is saved on the server with these settings. Nothing is sent to any recipient.</span>
         </p>
       </form>
 
@@ -265,30 +296,39 @@ export default function Generate({
       {result && (
         <section aria-labelledby="generated-heading" className="card">
           <div className="card-head">
-            <h2 id="generated-heading">Your covert image</h2>
-            <span className="chip">source: red_team</span>
+            <h2 id="generated-heading">Your test picture, with information hidden in it</h2>
+            <span className="chip" title="source: red_team">made for testing the checker</span>
           </div>
           <img className="skyline-img" src={result.image_url}
-            alt={`Generated ${result.fixture_id}`} />
-          <dl className="kv kv-wide">
-            <div><dt>Fixture</dt><dd>{result.fixture_id}</dd></div>
-            <div><dt>Content hash</dt><dd>{result.content_hash}</dd></div>
-            {Object.entries(result.parameters).map(([key, value]) => (
-              <div key={key}>
-                <dt>{key}</dt>
-                <dd>{typeof value === "object" ? JSON.stringify(value) : fmtExact(value)}</dd>
-              </div>
-            ))}
-          </dl>
+            alt={`Your generated test picture (${result.fixture_id})`} />
+          <p className="note">
+            To your eye this should look ordinary — that is the point.
+            The next step is to find out whether it also looks ordinary to
+            the checker.
+          </p>
+          <TechDetails summary="Saved settings and file fingerprint (to recreate this exact test)">
+            <dl className="kv kv-wide">
+              <div><dt>Test picture name</dt><dd>{result.fixture_id}</dd></div>
+              <div><dt>File fingerprint</dt><dd>{result.content_hash}</dd></div>
+              {Object.entries(result.parameters).map(([key, value]) => (
+                <div key={key}>
+                  <dt title={key}>{humanizeKey(key)}</dt>
+                  <dd>{typeof value === "object" ? JSON.stringify(value) : fmtExact(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </TechDetails>
           <p>
             <button type="button" className="button button-primary" onClick={sendToAnalyze}>
-              Send to Analyze
+              Send it to “Check an image” — did the checker spot it?
             </button>{" "}
-            <a href={result.image_url} download>Download image</a>
+            <a href={result.image_url} download>Download this picture</a>
           </p>
           <p className="note">
-            Analyze never shows decoded text; it reports the discovered
-            step, structure score, and verdict as evidence.
+            The check page will not read your hidden text back to you. It
+            reports whether it found your regular spacing, whether the
+            pattern looks deliberate, and whether the picture would be
+            delivered or held back.
           </p>
           <LeaderboardSubmit
             key={result.artifact_version_id}
@@ -321,7 +361,7 @@ function LeaderboardSubmit({
     try {
       setEntry(await submitToLeaderboard(artifactVersionId, name.trim()));
     } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : "Submission failed.");
+      setMessage(err instanceof ApiError ? err.message : "Your entry could not be added to the leaderboard. What to do: try again in a moment — your picture itself is unaffected.");
     } finally {
       setBusy(false);
     }
@@ -335,7 +375,14 @@ function LeaderboardSubmit({
         void submit();
       }}
     >
-      <label htmlFor="leaderboard-name">Leaderboard name</label>
+      <p className="note">
+        Optional competition: enter this picture in the public
+        leaderboard. The server re-checks the exact saved picture (you
+        cannot upload a substitute), and ranks it by how much hidden
+        information it carried past each decision cut-off. Only your
+        chosen name is sent.
+      </p>
+      <label htmlFor="leaderboard-name">Name to show on the leaderboard (optional)</label>
       <input
         id="leaderboard-name"
         value={name}
@@ -345,13 +392,16 @@ function LeaderboardSubmit({
         disabled={busy || entry !== null}
       />
       <button type="submit" className="button" disabled={busy || entry !== null}>
-        Submit to leaderboard
+        Enter this picture in the leaderboard
       </button>
+      {entry !== null && (
+        <span className="note">Already entered — one entry per picture.</span>
+      )}
       {entry && (
         <p role="status" className="note">
           {entry.status === "pending"
-            ? "Submitted: it appears once an operator approves it. "
-            : `Scored ${entry.outcome.verdict} carrying ${entry.outcome.payload.bits} bits. `}
+            ? "Entered. It will appear on the public board once an operator has approved it. "
+            : `It was checked again by the server: decision “${verdictLabel(entry.outcome.verdict).toLowerCase()}”, carrying ${entry.outcome.payload.bits} bits of hidden information. `}
           <a
             href="/leaderboard"
             onClick={(e) => {

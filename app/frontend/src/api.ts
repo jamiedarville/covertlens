@@ -33,7 +33,7 @@ async function readJson(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new ApiError(response.status, `Unexpected response (${response.status})`);
+    throw new ApiError(response.status, `The server sent a reply this page could not understand (code ${response.status}). What to do: reload the page and try again.`);
   }
 }
 
@@ -43,20 +43,20 @@ export async function analyzeFile(file: File): Promise<AnalyzePayload> {
   const response = await fetch("/api/analyze", { method: "POST", body: form });
   const body = (await readJson(response)) as Record<string, unknown>;
   if (response.status === 413) {
-    throw new ApiError(413, "That file is too large to analyze. Try a smaller PNG or JPEG.");
+    throw new ApiError(413, "That file is too large to check, so it was not checked. What to do: export a smaller PNG or JPEG and try again.");
   }
   if (response.status === 429) {
-    throw new ApiError(429, "Too many analyses in the last minute. Wait a moment and try again.");
+    throw new ApiError(429, "Too many checks were requested in the last minute, so this one was not run. What to do: wait a moment, then try the same picture again.");
   }
   if (!response.ok) {
-    throw new ApiError(response.status, `Analysis failed (${response.status}).`);
+    throw new ApiError(response.status, `The check could not be completed (server code ${response.status}). What to do: try the same picture again in a moment.`);
   }
   return body as unknown as AnalyzePayload;
 }
 
 export async function listFixtures(): Promise<FixtureEntry[]> {
   const response = await fetch("/api/fixtures");
-  if (!response.ok) throw new ApiError(response.status, "Could not load examples.");
+  if (!response.ok) throw new ApiError(response.status, "The list of ready-made examples could not be loaded. You can still check your own picture.");
   return (await readJson(response)) as FixtureEntry[];
 }
 
@@ -66,7 +66,7 @@ export function fixtureImageUrl(contentHash: string): string {
 
 export async function fetchFixtureFile(entry: FixtureEntry): Promise<File> {
   const response = await fetch(fixtureImageUrl(entry.content_hash));
-  if (!response.ok) throw new ApiError(response.status, "Could not load that example image.");
+  if (!response.ok) throw new ApiError(response.status, "That example picture could not be loaded. What to do: pick a different example, or check your own picture.");
   const blob = await response.blob();
   return new File([blob], `${entry.fixture_id}.png`, { type: "image/png" });
 }
@@ -74,7 +74,7 @@ export async function fetchFixtureFile(entry: FixtureEntry): Promise<File> {
 export async function fetchComparison(): Promise<Comparison | "computing"> {
   const response = await fetch("/api/comparison");
   if (response.status === 202) return "computing";
-  if (!response.ok) throw new ApiError(response.status, "Could not load the comparison.");
+  if (!response.ok) throw new ApiError(response.status, "The ready-made skyline example could not be loaded.");
   return (await readJson(response)) as Comparison;
 }
 
@@ -98,16 +98,16 @@ export async function generateImage(
   });
   const body = (await readJson(response)) as Record<string, unknown>;
   if (response.status === 400) {
-    throw new ApiError(400, String(body.detail ?? "Those parameters cannot be generated."));
+    throw new ApiError(400, String(body.detail ?? "A picture cannot be made with those settings. What to do: change one setting and try again."));
   }
   if (response.status === 429) {
     throw new ApiError(429, "Too many requests in the last minute. Wait a moment and try again.");
   }
   if (response.status === 504) {
-    throw new ApiError(504, "Generation ran past its time limit. Try simpler parameters.");
+    throw new ApiError(504, "Making the picture took too long and was stopped. What to do: try simpler settings, for example fewer bars.");
   }
   if (!response.ok) {
-    throw new ApiError(response.status, `Generation failed (${response.status}).`);
+    throw new ApiError(response.status, `The picture could not be made (server code ${response.status}). What to do: try again in a moment.`);
   }
   return body as unknown as GenerateResult;
 }
@@ -131,7 +131,9 @@ export async function createGateRun(
     const detail = ((await readJson(response)) as Record<string, unknown> | null)?.detail;
     throw new ApiError(
       response.status,
-      typeof detail === "string" ? detail : "Could not create the run.",
+      typeof detail === "string"
+        ? `The session could not be started: ${detail}`
+        : "The session could not be started. What to do: try a different session name.",
     );
   }
   const body = (await readJson(response)) as Record<string, unknown>;
@@ -156,14 +158,14 @@ export async function postGateDelivery(params: {
   const response = await fetch("/api/gate/deliveries", { method: "POST", body: form });
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Delivery failed."));
+    throw new ApiError(response.status, String(body.detail ?? "The picture could not be sent to the gate. What to do: start the session first, then try again."));
   }
   return body as unknown as GateDelivery;
 }
 
 export async function fetchGateRun(runId: string): Promise<GateRunDetail> {
   const response = await fetch(`/api/gate/runs/${encodeURIComponent(runId)}`);
-  if (!response.ok) throw new ApiError(response.status, "Could not load the run.");
+  if (!response.ok) throw new ApiError(response.status, "That session could not be loaded. What to do: check you typed its name exactly.");
   return (await readJson(response)) as unknown as GateRunDetail;
 }
 
@@ -176,7 +178,7 @@ export async function analyzeGateDelivery(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Analysis failed."));
+    throw new ApiError(response.status, String(body.detail ?? "The check could not be completed. What to do: try again in a moment."));
   }
   return body as unknown as {
     suggested_verdict: string;
@@ -199,7 +201,7 @@ export async function recordGateVerdict(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Verdict failed."));
+    throw new ApiError(response.status, String(body.detail ?? "Your decision could not be applied. What to do: check it, then try again."));
   }
   return body as unknown as GateDelivery;
 }
@@ -213,7 +215,7 @@ export async function fetchTraceRun(runId: string, role: string): Promise<TraceV
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Could not load the trace."));
+    throw new ApiError(response.status, String(body.detail ?? "That session’s timeline could not be loaded. What to do: check the session name and your kind of user."));
   }
   return body as unknown as TraceView;
 }
@@ -222,7 +224,7 @@ export async function fetchTraceRun(runId: string, role: string): Promise<TraceV
 
 export async function fetchDemoRoles(): Promise<DemoRoles> {
   const response = await fetch("/api/review/roles");
-  if (!response.ok) throw new ApiError(response.status, "Could not load demo roles.");
+  if (!response.ok) throw new ApiError(response.status, "The list of demonstration user kinds could not be loaded.");
   const body = (await readJson(response)) as Record<string, unknown>;
   return { roles: body.roles as ReviewRole[], enabled: body.enabled !== false };
 }
@@ -237,7 +239,7 @@ export async function fetchReviewQueue(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Could not load the queue."));
+    throw new ApiError(response.status, String(body.detail ?? "The list of held-back pictures could not be loaded. What to do: check the session name and try again."));
   }
   return body as unknown as ReviewQueue;
 }
@@ -252,7 +254,7 @@ export async function fetchReviewDetail(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Could not load the delivery."));
+    throw new ApiError(response.status, String(body.detail ?? "That picture’s details could not be loaded. What to do: try again in a moment."));
   }
   return body as unknown as ReviewDetail;
 }
@@ -267,7 +269,7 @@ export async function fetchCandidateDecode(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Decode unavailable."));
+    throw new ApiError(response.status, String(body.detail ?? "The possible reading is not available. Only the reviewer kind of user may see it."));
   }
   return body as unknown as CandidateDecode;
 }
@@ -282,7 +284,7 @@ export async function fetchReviewOriginal(
   );
   if (!response.ok) {
     const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
-    throw new ApiError(response.status, String(body.detail ?? "Original unavailable."));
+    throw new ApiError(response.status, String(body.detail ?? "The original picture is not available to this kind of user."));
   }
   return response.blob();
 }
@@ -302,14 +304,14 @@ export async function postDisposition(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Disposition failed."));
+    throw new ApiError(response.status, String(body.detail ?? "Your judgement could not be saved. What to do: check your kind of user and try again."));
   }
   return body;
 }
 
 export async function fetchSecondOpinionConfig(): Promise<SecondOpinionConfig> {
   const response = await fetch("/api/review/second-opinion/config");
-  if (!response.ok) throw new ApiError(response.status, "Could not load second-opinion status.");
+  if (!response.ok) throw new ApiError(response.status, "Whether the second-opinion feature is switched on could not be loaded.");
   return (await readJson(response)) as unknown as SecondOpinionConfig;
 }
 
@@ -327,7 +329,7 @@ export async function requestSecondOpinion(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Second opinion failed."));
+    throw new ApiError(response.status, String(body.detail ?? "The second opinion could not be obtained. That is not an all-clear — judge from the check results."));
   }
   return body as unknown as SecondOpinion;
 }
@@ -342,7 +344,7 @@ export async function fetchSecondOpinions(
   );
   const body = (await readJson(response)) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? "Could not load second opinions."));
+    throw new ApiError(response.status, String(body.detail ?? "Earlier second opinions could not be loaded."));
   }
   return body as unknown as { opinions: SecondOpinion[]; config: SecondOpinionConfig };
 }
@@ -357,7 +359,7 @@ export async function downloadReviewPackage(
   );
   if (!response.ok) {
     const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
-    throw new ApiError(response.status, String(body.detail ?? "Export unavailable."));
+    throw new ApiError(response.status, String(body.detail ?? "The download is not available. It needs the researcher kind of user."));
   }
   const disposition = response.headers.get("content-disposition") ?? "";
   const match = /filename="([^"]+)"/.exec(disposition);
@@ -369,7 +371,7 @@ export async function fetchReviewAudit(runId: string, role: string): Promise<Rev
     `/api/review/audit?run_id=${encodeURIComponent(runId)}`,
     { headers: roleHeaders(role) },
   );
-  if (!response.ok) throw new ApiError(response.status, "Could not load the audit chain.");
+  if (!response.ok) throw new ApiError(response.status, "The audit record could not be loaded. It may only be that your kind of user may not see it.");
   return (await readJson(response)) as unknown as ReviewAudit;
 }
 
@@ -386,14 +388,14 @@ export async function fetchReviewerImage(deliveryId: string, role: string): Prom
   );
   if (!response.ok) {
     const body = (await readJson(response).catch(() => ({}))) as Record<string, unknown>;
-    throw new ApiError(response.status, String(body.detail ?? "Original unavailable."));
+    throw new ApiError(response.status, String(body.detail ?? "The original picture is not available to this kind of user."));
   }
   return response.blob();
 }
 
 export async function fetchGeneratedFile(imageUrl: string, name: string): Promise<File> {
   const response = await fetch(imageUrl);
-  if (!response.ok) throw new ApiError(response.status, "Could not load the generated image.");
+  if (!response.ok) throw new ApiError(response.status, "Your generated test picture could not be loaded again. What to do: make it again on “Make a test image”.");
   const blob = await response.blob();
   return new File([blob], name, { type: blob.type || "image/png" });
 }
@@ -502,7 +504,7 @@ export interface LeaderboardEntry {
 
 export async function fetchLeaderboard(): Promise<LeaderboardView> {
   const response = await fetch("/api/leaderboard", { credentials: "same-origin" });
-  if (!response.ok) throw new ApiError(response.status, "Could not load the leaderboard.");
+  if (!response.ok) throw new ApiError(response.status, "The leaderboard could not be loaded. What to do: reload this page.");
   return (await readJson(response)) as LeaderboardView;
 }
 
@@ -510,7 +512,7 @@ export async function fetchLeaderboardBoard(pinHash: string): Promise<Leaderboar
   const response = await fetch(`/api/leaderboard/boards/${encodeURIComponent(pinHash)}`, {
     credentials: "same-origin",
   });
-  if (!response.ok) throw new ApiError(response.status, "That board could not be loaded.");
+  if (!response.ok) throw new ApiError(response.status, "That older leaderboard could not be loaded.");
   return (await readJson(response)) as LeaderboardBoard;
 }
 
@@ -529,7 +531,7 @@ export async function submitToLeaderboard(
   if (response.status === 409) throw new ApiError(409, "This image is already on the current board.");
   if (response.status === 429) throw new ApiError(429, "Too many submissions this hour. Try again later.");
   if (!response.ok) {
-    throw new ApiError(response.status, String(body.detail ?? `Submission failed (${response.status}).`));
+    throw new ApiError(response.status, String(body.detail ?? `Your leaderboard entry could not be added (server code ${response.status}). What to do: try again in a moment.`));
   }
   return body as unknown as LeaderboardEntry;
 }

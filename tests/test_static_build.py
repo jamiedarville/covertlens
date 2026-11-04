@@ -62,8 +62,8 @@ def test_static_page_analyses_a_fixture_offline(site_server):
         page = context.new_page()
         page.goto(url)
         status = page.get_by_test_id("runtime-status")
-        status.filter(has_text="offline cache: ready").wait_for(timeout=60_000)
-        status.filter(has_text="Python runtime ready").wait_for(timeout=120_000)
+        status.filter(has_text="offline use: ready").wait_for(timeout=60_000)
+        status.filter(has_text="checker software: ready").wait_for(timeout=120_000)
         assert any(path.endswith("pyodide.asm.wasm") for path in seen)
 
         # Offline from here on: the HTTP server stops and the browser
@@ -74,13 +74,18 @@ def test_static_page_analyses_a_fixture_offline(site_server):
         responses = []
         page.on("response", lambda r: responses.append(r))
         page.reload()
-        status.filter(has_text="Python runtime ready").wait_for(timeout=120_000)
+        status.filter(has_text="checker software: ready").wait_for(timeout=120_000)
         page.locator("#fixture-select").select_option(index=2)
-        page.get_by_role("button", name="Analyze example").click()
+        page.get_by_role("button", name="Check this example").click()
         page.get_by_role("heading", name="Result", exact=False).wait_for(
             timeout=120_000
         )
-        assert page.locator(".results").get_by_text("Verdict", exact=False).count() >= 1
+        assert (
+            page.locator(".results")
+            .get_by_text("Would this image be delivered?", exact=False)
+            .count()
+            >= 1
+        )
         assert len(seen) == requests_before, "a request reached the server"
         assert responses, "the reload produced no responses"
         assert all(r.from_service_worker for r in responses if r.url.startswith(url))

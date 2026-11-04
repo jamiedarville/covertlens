@@ -2414,6 +2414,24 @@ def gate_page() -> Response:
     return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
 
 
+@app.get("/benchmarks")
+def benchmarks_page() -> Response:
+    """SPA route for the Benchmarks page (CL-79: direct loads 404'd)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
+@app.get("/scorecard")
+def scorecard_page() -> Response:
+    """SPA route for the Scorecard page (CL-79: direct loads 404'd)."""
+    response = _index_response()
+    if response is not None:
+        return response
+    return JSONResponse({"detail": "frontend_not_built"}, status_code=404)
+
+
 @app.get("/assets/{asset_path:path}")
 def frontend_asset(asset_path: str) -> Response:
     """Hashed Vite assets; never a path outside the build (CL-48)."""

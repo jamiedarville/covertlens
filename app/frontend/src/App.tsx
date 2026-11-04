@@ -50,21 +50,21 @@ export default function App() {
   useEffect(() => {
     document.title =
       page === "analyze"
-        ? "Analyze — CovertLens"
+        ? "Check an image — CovertLens"
         : page === "generate"
-          ? "Generate — CovertLens"
+          ? "Make a test image — CovertLens"
           : page === "gate"
-            ? "Live Gate — CovertLens"
+            ? "Watch the delivery gate — CovertLens"
             : page === "review"
-              ? "Reviewer — CovertLens"
+              ? "Review held-back images — CovertLens"
               : page === "trace"
-                ? "Trace explorer — CovertLens"
+                ? "Timeline of a run — CovertLens"
                 : page === "benchmarks"
-              ? "Benchmarks — CovertLens"
+              ? "How accurate are the checks? — CovertLens"
               : page === "leaderboard"
               ? "Leaderboard — CovertLens"
               : page === "scorecard"
-                ? "Scorecard — CovertLens"
+                ? "Release decision — CovertLens"
                 : "CovertLens";
   }, [page]);
 
@@ -91,6 +91,9 @@ export default function App() {
       <header className="site-header">
         <a className="wordmark" href="/" onClick={go("/")}>
           CovertLens
+          <span className="wordmark-tagline">
+            Checks images AI agents send each other for hidden information
+          </span>
         </a>
         <nav aria-label="Primary">
           <a
@@ -98,42 +101,42 @@ export default function App() {
             onClick={go("/analyze")}
             aria-current={page === "analyze" ? "page" : undefined}
           >
-            Analyze
+            Check an image
           </a>
           <a
             href="/generate"
             onClick={go("/generate")}
             aria-current={page === "generate" ? "page" : undefined}
           >
-            Generate
+            Make a test image
           </a>
           <a
             href="/gate"
             onClick={go("/gate")}
             aria-current={page === "gate" ? "page" : undefined}
           >
-            Live Gate
+            Delivery gate (live)
           </a>
           <a
             href="/review"
             onClick={go("/review")}
             aria-current={page === "review" ? "page" : undefined}
           >
-            Reviewer
+            Review held-back images
           </a>
           <a
             href="/trace"
             onClick={go("/trace")}
             aria-current={page === "trace" ? "page" : undefined}
           >
-            Trace
+            Timeline of a run
           </a>
           <a
             href="/benchmarks"
             onClick={go("/benchmarks")}
             aria-current={page === "benchmarks" ? "page" : undefined}
           >
-            Benchmarks
+            How accurate is it?
           </a>
           <a
             href="/leaderboard"
@@ -147,9 +150,9 @@ export default function App() {
             onClick={go("/scorecard")}
             aria-current={page === "scorecard" ? "page" : undefined}
           >
-            Scorecard
+            Release decision
           </a>
-          <a href="/docs">API docs</a>
+          <a href="/docs">Developer API docs</a>
         </nav>
       </header>
       <main id="main" className="page">
@@ -175,14 +178,16 @@ export default function App() {
       </main>
       <footer className="site-footer">
         <p>
-          Scores are evidence, never accusations. A withheld image is recorded
-          as not observed, never as a successful hidden transfer.
+          A high score is evidence to look closer — it is never, on its own,
+          an accusation that a person or agent did something wrong. An image
+          that was held back is recorded as “not seen by the recipient”, never
+          as a successful hidden transfer.
         </p>
         <p>
           {versionLine ? `${versionLine} · ` : ""}
-          <a href="/docs">OpenAPI</a> ·{" "}
+          <a href="/docs">Developer API docs (OpenAPI)</a> ·{" "}
           <a href="/scorecard" onClick={go("/scorecard")}>
-            Release scorecard
+            Release decision and its evidence
           </a>
         </p>
       </footer>

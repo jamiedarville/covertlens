@@ -33,8 +33,8 @@ test("overlay shows the classification and a digest, never the symbol sequence",
   const html = renderToStaticMarkup(
     <Overlay geometric={payload.geometric} imageUrl="blob:scene" imageLabel="scene" />,
   );
-  assert.match(html, /Structure claimed/);
-  assert.match(html, /Evidence aid — not a decoded message/);
+  assert.match(html, /Pattern looks deliberately arranged/);
+  assert.match(html, /not a decoded hidden message/);
   assert.match(html, /data-testid="symbols-digest"/);
   assert.match(html, /sha256:[0-9a-f]{12}…/);
   assert.match(html, /reviewer-only/);
@@ -61,7 +61,7 @@ test("overlay explains a failed segmentation instead of drawing boxes", () => {
     />,
   );
   assert.match(html, /too_few_elements/);
-  assert.match(html, /No element overlay/);
+  assert.match(html, /No separate shapes could be picked out/);
   assert.doesNotMatch(html, /<canvas/);
 });
 
@@ -79,7 +79,7 @@ test("recipient pane never shows an image for a withheld or pending delivery", (
   const pending = renderToStaticMarkup(
     <RecipientPane delivery={delivery("pending", "pending — awaiting analysis")} imageUrl={null} note="" />,
   );
-  assert.match(pending, /<strong>pending<\/strong>/);
+  assert.match(pending, /<strong>Waiting for a decision<\/strong>/);
   assert.doesNotMatch(pending, /<img/);
   const permitted = renderToStaticMarkup(
     <RecipientPane delivery={delivery("permitted", "delivered")} imageUrl="blob:ok" note="delivered" />,
@@ -98,7 +98,7 @@ test("reviewer pane stays closed until opened, as the chosen role", () => {
       onOpen={() => {}}
     />,
   );
-  assert.match(closed, /Open original as viewer/);
+  assert.match(closed, /Open the original picture.*viewer/);
   assert.doesNotMatch(closed, /<img/);
   const denied = renderToStaticMarkup(
     <ReviewerPane
@@ -141,7 +141,7 @@ test("review queue says a decode exists without showing it", () => {
   const html = renderToStaticMarkup(
     <QueueTable queue={queue} selectedId={null} busy={false} onSelect={() => {}} />,
   );
-  assert.match(html, /available \(reviewer only\)/);
+  assert.match(html, /exists \(reviewer only\)/);
   assert.match(html, /unresolved/);
   assert.doesNotMatch(html, /dec_1/);
 });
@@ -150,13 +150,13 @@ test("candidate decode text appears only after a reviewer read", () => {
   const none = renderToStaticMarkup(
     <CandidateDecodePanel available={false} decode={null} note="" role="reviewer" busy={false} onRead={() => {}} />,
   );
-  assert.match(none, /No candidate decode/);
+  assert.match(none, /No possible reading exists/);
   const unread = renderToStaticMarkup(
     <CandidateDecodePanel available decode={null} note="Denied for researcher" role="researcher" busy={false} onRead={() => {}} />,
   );
-  assert.match(unread, /Read candidate decode as researcher/);
+  assert.match(unread, /Show the possible reading.*researcher/);
   assert.match(unread, /Denied for researcher/);
-  assert.doesNotMatch(unread, /Candidate text/);
+  assert.doesNotMatch(unread, /Possible reading \(hypothesis only\)/);
   const read = renderToStaticMarkup(
     <CandidateDecodePanel
       available
@@ -167,6 +167,6 @@ test("candidate decode text appears only after a reviewer read", () => {
       onRead={() => {}}
     />,
   );
-  assert.match(read, /Candidate text/);
+  assert.match(read, /Possible reading \(hypothesis only\)/);
   assert.match(read, /DECAFDECAFDE/);
 });

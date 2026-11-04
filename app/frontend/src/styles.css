@@ -343,3 +343,34 @@ select { font: inherit; margin: .4rem; padding: .3rem; }
 .report-tabs + section { min-width: 0; }
 .report-tabs + section table { display: block; max-width: 100%; overflow-x: auto; }
 .site-header nav { flex-wrap: wrap; }
+
+/* Plain-English guidance blocks (CL-79). */
+.wordmark-tagline {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+  max-width: 22rem;
+}
+.start-steps {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 0.9rem 1.1rem 0.6rem;
+  margin: 1rem 0;
+  max-width: 46rem;
+}
+.start-steps-heading { font-size: 1.05rem; margin: 0.1rem 0 0.4rem; }
+.start-steps ol { margin: 0.3rem 0 0.5rem; padding-left: 1.4rem; }
+.start-steps li { margin-bottom: 0.35rem; }
+.tech-details { margin: 0.7rem 0; }
+.tech-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.tech-details summary:hover { color: var(--accent-dark); }
